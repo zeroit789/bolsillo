@@ -15,6 +15,10 @@
   <img src="https://img.shields.io/badge/license-MIT-7c6af7" alt="MIT">
 </p>
 
+<p align="center">
+  <a href="https://danimefle.com"><strong>danimefle.com</strong></a> — author's portfolio / portfolio del autor
+</p>
+
 <!-- screenshot -->
 <p align="center">
   <img src="docs/screenshot.png" alt="Bolsillo dashboard / Panel de Bolsillo" width="820">
@@ -106,7 +110,7 @@ bolsillo/
 
 ### License
 
-[MIT](LICENSE) — © Daniel Castaños Mefle
+[MIT](LICENSE) — © Daniel Castaños Mefle · [danimefle.com](https://danimefle.com)
 
 ---
 
@@ -194,4 +198,4 @@ bolsillo/
 
 ### Licencia
 
-[MIT](LICENSE) — © Daniel Castaños Mefle
+[MIT](LICENSE) — © Daniel Castaños Mefle · [danimefle.com](https://danimefle.com)
