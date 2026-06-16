@@ -50,7 +50,7 @@ function etiquetaTipo(linea: LineaMes): string {
    --------------------------------------------------------------------------- */
 async function guardar(
   nombreSugerido: string,
-  ext: "xlsx" | "pdf",
+  ext: "xlsx" | "pdf" | "csv",
   bytes: Uint8Array
 ): Promise<void> {
   // Abre el diálogo "Guardar como" con el filtro de extensión correspondiente.
@@ -477,4 +477,60 @@ export async function exportarHistorialPDF(filas: ResumenMes[]): Promise<void> {
   // Exportar y guardar.
   const bytes = doc.output("arraybuffer");
   await guardar("Bolsillo - Historial.pdf", "pdf", new Uint8Array(bytes));
+}
+
+/* ===========================================================================
+   5) EXPORTAR HISTORIAL A CSV
+   Una fila por mes con sus totales. Separador ';' (convención española, así
+   los importes pueden llevar coma decimal sin chocar con el delimitador).
+   =========================================================================== */
+export async function exportarHistorialCSV(filas: ResumenMes[]): Promise<void> {
+  // Separador de columnas: ';' para que la coma decimal no rompa el CSV.
+  const SEP = ";";
+
+  // Pasa un número a texto con coma decimal y 2 decimales (sin símbolo €):
+  // 1234.5 -> "1234,50". Se evita el separador de miles para no chocar con ';'.
+  const num = (n: number): string => n.toFixed(2).replace(".", ",");
+
+  // Escapa un campo de texto: si contiene ';', comillas o saltos de línea, lo
+  // envuelve en comillas dobles y duplica las comillas internas (RFC 4180).
+  const esc = (texto: string): string => {
+    if (/[";\n\r]/.test(texto)) {
+      return `"${texto.replace(/"/g, '""')}"`;
+    }
+    return texto;
+  };
+
+  // Encabezados de columna (mismos que la tabla del historial).
+  const cabecera = [
+    "Mes",
+    "Ingresos",
+    "Gastos fijos",
+    "Gastos variables",
+    "Total gastos",
+    "Disponible",
+  ];
+
+  // Construimos las líneas: cabecera + una fila por mes.
+  const lineas: string[] = [cabecera.map(esc).join(SEP)];
+  for (const f of filas) {
+    lineas.push(
+      [
+        esc(f.mes),
+        num(f.ingresos),
+        num(f.gastosFijos),
+        num(f.gastosVariables),
+        num(f.totalGastos),
+        num(f.disponible),
+      ].join(SEP)
+    );
+  }
+
+  // Unimos con CRLF (compatibilidad amplia, p. ej. Excel) y antepones un BOM
+  // UTF-8 para que Excel reconozca los acentos correctamente.
+  const contenido = "﻿" + lineas.join("\r\n");
+
+  // Pasamos el texto a bytes UTF-8 y reutilizamos el mismo helper de guardado.
+  const bytes = new TextEncoder().encode(contenido);
+  await guardar("Bolsillo - Historial.csv", "csv", bytes);
 }

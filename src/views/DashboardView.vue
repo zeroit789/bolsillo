@@ -34,6 +34,9 @@ import { exportarMesXLSX, exportarMesPDF } from "../utils/export";
 import KpiCard from "../components/KpiCard.vue";
 import GraficaEvolucion from "../components/GraficaEvolucion.vue";
 import PrevisionCaja from "../components/PrevisionCaja.vue";
+// EN: Donut chart of spending by category (pure SVG, no libraries).
+// ES: Gráfica de dona del gasto por categoría (SVG puro, sin librerías).
+import GraficaDona from "../components/GraficaDona.vue";
 
 // EN: Finanzas store: single source of truth for every figure shown here.
 // ES: Store de finanzas: única fuente de verdad de toda cifra mostrada aquí.
@@ -276,7 +279,13 @@ async function exportar(tipo: "xlsx" | "pdf") {
       <!-- EN: Empty state when there are no expenses this month. -->
       <!-- ES: Estado vacío cuando no hay gastos este mes. -->
       <div v-if="!f.gastoPorCategoria.length" class="text-muted text-sm">{{ t("sinGastos") }}</div>
-      <ul v-else class="space-y-3">
+      <template v-else>
+        <!-- EN: Donut chart on top: visual split with legend (color/name/amount/%). -->
+        <!-- ES: Gráfica de dona arriba: reparto visual con leyenda (color/nombre/importe/%). -->
+        <GraficaDona :datos="f.gastoPorCategoria" class="mb-6 block" />
+        <!-- EN: Proportional bars below the donut, kept as a detailed breakdown. -->
+        <!-- ES: Barras proporcionales debajo de la dona, como desglose detallado. -->
+        <ul class="space-y-3">
         <li v-for="c in f.gastoPorCategoria" :key="c.categoria">
           <!-- EN: Row header: category name + its total amount. -->
           <!-- ES: Cabecera de fila: nombre de la categoría + su total. -->
@@ -293,7 +302,8 @@ async function exportar(tipo: "xlsx" | "pdf") {
             />
           </div>
         </li>
-      </ul>
+        </ul>
+      </template>
     </section>
 
     <!-- EN: Monthly evolution chart (income vs expenses). -->

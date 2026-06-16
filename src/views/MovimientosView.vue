@@ -21,7 +21,7 @@
  * ===========================================================================*/
 
 // ── 1. Imports & translations / Imports y traducciones ────────────────────────
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
 import { categoriasPorGrupo } from "../data/categorias";
@@ -382,6 +382,45 @@ function guardarPlantilla(): void {
   });
   formAbierto.value = false;
 }
+
+// ── 7. Keyboard shortcuts / Atajos de teclado ─────────────────────────────────
+// EN: Global key handler: "n" opens the new-movement modal (only when not typing
+//     in a form field), and "Escape" closes the modal if it is open. Registered
+//     in onMounted and removed in onUnmounted to avoid leaks.
+// ES: Manejador global de teclas: "n" abre el modal de nuevo movimiento (solo si
+//     NO se está escribiendo en un campo de formulario), y "Escape" cierra el
+//     modal si está abierto. Se registra en onMounted y se quita en onUnmounted
+//     para no dejar listeners colgando.
+function onTecla(e: KeyboardEvent): void {
+  // EN: Element with focus; we skip the "n" shortcut while typing in a field.
+  // ES: Elemento con foco; nos saltamos el atajo "n" si se escribe en un campo.
+  const destino = e.target as HTMLElement | null;
+  const enCampo =
+    !!destino &&
+    (destino.tagName === "INPUT" ||
+      destino.tagName === "TEXTAREA" ||
+      destino.tagName === "SELECT" ||
+      destino.isContentEditable);
+
+  // EN: "n" (no modifiers, not in a field) -> open the add-movement modal.
+  // ES: "n" (sin modificadores, fuera de un campo) -> abre el modal de alta.
+  if ((e.key === "n" || e.key === "N") && !enCampo && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    abrirAlta();
+    return;
+  }
+
+  // EN: "Escape" closes the modal if it is open (the mini-form has its own handler).
+  // ES: "Escape" cierra el modal si está abierto (el mini-form tiene el suyo propio).
+  if (e.key === "Escape" && modal.value) {
+    cerrarModal();
+  }
+}
+
+// EN: Register the listener on mount, remove it on unmount.
+// ES: Registra el listener al montar, lo quita al desmontar.
+onMounted(() => window.addEventListener("keydown", onTecla));
+onUnmounted(() => window.removeEventListener("keydown", onTecla));
 </script>
 
 <template>

@@ -36,7 +36,7 @@ import { useFinanzas } from '../stores/finanzas'
 import { euro, mesLegible } from '../utils/format'
 // EN: Export functions (export.ts is created by another process in parallel).
 // ES: Funciones de exportación (export.ts lo crea otro proceso en paralelo).
-import { exportarHistorialXLSX, exportarHistorialPDF } from '../utils/export'
+import { exportarHistorialXLSX, exportarHistorialPDF, exportarHistorialCSV } from '../utils/export'
 // EN: Yearly summary component (KPIs of the most recent year in the history).
 // ES: Componente de resumen anual (KPIs del año más reciente del historial).
 import ResumenAnual from '../components/ResumenAnual.vue'
@@ -63,6 +63,8 @@ const t = crearT({
   historial: { es: 'Historial', en: 'History' },
   exportarExcel: { es: 'Exportar Excel', en: 'Export Excel' },
   exportarPDF: { es: 'Exportar PDF', en: 'Export PDF' },
+  // EN: Label of the CSV export button. / ES: Etiqueta del botón de exportar CSV.
+  exportarCSV: { es: 'CSV', en: 'CSV' },
   // EN: Visible message shown when an export (Excel/PDF) fails.
   // ES: Mensaje visible que se muestra cuando una exportación (Excel/PDF) falla.
   errorExportar: {
@@ -216,6 +218,22 @@ async function alExportarPDF(): Promise<void> {
     errorExportacion.value = t('errorExportar')
   }
 }
+
+// EN: Exports the whole history to CSV (try/catch so the UI never breaks).
+//     Same feedback flow as Excel/PDF: clear first, then log + show on failure.
+// ES: Exporta el historial completo a CSV (try/catch para no romper la UI).
+//     Mismo flujo de aviso que Excel/PDF: limpiar y, si falla, registrar + mostrar.
+async function alExportarCSV(): Promise<void> {
+  errorExportacion.value = '' // EN: clear previous error. / ES: limpia el error anterior.
+  try {
+    await exportarHistorialCSV(finanzas.historial)
+  } catch (error) {
+    // EN: log for debugging and surface a visible message to the user.
+    // ES: registramos para depurar y mostramos un mensaje visible al usuario.
+    console.error('Error al exportar a CSV:', error)
+    errorExportacion.value = t('errorExportar')
+  }
+}
 </script>
 
 <template>
@@ -268,6 +286,14 @@ async function alExportarPDF(): Promise<void> {
 
       <!-- EN: Export buttons on the right. / ES: Botones de exportación a la derecha. -->
       <div class="flex items-center gap-3">
+        <!-- EN: Secondary button: Export CSV. / ES: Botón secundario: Exportar CSV. -->
+        <button
+          type="button"
+          class="rounded-lg border border-border px-4 py-2 text-muted hover:text-ink"
+          @click="alExportarCSV"
+        >
+          {{ t('exportarCSV') }}
+        </button>
         <!-- EN: Secondary button: Export Excel. / ES: Botón secundario: Exportar Excel. -->
         <button
           type="button"
