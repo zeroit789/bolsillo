@@ -5,9 +5,37 @@ import { ref, computed } from "vue";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
 import { mesActual } from "../utils/format";
+import { crearT } from "../i18n";
 
 const sesion = useSesion();
 const finanzas = useFinanzas();
+
+// Diccionario de textos visibles del onboarding (ES/EN).
+const t = crearT({
+  titulo: { es: "Bienvenido a Bolsillo", en: "Welcome to Bolsillo" },
+  subtitulo: { es: "Configúralo en 10 segundos.", en: "Set it up in 10 seconds." },
+  etiquetaNombre: { es: "¿Cómo te llamas?", en: "What's your name?" },
+  placeholderNombre: { es: "Tu nombre", en: "Your name" },
+  etiquetaFecha: { es: "Fecha", en: "Date" },
+  fechaSistema: { es: "Usar la fecha de mi PC (recomendado)", en: "Use my computer's date (recommended)" },
+  fechaManual: { es: "Empezar en un mes concreto", en: "Start in a specific month" },
+  etiquetaBloqueo: { es: "¿Proteger la app al abrir?", en: "Protect the app on open?" },
+  bloqueoNinguno: { es: "No, abrir directamente", en: "No, open directly" },
+  bloqueoPin: { es: "Sí, con un PIN (4-6 dígitos)", en: "Yes, with a PIN (4-6 digits)" },
+  bloqueoPassword: { es: "Sí, con una contraseña", en: "Yes, with a password" },
+  placeholderPin: { es: "Tu PIN", en: "Your PIN" },
+  placeholderPassword: { es: "Tu contraseña", en: "Your password" },
+  placeholderRepetir: { es: "Repetir", en: "Repeat" },
+  notaCifrado: {
+    es: "Tus datos se cifrarán con esta clave. Si la olvidas, no se pueden recuperar.",
+    en: "Your data will be encrypted with this key. If you forget it, it cannot be recovered.",
+  },
+  botonPreparando: { es: "Preparando…", en: "Setting up…" },
+  botonEmpezar: { es: "Empezar", en: "Get started" },
+  errorPin: { es: "El PIN debe tener entre 4 y 6 dígitos.", en: "The PIN must be 4 to 6 digits." },
+  errorPassword: { es: "La contraseña debe tener al menos 4 caracteres.", en: "The password must be at least 4 characters." },
+  errorNoCoincide: { es: "La credencial no coincide.", en: "The credentials don't match." },
+});
 
 const nombre = ref("");
 const modoFecha = ref<"sistema" | "manual">("sistema");
@@ -26,15 +54,15 @@ async function empezar() {
   // Validación del bloqueo si se eligió.
   if (pideCredencial.value) {
     if (tipoBloqueo.value === "pin" && !REGEX_PIN.test(credencial.value)) {
-      error.value = "El PIN debe tener entre 4 y 6 dígitos.";
+      error.value = t("errorPin");
       return;
     }
     if (tipoBloqueo.value === "password" && credencial.value.length < 4) {
-      error.value = "La contraseña debe tener al menos 4 caracteres.";
+      error.value = t("errorPassword");
       return;
     }
     if (credencial.value !== credencialRep.value) {
-      error.value = "La credencial no coincide.";
+      error.value = t("errorNoCoincide");
       return;
     }
   }
@@ -58,31 +86,31 @@ async function empezar() {
   <div class="min-h-screen flex items-center justify-center bg-base p-6">
     <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-7">
       <h1 class="font-display text-3xl font-extrabold">
-        Bienvenido a Bolsillo<span class="text-brand">.</span>
+        {{ t("titulo") }}<span class="text-brand">.</span>
       </h1>
-      <p class="text-muted text-sm mt-1 mb-6">Configúralo en 10 segundos.</p>
+      <p class="text-muted text-sm mt-1 mb-6">{{ t("subtitulo") }}</p>
 
       <div class="space-y-4">
         <!-- Nombre -->
         <div>
-          <label class="text-muted text-sm">¿Cómo te llamas?</label>
+          <label class="text-muted text-sm">{{ t("etiquetaNombre") }}</label>
           <input
             v-model="nombre"
             type="text"
-            placeholder="Tu nombre"
+            :placeholder="t('placeholderNombre')"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
         </div>
 
         <!-- Fecha -->
         <div>
-          <label class="text-muted text-sm">Fecha</label>
+          <label class="text-muted text-sm">{{ t("etiquetaFecha") }}</label>
           <select
             v-model="modoFecha"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
-            <option value="sistema">Usar la fecha de mi PC (recomendado)</option>
-            <option value="manual">Empezar en un mes concreto</option>
+            <option value="sistema">{{ t("fechaSistema") }}</option>
+            <option value="manual">{{ t("fechaManual") }}</option>
           </select>
           <input
             v-if="modoFecha === 'manual'"
@@ -94,14 +122,14 @@ async function empezar() {
 
         <!-- Bloqueo -->
         <div>
-          <label class="text-muted text-sm">¿Proteger la app al abrir?</label>
+          <label class="text-muted text-sm">{{ t("etiquetaBloqueo") }}</label>
           <select
             v-model="tipoBloqueo"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
-            <option value="ninguno">No, abrir directamente</option>
-            <option value="pin">Sí, con un PIN (4-6 dígitos)</option>
-            <option value="password">Sí, con una contraseña</option>
+            <option value="ninguno">{{ t("bloqueoNinguno") }}</option>
+            <option value="pin">{{ t("bloqueoPin") }}</option>
+            <option value="password">{{ t("bloqueoPassword") }}</option>
           </select>
 
           <template v-if="pideCredencial">
@@ -110,7 +138,7 @@ async function empezar() {
               :type="tipoBloqueo === 'pin' ? 'tel' : 'password'"
               :inputmode="tipoBloqueo === 'pin' ? 'numeric' : 'text'"
               :maxlength="tipoBloqueo === 'pin' ? 6 : undefined"
-              :placeholder="tipoBloqueo === 'pin' ? 'Tu PIN' : 'Tu contraseña'"
+              :placeholder="tipoBloqueo === 'pin' ? t('placeholderPin') : t('placeholderPassword')"
               class="mt-2 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
             <input
@@ -118,11 +146,11 @@ async function empezar() {
               :type="tipoBloqueo === 'pin' ? 'tel' : 'password'"
               :inputmode="tipoBloqueo === 'pin' ? 'numeric' : 'text'"
               :maxlength="tipoBloqueo === 'pin' ? 6 : undefined"
-              placeholder="Repetir"
+              :placeholder="t('placeholderRepetir')"
               class="mt-2 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
             <p class="text-faint text-xs mt-1">
-              Tus datos se cifrarán con esta clave. Si la olvidas, no se pueden recuperar.
+              {{ t("notaCifrado") }}
             </p>
           </template>
         </div>
@@ -135,7 +163,7 @@ async function empezar() {
         :disabled="cargando"
         @click="empezar"
       >
-        {{ cargando ? "Preparando…" : "Empezar" }}
+        {{ cargando ? t("botonPreparando") : t("botonEmpezar") }}
       </button>
     </div>
   </div>

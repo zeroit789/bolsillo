@@ -13,6 +13,14 @@ export function setMoneda(codigo: string): void {
   monedaActual.value = codigo;
 }
 
+// Locale activo para fechas (es-ES por defecto). Reactivo: al cambiarlo, todas
+// las fechas/meses formateados se re-renderizan en el nuevo idioma. Lo sincroniza
+// el store de ajustes según el idioma elegido (es-ES / en-US).
+export const localeFecha = ref<string>("es-ES");
+export function setLocaleFecha(locale: string): void {
+  localeFecha.value = locale;
+}
+
 // Formatea un número en la moneda activa: 1234.5 -> "1.234,50 €" (o $, £...).
 // Importante: el formateador se crea EN CADA LLAMADA leyendo monedaActual.value.
 // Así Vue registra monedaActual como dependencia y reacciona a sus cambios.
@@ -24,28 +32,28 @@ export function euro(n: number): string {
   }).format(n);
 }
 
-// Formatea una fecha ISO ("2026-06-16") como "16 jun 2026"
-const FORMATO_FECHA = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
+// Formatea una fecha ISO ("2026-06-16") como "16 jun 2026" / "16 Jun 2026".
+// El formateador se crea EN CADA LLAMADA leyendo localeFecha.value para que
+// sea reactivo al cambio de idioma (igual que euro() con la moneda).
 export function fechaLegible(fechaISO: string): string {
+  const fmt = new Intl.DateTimeFormat(localeFecha.value, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
   // Se añade T00:00 para que no reste un día por zona horaria
-  return FORMATO_FECHA.format(new Date(fechaISO + "T00:00:00"));
+  return fmt.format(new Date(fechaISO + "T00:00:00"));
 }
 
-// Convierte "YYYY-MM" en algo legible: "2026-06" -> "Junio 2026"
-const FORMATO_MES = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric",
-});
-
+// Convierte "YYYY-MM" en algo legible: "2026-06" -> "Junio 2026" / "June 2026".
 export function mesLegible(mes: string): string {
   const [a, m] = mes.split("-").map(Number);
-  const texto = FORMATO_MES.format(new Date(a, m - 1, 1));
-  return texto.charAt(0).toUpperCase() + texto.slice(1); // "Junio 2026"
+  const fmt = new Intl.DateTimeFormat(localeFecha.value, {
+    month: "long",
+    year: "numeric",
+  });
+  const texto = fmt.format(new Date(a, m - 1, 1));
+  return texto.charAt(0).toUpperCase() + texto.slice(1); // capitaliza el mes
 }
 
 // Mes actual en formato "YYYY-MM"

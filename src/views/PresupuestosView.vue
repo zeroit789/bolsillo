@@ -20,9 +20,39 @@ import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
 import { NOMBRES_CATEGORIA, colorCategoria } from "../data/categorias";
+import { crearT } from "../i18n";
 
 // Store central de finanzas (ya inicializado en la app).
 const finanzas = useFinanzas();
+
+// Función de traducción del componente (ES/EN). Reúne todos los textos visibles.
+const t = crearT({
+  titulo: { es: "Presupuestos", en: "Budgets" },
+  subtitulo: {
+    es: "Pon un tope mensual por categoría y controla cuánto llevas",
+    en: "Set a monthly cap per category and track how much you've spent",
+  },
+  nuevoTope: { es: "Nuevo tope o editar", en: "New cap or edit" },
+  categoria: { es: "Categoría", en: "Category" },
+  topeMensual: { es: "Tope mensual (€)", en: "Monthly cap (€)" },
+  placeholderImporte: { es: "Ej: 300", en: "E.g. 300" },
+  guardarTope: { es: "Guardar tope", en: "Save cap" },
+  errorCategoria: { es: "Elige una categoría.", en: "Choose a category." },
+  errorImporte: { es: "Pon un importe mayor que 0 €.", en: "Enter an amount greater than €0." },
+  vacioTitulo: { es: "Aún no tienes ningún tope", en: "You don't have any caps yet" },
+  vacioTexto: {
+    es: "Define un límite mensual por categoría para vigilar tus gastos del mes.",
+    en: "Set a monthly limit per category to keep an eye on this month's spending.",
+  },
+  eliminarTope: { es: "Eliminar tope", en: "Delete cap" },
+  // Función para el texto "Gastado X de Y" (interpola los importes ya formateados).
+  gastado: { es: "Gastado", en: "Spent" },
+  de: { es: "de", en: "of" },
+  pasado: { es: "¡Te has pasado!", en: "You've gone over!" },
+  // Mensaje del confirm de borrado (lleva el nombre de la categoría interpolado aparte).
+  confirmEliminarA: { es: '¿Eliminar el tope de "', en: 'Delete the cap for "' },
+  confirmEliminarB: { es: '"?', en: '"?' },
+});
 
 // --- Estado del formulario de alta/edición de un tope ---
 // Categoría seleccionada en el <select> (por defecto, la primera del catálogo).
@@ -96,13 +126,13 @@ function guardarTope(): void {
   const cat = categoriaSel.value.trim();
   // Debe haber una categoría elegida.
   if (!cat) {
-    error.value = "Elige una categoría.";
+    error.value = t("errorCategoria");
     return;
   }
   const limite = aNumero(limiteTexto.value);
   // El límite debe ser mayor que 0 (un 0 lo borraría; aquí pedimos uno válido).
   if (limite <= 0) {
-    error.value = "Pon un importe mayor que 0 €.";
+    error.value = t("errorImporte");
     return;
   }
   // El store hace el upsert: si ya existe la categoría la reemplaza.
@@ -114,7 +144,7 @@ function guardarTope(): void {
 // Elimina el presupuesto de una categoría (con confirmación nativa).
 function borrarTope(categoria: string): void {
   // confirm() nativo: si el usuario cancela, no se borra nada.
-  if (!confirm(`¿Eliminar el tope de "${categoria}"?`)) return;
+  if (!confirm(`${t("confirmEliminarA")}${categoria}${t("confirmEliminarB")}`)) return;
   finanzas.eliminarPresupuesto(categoria);
 }
 </script>
@@ -124,20 +154,20 @@ function borrarTope(categoria: string): void {
   <div class="min-h-full bg-base p-6 text-ink">
     <!-- 1. Cabecera: título + texto explicativo -->
     <header class="mb-6">
-      <h1 class="font-display text-2xl font-bold">Presupuestos</h1>
+      <h1 class="font-display text-2xl font-bold">{{ t("titulo") }}</h1>
       <p class="mt-1 text-sm text-muted">
-        Pon un tope mensual por categoría y controla cuánto llevas
+        {{ t("subtitulo") }}
       </p>
     </header>
 
     <!-- 2. Formulario para añadir / editar un tope -->
     <section class="rounded-2xl bg-surface border border-border p-5 mb-6">
-      <h2 class="font-display font-bold mb-4">Nuevo tope o editar</h2>
+      <h2 class="font-display font-bold mb-4">{{ t("nuevoTope") }}</h2>
       <!-- @submit.prevent para no recargar la app (es una SPA de escritorio) -->
       <form class="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end" @submit.prevent="guardarTope">
         <!-- Selector de categoría -->
         <div>
-          <label class="mb-1 block text-sm text-muted">Categoría</label>
+          <label class="mb-1 block text-sm text-muted">{{ t("categoria") }}</label>
           <select
             v-model="categoriaSel"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
@@ -150,12 +180,12 @@ function borrarTope(categoria: string): void {
 
         <!-- Importe del tope (€) -->
         <div>
-          <label class="mb-1 block text-sm text-muted">Tope mensual (€)</label>
+          <label class="mb-1 block text-sm text-muted">{{ t("topeMensual") }}</label>
           <input
             v-model="limiteTexto"
             type="text"
             inputmode="decimal"
-            placeholder="Ej: 300"
+            :placeholder="t('placeholderImporte')"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand sm:w-40"
           />
         </div>
@@ -165,7 +195,7 @@ function borrarTope(categoria: string): void {
           type="submit"
           class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         >
-          Guardar tope
+          {{ t("guardarTope") }}
         </button>
       </form>
 
@@ -179,9 +209,9 @@ function borrarTope(categoria: string): void {
       class="rounded-2xl bg-surface border border-border p-10 text-center"
     >
       <p class="text-4xl">💰</p>
-      <p class="mt-3 font-display font-bold text-ink">Aún no tienes ningún tope</p>
+      <p class="mt-3 font-display font-bold text-ink">{{ t("vacioTitulo") }}</p>
       <p class="mt-1 text-sm text-muted">
-        Define un límite mensual por categoría para vigilar tus gastos del mes.
+        {{ t("vacioTexto") }}
       </p>
     </div>
 
@@ -207,8 +237,8 @@ function borrarTope(categoria: string): void {
           <!-- Botón eliminar (con confirm) -->
           <button
             class="shrink-0 rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-            title="Eliminar tope"
-            aria-label="Eliminar tope"
+            :title="t('eliminarTope')"
+            :aria-label="t('eliminarTope')"
             @click="borrarTope(p.categoria)"
           >
             🗑️
@@ -228,13 +258,13 @@ function borrarTope(categoria: string): void {
 
           <!-- Texto: gastado X de Y (N%) — el % mostrado es el REAL (puede pasar de 100) -->
           <p class="mt-2 text-xs text-muted">
-            Gastado {{ euro(gastoDe(p.categoria)) }} de {{ euro(p.limite) }}
+            {{ t("gastado") }} {{ euro(gastoDe(p.categoria)) }} {{ t("de") }} {{ euro(p.limite) }}
             (<span :class="colorTexto(p.categoria, p.limite)">{{ porcentajeReal(p.categoria, p.limite) }}%</span>)
           </p>
 
           <!-- Aviso cuando se ha pasado del tope -->
           <p v-if="pasado(p.categoria, p.limite)" class="mt-1 text-xs font-medium text-danger">
-            ¡Te has pasado!
+            {{ t("pasado") }}
           </p>
         </div>
       </article>

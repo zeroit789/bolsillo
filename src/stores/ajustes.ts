@@ -5,10 +5,11 @@
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 // Sincroniza el formateador de importes con la moneda guardada.
-import { setMoneda as setMonedaFormat } from "../utils/format";
+import { setMoneda as setMonedaFormat, setLocaleFecha } from "../utils/format";
 
 export type Tema = "oscuro" | "claro";
 export type TipoBloqueo = "pin" | "password";
+export type Idioma = "es" | "en";
 
 const CLAVE = "bolsillo.ajustes";
 
@@ -18,6 +19,7 @@ interface AjustesGuardados {
   bloqueoTipo: TipoBloqueo | null;
   nombre: string;
   moneda: string; // código ISO de la moneda elegida (EUR, USD, GBP...)
+  idioma: Idioma; // idioma de la interfaz (es / en)
   configurado: boolean; // true tras completar la bienvenida
 }
 
@@ -27,6 +29,7 @@ const POR_DEFECTO: AjustesGuardados = {
   bloqueoTipo: null,
   nombre: "",
   moneda: "EUR",
+  idioma: "es",
   configurado: false,
 };
 
@@ -48,6 +51,7 @@ export const useAjustes = defineStore("ajustes", () => {
   const bloqueoTipo = ref<TipoBloqueo | null>(inicial.bloqueoTipo);
   const nombre = ref<string>(inicial.nombre);
   const moneda = ref<string>(inicial.moneda);
+  const idioma = ref<Idioma>(inicial.idioma);
   const configurado = ref<boolean>(inicial.configurado);
 
   // Aplica el tema al documento (clase que el CSS usa para invertir).
@@ -71,13 +75,16 @@ export const useAjustes = defineStore("ajustes", () => {
   function setMoneda(c: string) {
     moneda.value = c;
   }
+  function setIdioma(i: Idioma) {
+    idioma.value = i;
+  }
   function marcarConfigurado() {
     configurado.value = true;
   }
 
   // Persiste y aplica el tema ante cualquier cambio (también al iniciar).
   watch(
-    [tema, bloqueoActivo, bloqueoTipo, nombre, moneda, configurado],
+    [tema, bloqueoActivo, bloqueoTipo, nombre, moneda, idioma, configurado],
     () => {
       localStorage.setItem(
         CLAVE,
@@ -87,6 +94,7 @@ export const useAjustes = defineStore("ajustes", () => {
           bloqueoTipo: bloqueoTipo.value,
           nombre: nombre.value,
           moneda: moneda.value,
+          idioma: idioma.value,
           configurado: configurado.value,
         })
       );
@@ -99,12 +107,16 @@ export const useAjustes = defineStore("ajustes", () => {
   // immediate: true -> al arrancar aplica la moneda persistida, no solo al cambiarla.
   watch(moneda, (m) => setMonedaFormat(m), { immediate: true });
 
+  // Sincroniza el locale de fechas con el idioma elegido (es-ES / en-US).
+  watch(idioma, (i) => setLocaleFecha(i === "en" ? "en-US" : "es-ES"), { immediate: true });
+
   return {
     tema,
     bloqueoActivo,
     bloqueoTipo,
     nombre,
     moneda,
+    idioma,
     configurado,
     aplicarTema,
     setTema,
@@ -112,6 +124,7 @@ export const useAjustes = defineStore("ajustes", () => {
     setBloqueo,
     setNombre,
     setMoneda,
+    setIdioma,
     marcarConfigurado,
   };
 });

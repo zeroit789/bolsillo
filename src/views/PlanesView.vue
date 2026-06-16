@@ -15,9 +15,55 @@ import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import type { Plan } from "../types";
 import { euro } from "../utils/format";
+import { crearT } from "../i18n";
 
 // Store central de finanzas (ya inicializado en la app).
 const finanzas = useFinanzas();
+
+// Función de traducción del componente (ES/EN). Reactiva según el idioma activo.
+// Contiene todos los textos visibles de la vista de Planes.
+const t = crearT({
+  // Cabecera
+  titulo: { es: "Planes", en: "Plans" },
+  subtitulo: { es: "Ahorra para una compra o un objetivo", en: "Save for a purchase or a goal" },
+  nuevoPlan: { es: "+ Nuevo plan", en: "+ New plan" },
+  // Estado vacío
+  vacioTitulo: { es: "Aún no tienes ningún plan", en: "You don't have any plans yet" },
+  vacioTexto: {
+    es: 'Crea un plan para ahorrar hacia una compra o un objetivo (ej. "Pintar el salón").',
+    en: 'Create a plan to save toward a purchase or a goal (e.g. "Paint the living room").',
+  },
+  crearPrimero: { es: "+ Crear mi primer plan", en: "+ Create my first plan" },
+  // Tarjeta de plan
+  conseguido: { es: "✓ Conseguido", en: "✓ Achieved" },
+  editar: { es: "Editar", en: "Edit" },
+  editarPlan: { es: "Editar plan", en: "Edit plan" },
+  eliminar: { es: "Eliminar", en: "Delete" },
+  eliminarPlan: { es: "Eliminar plan", en: "Delete plan" },
+  aportadoDe: { es: "Aportado", en: "Saved" },
+  de: { es: "de", en: "of" },
+  restante: { es: "Restante:", en: "Remaining:" },
+  aportar: { es: "+ Aportar", en: "+ Add funds" },
+  // Modal alta/edición
+  nuevoPlanTitulo: { es: "Nuevo plan", en: "New plan" },
+  nombre: { es: "Nombre", en: "Name" },
+  nombrePlaceholder: { es: "Ej: Pintar el salón", en: "E.g. Paint the living room" },
+  objetivo: { es: "Objetivo (€)", en: "Goal (€)" },
+  yaAportado: { es: "Ya aportado (€)", en: "Already saved (€)" },
+  cancelar: { es: "Cancelar", en: "Cancel" },
+  guardar: { es: "Guardar", en: "Save" },
+  // Mini-modal de aportar
+  aportarA: { es: "Aportar a", en: "Add funds to" },
+  cantidad: { es: "Cantidad (€)", en: "Amount (€)" },
+  cantidadPlaceholder: { es: "Ej: 25,50", en: "E.g. 25.50" },
+  aportarBoton: { es: "Aportar", en: "Add funds" },
+  // Mensajes de validación / confirmación
+  errNombre: { es: "El nombre no puede estar vacío.", en: "The name cannot be empty." },
+  errObjetivo: { es: "El objetivo debe ser mayor que 0.", en: "The goal must be greater than 0." },
+  errAportado: { es: "Lo aportado no puede ser negativo.", en: "The amount saved cannot be negative." },
+  errCantidad: { es: "Introduce una cantidad válida mayor que 0.", en: "Enter a valid amount greater than 0." },
+  confirmarEliminar: { es: "¿Eliminar el plan", en: "Delete the plan" },
+});
 
 // --- Estado del modal de alta/edición ---
 // Si está abierto el modal.
@@ -50,7 +96,7 @@ const errorAportar = ref("");
 
 // Título del modal según estemos creando o editando.
 const tituloModal = computed(() =>
-  editandoId.value ? "Editar plan" : "Nuevo plan"
+  editandoId.value ? t("editarPlan") : t("nuevoPlanTitulo")
 );
 
 // --- Helpers de cálculo por plan ---
@@ -117,15 +163,15 @@ function guardar() {
 
   // Validación: nombre no vacío, objetivo > 0, aportado >= 0.
   if (!form.nombre.trim()) {
-    error.value = "El nombre no puede estar vacío.";
+    error.value = t("errNombre");
     return;
   }
   if (objetivo <= 0) {
-    error.value = "El objetivo debe ser mayor que 0.";
+    error.value = t("errObjetivo");
     return;
   }
   if (aportado < 0) {
-    error.value = "Lo aportado no puede ser negativo.";
+    error.value = t("errAportado");
     return;
   }
 
@@ -171,7 +217,7 @@ function confirmarAporte() {
 
   // Solo se aportan cantidades positivas válidas.
   if (!c || c <= 0) {
-    errorAportar.value = "Introduce una cantidad válida mayor que 0.";
+    errorAportar.value = t("errCantidad");
     return;
   }
 
@@ -182,7 +228,7 @@ function confirmarAporte() {
 
 // Elimina un plan tras confirmación del navegador.
 function borrar(plan: Plan) {
-  if (confirm(`¿Eliminar el plan "${plan.nombre}"?`)) {
+  if (confirm(`${t("confirmarEliminar")} "${plan.nombre}"?`)) {
     finanzas.eliminarPlan(plan.id);
   }
 }
@@ -194,14 +240,14 @@ function borrar(plan: Plan) {
     <!-- 1. Cabecera: título + texto explicativo + botón de alta -->
     <header class="mb-6 flex items-start justify-between gap-3">
       <div>
-        <h1 class="font-display text-2xl font-bold">Planes</h1>
-        <p class="mt-1 text-sm text-muted">Ahorra para una compra o un objetivo</p>
+        <h1 class="font-display text-2xl font-bold">{{ t("titulo") }}</h1>
+        <p class="mt-1 text-sm text-muted">{{ t("subtitulo") }}</p>
       </div>
       <button
         class="shrink-0 rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         @click="abrirNuevo"
       >
-        + Nuevo plan
+        {{ t("nuevoPlan") }}
       </button>
     </header>
 
@@ -211,15 +257,15 @@ function borrar(plan: Plan) {
       class="rounded-2xl bg-surface border border-border p-10 text-center"
     >
       <p class="text-4xl">🎯</p>
-      <p class="mt-3 font-display font-bold text-ink">Aún no tienes ningún plan</p>
+      <p class="mt-3 font-display font-bold text-ink">{{ t("vacioTitulo") }}</p>
       <p class="mt-1 text-sm text-muted">
-        Crea un plan para ahorrar hacia una compra o un objetivo (ej. "Pintar el salón").
+        {{ t("vacioTexto") }}
       </p>
       <button
         class="mt-5 rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         @click="abrirNuevo"
       >
-        + Crear mi primer plan
+        {{ t("crearPrimero") }}
       </button>
     </div>
 
@@ -238,23 +284,23 @@ function borrar(plan: Plan) {
             </h2>
             <!-- Badge "Conseguido" si ya se alcanzó el objetivo -->
             <p v-if="conseguido(plan)" class="mt-1 text-xs font-medium text-ok">
-              ✓ Conseguido
+              {{ t("conseguido") }}
             </p>
           </div>
           <!-- Botones de editar y eliminar -->
           <div class="flex gap-1 shrink-0">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
-              title="Editar"
-              aria-label="Editar plan"
+              :title="t('editar')"
+              :aria-label="t('editarPlan')"
               @click="abrirEditar(plan)"
             >
               ✏️
             </button>
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-              title="Eliminar"
-              aria-label="Eliminar plan"
+              :title="t('eliminar')"
+              :aria-label="t('eliminarPlan')"
               @click="borrar(plan)"
             >
               🗑️
@@ -274,7 +320,7 @@ function borrar(plan: Plan) {
           </div>
           <!-- Texto: aportado X de Y (progreso%) -->
           <p class="mt-2 text-xs text-muted">
-            Aportado {{ euro(plan.aportado) }} de {{ euro(plan.objetivo) }}
+            {{ t("aportadoDe") }} {{ euro(plan.aportado) }} {{ t("de") }} {{ euro(plan.objetivo) }}
             ({{ Math.round(progreso(plan)) }}%)
           </p>
         </div>
@@ -282,7 +328,7 @@ function borrar(plan: Plan) {
         <!-- Detalle: restante + botón de aportar -->
         <div class="mt-4 flex items-end justify-between gap-3">
           <p class="text-sm">
-            <span class="text-muted">Restante: </span>
+            <span class="text-muted">{{ t("restante") }} </span>
             <!-- Verde cuando ya no falta nada (restante = 0) -->
             <span :class="restante(plan) === 0 ? 'text-ok font-medium' : 'text-ink font-medium'">
               {{ euro(restante(plan)) }}
@@ -294,7 +340,7 @@ function borrar(plan: Plan) {
             class="shrink-0 rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
             @click="aportar(plan)"
           >
-            + Aportar
+            {{ t("aportar") }}
           </button>
         </div>
       </article>
@@ -314,11 +360,11 @@ function borrar(plan: Plan) {
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
           <!-- Nombre del plan -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Nombre</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("nombre") }}</label>
             <input
               v-model="form.nombre"
               type="text"
-              placeholder="Ej: Pintar el salón"
+              :placeholder="t('nombrePlaceholder')"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
@@ -326,7 +372,7 @@ function borrar(plan: Plan) {
           <!-- Objetivo y ya aportado en dos columnas -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-sm text-muted">Objetivo (€)</label>
+              <label class="mb-1 block text-sm text-muted">{{ t("objetivo") }}</label>
               <input
                 v-model.number="form.objetivo"
                 type="number"
@@ -336,7 +382,7 @@ function borrar(plan: Plan) {
               />
             </div>
             <div>
-              <label class="mb-1 block text-sm text-muted">Ya aportado (€)</label>
+              <label class="mb-1 block text-sm text-muted">{{ t("yaAportado") }}</label>
               <input
                 v-model.number="form.aportado"
                 type="number"
@@ -357,13 +403,13 @@ function borrar(plan: Plan) {
               class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-muted font-medium hover:text-ink"
               @click="cerrarModal"
             >
-              Cancelar
+              {{ t("cancelar") }}
             </button>
             <button
               type="submit"
               class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
             >
-              Guardar
+              {{ t("guardar") }}
             </button>
           </div>
         </form>
@@ -379,19 +425,19 @@ function borrar(plan: Plan) {
       <!-- Tarjeta del mini-modal -->
       <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-5">
         <h3 class="font-display font-bold text-lg">
-          Aportar a {{ planAportar?.nombre }}
+          {{ t("aportarA") }} {{ planAportar?.nombre }}
         </h3>
 
         <!-- Formulario de aporte -->
         <form class="mt-4 space-y-4" @submit.prevent="confirmarAporte">
           <!-- Cantidad a aportar -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Cantidad (€)</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("cantidad") }}</label>
             <input
               v-model="cantidadAportar"
               type="text"
               inputmode="decimal"
-              placeholder="Ej: 25,50"
+              :placeholder="t('cantidadPlaceholder')"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
@@ -406,13 +452,13 @@ function borrar(plan: Plan) {
               class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-muted font-medium hover:text-ink"
               @click="cerrarModalAportar"
             >
-              Cancelar
+              {{ t("cancelar") }}
             </button>
             <button
               type="submit"
               class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
             >
-              Aportar
+              {{ t("aportarBoton") }}
             </button>
           </div>
         </form>

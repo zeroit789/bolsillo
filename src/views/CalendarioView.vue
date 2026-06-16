@@ -7,16 +7,41 @@
 import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, mesLegible } from "../utils/format";
+import { crearT } from "../i18n";
 import type { Puntual } from "../types";
 
 // Store central de finanzas (puntuales + mes seleccionado).
 const f = useFinanzas();
 
+// Función de traducción del componente: todos los textos visibles ES/EN.
+const t = crearT({
+  titulo: { es: "Calendario", en: "Calendar" },
+  sinMovimientos: { es: "Sin movimientos", en: "No transactions" },
+  dia: { es: "Día", en: "Day" },
+  // Cabeceras de la semana (lunes a domingo), una clave por día.
+  diaLun: { es: "L", en: "M" },
+  diaMar: { es: "M", en: "T" },
+  diaMie: { es: "X", en: "W" },
+  diaJue: { es: "J", en: "T" },
+  diaVie: { es: "V", en: "F" },
+  diaSab: { es: "S", en: "S" },
+  diaDom: { es: "D", en: "S" },
+});
+
 // Día seleccionado por el usuario ("YYYY-MM-DD") o null si no hay ninguno.
 const diaSeleccionado = ref<string | null>(null);
 
-// Cabeceras de la semana, empezando en lunes (formato español).
-const DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"];
+// Cabeceras de la semana, empezando en lunes. Computed para que dependa del
+// idioma activo: cada entrada se traduce con t() (ES: L M X J V S D / EN: M T W T F S S).
+const DIAS_SEMANA = computed<string[]>(() => [
+  t("diaLun"),
+  t("diaMar"),
+  t("diaMie"),
+  t("diaJue"),
+  t("diaVie"),
+  t("diaSab"),
+  t("diaDom"),
+]);
 
 // Estructura de cada celda del calendario.
 interface CeldaDia {
@@ -115,7 +140,8 @@ const movimientosSeleccion = computed<Puntual[]>(() => {
 const tituloSeleccion = computed<string>(() => {
   if (!diaSeleccionado.value) return "";
   const [, , d] = diaSeleccionado.value.split("-");
-  return `Día ${Number(d)} · ${mesLegible(f.mesSeleccionado)}`;
+  // "Día N · mes" (ES) / "Day N · month" (EN); el número y el mes no se traducen.
+  return `${t("dia")} ${Number(d)} · ${mesLegible(f.mesSeleccionado)}`;
 });
 
 // Marca/desmarca el día al hacer clic (segundo clic en el mismo día lo cierra).
@@ -128,17 +154,18 @@ function seleccionarDia(fecha: string): void {
   <div>
     <!-- Cabecera: título de la vista + mes legible -->
     <div class="mb-6">
-      <h2 class="font-display text-2xl font-bold">Calendario</h2>
+      <h2 class="font-display text-2xl font-bold">{{ t("titulo") }}</h2>
       <p class="text-muted mt-0.5">{{ mesLegible(f.mesSeleccionado) }}</p>
     </div>
 
     <!-- Tarjeta con la rejilla del mes -->
     <div class="rounded-2xl bg-surface border border-border p-5">
-      <!-- Cabeceras de la semana (L M X J V S D) -->
+      <!-- Cabeceras de la semana (ES: L M X J V S D / EN: M T W T F S S) -->
+      <!-- key por índice: en inglés hay letras repetidas (T, S) y no pueden colisionar -->
       <div class="grid grid-cols-7 gap-1.5 mb-1.5">
         <div
-          v-for="dia in DIAS_SEMANA"
-          :key="dia"
+          v-for="(dia, i) in DIAS_SEMANA"
+          :key="i"
           class="text-center text-faint text-xs font-medium py-1"
         >
           {{ dia }}
@@ -190,7 +217,7 @@ function seleccionarDia(fecha: string): void {
 
       <!-- Sin movimientos ese día -->
       <p v-if="!movimientosSeleccion.length" class="text-muted text-sm">
-        Sin movimientos
+        {{ t("sinMovimientos") }}
       </p>
 
       <!-- Lista de movimientos puntuales del día -->

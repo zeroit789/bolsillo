@@ -9,6 +9,21 @@
 import { computed } from "vue";
 // Utilidades de formato: euro() para tooltips, mesLegible() para el mes completo.
 import { euro, mesLegible } from "../utils/format";
+// Sistema de traducción propio del proyecto (ES/EN reactivo).
+import { crearT } from "../i18n";
+
+// ─── Traducciones del componente ─────────────────────────────────────────────
+// Todos los textos visibles fijos del componente, en español e inglés.
+const t = crearT({
+  titulo: { es: "Evolución", en: "Trend" },
+  ingresos: { es: "Ingresos", en: "Income" },
+  gastos: { es: "Gastos", en: "Expenses" },
+  sinDatos: { es: "Aún no hay datos suficientes", en: "Not enough data yet" },
+  aria: {
+    es: "Gráfica de evolución de ingresos y gastos por mes",
+    en: "Chart showing income and expenses trend by month",
+  },
+});
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 // Forma mínima que necesita el componente. Es compatible estructuralmente con
@@ -112,7 +127,7 @@ const grupos = computed<GrupoMes[]>(() => {
       ancho: anchoBarra,
       alto: altoIng,
       color: "var(--color-ok)",
-      titulo: `${mesLegible(m.mes)} · Ingresos ${euro(m.ingresos)}`,
+      titulo: `${mesLegible(m.mes)} · ${t("ingresos")} ${euro(m.ingresos)}`,
     };
 
     // Barra de gastos (derecha, roja).
@@ -123,7 +138,7 @@ const grupos = computed<GrupoMes[]>(() => {
       ancho: anchoBarra,
       alto: altoGas,
       color: "var(--color-danger)",
-      titulo: `${mesLegible(m.mes)} · Gastos ${euro(m.totalGastos)}`,
+      titulo: `${mesLegible(m.mes)} · ${t("gastos")} ${euro(m.totalGastos)}`,
     };
 
     lista.push({
@@ -149,24 +164,24 @@ function etiquetaMes(mes: string): string {
   <div class="rounded-2xl bg-surface border border-border p-5">
     <!-- Cabecera: título + leyenda de colores -->
     <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display font-bold text-ink">Evolución</h3>
+      <h3 class="font-display font-bold text-ink">{{ t("titulo") }}</h3>
 
       <!-- Leyenda: cuadradito verde (ingresos) y rojo (gastos) -->
       <div class="flex items-center gap-4 text-xs text-muted no-select">
         <span class="flex items-center gap-1.5">
           <span class="inline-block w-3 h-3 rounded-sm bg-ok"></span>
-          Ingresos
+          {{ t("ingresos") }}
         </span>
         <span class="flex items-center gap-1.5">
           <span class="inline-block w-3 h-3 rounded-sm bg-danger"></span>
-          Gastos
+          {{ t("gastos") }}
         </span>
       </div>
     </div>
 
     <!-- Estado vacío: sin datos o todo a cero -->
     <p v-if="!hayDatos" class="text-faint text-sm py-10 text-center">
-      Aún no hay datos suficientes
+      {{ t("sinDatos") }}
     </p>
 
     <!-- Gráfica SVG responsive: ocupa el 100% del ancho y mantiene proporción -->
@@ -176,7 +191,7 @@ function etiquetaMes(mes: string): string {
       preserveAspectRatio="xMidYMid meet"
       style="width: 100%; height: auto"
       role="img"
-      aria-label="Gráfica de evolución de ingresos y gastos por mes"
+      :aria-label="t('aria')"
     >
       <!-- Línea base del eje X (suelo de las barras) -->
       <line

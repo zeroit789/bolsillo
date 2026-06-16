@@ -11,6 +11,7 @@ import { useFinanzas } from "./stores/finanzas";
 import { mesActual, mesLegible, euro } from "./utils/format";
 import { estadoDeuda } from "./utils/deuda";
 import { notificar } from "./utils/notificar";
+import { crearT } from "./i18n";
 import PantallaBloqueo from "./components/PantallaBloqueo.vue";
 import Onboarding from "./components/Onboarding.vue";
 import DashboardView from "./views/DashboardView.vue";
@@ -27,6 +28,22 @@ import AjustesView from "./views/AjustesView.vue";
 const sesion = useSesion();
 const ajustes = useAjustes();
 const f = useFinanzas();
+
+// Traducciones del shell (etiquetas del menú, saludo y carga).
+const t = crearT({
+  resumen: { es: "Resumen", en: "Summary" },
+  movimientos: { es: "Movimientos", en: "Transactions" },
+  calendario: { es: "Calendario", en: "Calendar" },
+  deudas: { es: "Deudas", en: "Debts" },
+  planes: { es: "Planes", en: "Goals" },
+  presupuestos: { es: "Presupuestos", en: "Budgets" },
+  sobres: { es: "Sobres", en: "Envelopes" },
+  cuentas: { es: "Cuentas", en: "Accounts" },
+  historial: { es: "Historial", en: "History" },
+  ajustes: { es: "Ajustes", en: "Settings" },
+  hola: { es: "Hola", en: "Hi" },
+  cargando: { es: "Cargando…", en: "Loading…" },
+});
 
 // Secciones de navegación.
 const NAV = [
@@ -178,7 +195,7 @@ watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
           @click="vista = n.id"
         >
           <span class="text-lg">{{ n.icono }}</span>
-          <span class="font-medium">{{ n.etiqueta }}</span>
+          <span class="font-medium">{{ t(n.id) }}</span>
         </button>
       </nav>
     </aside>
@@ -188,7 +205,7 @@ watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
       <!-- Barra superior con el selector de mes -->
       <header class="flex items-center justify-between gap-3 px-8 py-4 border-b border-border">
         <p class="text-muted text-sm truncate">
-          <span v-if="ajustes.nombre">Hola, <span class="text-ink font-medium">{{ ajustes.nombre }}</span></span>
+          <span v-if="ajustes.nombre">{{ t("hola") }}, <span class="text-ink font-medium">{{ ajustes.nombre }}</span></span>
         </p>
         <select
           v-if="mostrarMes"
@@ -207,5 +224,5 @@ watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
   </div>
 
   <!-- Cargando (instante inicial) -->
-  <div v-else class="min-h-screen flex items-center justify-center text-muted">Cargando…</div>
+  <div v-else class="min-h-screen flex items-center justify-center text-muted">{{ t("cargando") }}</div>
 </template>

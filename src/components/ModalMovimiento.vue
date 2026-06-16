@@ -7,7 +7,59 @@ import { ref, reactive, computed } from "vue";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
+import { crearT } from "../i18n";
 import type { Signo, Subdivision } from "../types";
+
+// Diccionario de textos visibles del modal (ES/EN). t("clave") devuelve el
+// idioma activo según la store de ajustes; la UI se re-renderiza al cambiarlo.
+const t = crearT({
+  tituloEditar: { es: "Editar movimiento", en: "Edit transaction" },
+  tituloNuevo: { es: "Nuevo movimiento", en: "New transaction" },
+  tipo: { es: "Tipo", en: "Type" },
+  // Opciones del <select> de clase (gasto/ingreso, fijo/variable)
+  gastoVariable: { es: "Gasto variable", en: "Variable expense" },
+  gastoFijo: { es: "Gasto fijo (cada mes)", en: "Fixed expense (monthly)" },
+  ingresoPuntual: { es: "Ingreso puntual", en: "One-off income" },
+  ingresoFijo: { es: "Ingreso fijo (cada mes)", en: "Fixed income (monthly)" },
+  concepto: { es: "Concepto", en: "Description" },
+  conceptoPlaceholder: { es: "Ej. Supermercado", en: "E.g. Groceries" },
+  importe: { es: "Importe (€)", en: "Amount (€)" },
+  fecha: { es: "Fecha", en: "Date" },
+  diaPago: { es: "Día de pago (1-31)", en: "Payment day (1-31)" },
+  diaPagoPlaceholder: { es: "Ej. 5", en: "E.g. 5" },
+  categoria: { es: "Categoría", en: "Category" },
+  comercio: { es: "Comercio (opcional)", en: "Merchant (optional)" },
+  comercioPlaceholder: { es: "Ej. Mercadona", en: "E.g. Mercadona" },
+  etiquetas: { es: "Etiquetas (opcional)", en: "Tags (optional)" },
+  etiquetasPlaceholder: { es: "Ej. vacaciones, regalo", en: "E.g. holidays, gift" },
+  etiquetasAyuda: { es: "Sepáralas con comas.", en: "Separate them with commas." },
+  cuenta: { es: "Cuenta (opcional)", en: "Account (optional)" },
+  sinCuenta: { es: "— Sin cuenta —", en: "— No account —" },
+  dividirEnCategorias: { es: "Dividir en categorías", en: "Split into categories" },
+  quitarParte: { es: "Quitar parte", en: "Remove part" },
+  anadirParte: { es: "+ añadir parte", en: "+ add part" },
+  totalDividido: { es: "Total dividido", en: "Split total" },
+  recibo: { es: "Recibo (opcional)", en: "Receipt (optional)" },
+  reciboAlt: { es: "Recibo", en: "Receipt" },
+  quitar: { es: "Quitar", en: "Remove" },
+  avisoFijos: {
+    es: "Los fijos se repiten automáticamente en todos los meses desde hoy.",
+    en: "Fixed transactions repeat automatically every month from today.",
+  },
+  cancelar: { es: "Cancelar", en: "Cancel" },
+  guardar: { es: "Guardar", en: "Save" },
+  // Mensajes de validación mostrados al usuario
+  errConcepto: { es: "Pon un concepto", en: "Enter a description" },
+  errPartes: {
+    es: "Añade al menos 2 partes con importe mayor que 0",
+    en: "Add at least 2 parts with an amount greater than 0",
+  },
+  errImporte: {
+    es: "El importe debe ser mayor que 0",
+    en: "The amount must be greater than 0",
+  },
+  errFecha: { es: "Pon una fecha válida", en: "Enter a valid date" },
+});
 
 // Forma de los datos iniciales para precargar el formulario en modo edición.
 interface MovimientoInicial {
@@ -63,6 +115,15 @@ function claseDesde(recurrente: boolean, signo: Signo): string {
   const c = CLASES.find((x) => x.recurrente === recurrente && x.signo === signo);
   return c ? c.valor : "gasto-variable";
 }
+
+// Mapea el `valor` de cada clase a su clave de traducción, para mostrar la
+// etiqueta del <select> en el idioma activo sin tocar la lógica de CLASES.
+const CLAVE_CLASE: Record<string, string> = {
+  "gasto-variable": "gastoVariable",
+  "gasto-fijo": "gastoFijo",
+  "ingreso-puntual": "ingresoPuntual",
+  "ingreso-fijo": "ingresoFijo",
+};
 
 // Grupos de categorías para el <select> con <optgroup>.
 // El modal se monta con v-if cada vez que se abre, así que este setup se
@@ -189,7 +250,7 @@ const esGastoPuntual = computed(
 );
 
 function guardar() {
-  if (!form.concepto.trim()) return (error.value = "Pon un concepto");
+  if (!form.concepto.trim()) return (error.value = t("errConcepto"));
 
   // ¿Está activo el modo dividido? Solo tiene sentido en gastos puntuales.
   const usandoDividido = esGastoPuntual.value && dividido.value;
@@ -205,11 +266,11 @@ function guardar() {
   if (usandoDividido) {
     const validas = partes.filter((p) => aImporte(p.importe) > 0);
     if (validas.length < 2)
-      return (error.value = "Añade al menos 2 partes con importe mayor que 0");
+      return (error.value = t("errPartes"));
   }
 
-  if (!importe || importe <= 0) return (error.value = "El importe debe ser mayor que 0");
-  if (!esRecurrente.value && !form.fecha) return (error.value = "Pon una fecha válida");
+  if (!importe || importe <= 0) return (error.value = t("errImporte"));
+  if (!esRecurrente.value && !form.fecha) return (error.value = t("errFecha"));
 
   // Día de pago: solo para fijos y solo si se ha rellenado (si no, undefined).
   const diaPago =
@@ -265,33 +326,33 @@ function guardar() {
     <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-6 shadow-2xl">
       <!-- Título según el modo (edición vs alta) -->
       <h2 class="font-display text-xl font-bold mb-4">
-        {{ esEdicion ? "Editar movimiento" : "Nuevo movimiento" }}
+        {{ esEdicion ? t("tituloEditar") : t("tituloNuevo") }}
       </h2>
 
       <div class="space-y-3">
         <div>
-          <label class="text-muted text-sm">Tipo</label>
+          <label class="text-muted text-sm">{{ t("tipo") }}</label>
           <select
             v-model="form.clase"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
-            <option v-for="c in CLASES" :key="c.valor" :value="c.valor">{{ c.etiqueta }}</option>
+            <option v-for="c in CLASES" :key="c.valor" :value="c.valor">{{ t(CLAVE_CLASE[c.valor]) }}</option>
           </select>
         </div>
 
         <div>
-          <label class="text-muted text-sm">Concepto</label>
+          <label class="text-muted text-sm">{{ t("concepto") }}</label>
           <input
             v-model="form.concepto"
             type="text"
-            placeholder="Ej. Supermercado"
+            :placeholder="t('conceptoPlaceholder')"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
         </div>
 
         <div class="flex gap-3">
           <div class="flex-1">
-            <label class="text-muted text-sm">Importe (€)</label>
+            <label class="text-muted text-sm">{{ t("importe") }}</label>
             <!-- Si el gasto está dividido, el importe es la SUMA de las partes:
                  mostramos esa suma y deshabilitamos el input manual. -->
             <input
@@ -313,7 +374,7 @@ function guardar() {
           </div>
           <!-- La fecha solo importa en los movimientos puntuales -->
           <div v-if="!esRecurrente" class="flex-1">
-            <label class="text-muted text-sm">Fecha</label>
+            <label class="text-muted text-sm">{{ t("fecha") }}</label>
             <input
               v-model="form.fecha"
               type="date"
@@ -322,20 +383,20 @@ function guardar() {
           </div>
           <!-- Día de pago: solo para fijos (recurrentes), opcional -->
           <div v-if="esRecurrente" class="flex-1">
-            <label class="text-muted text-sm">Día de pago (1-31)</label>
+            <label class="text-muted text-sm">{{ t("diaPago") }}</label>
             <input
               v-model="form.diaPago"
               type="number"
               min="1"
               max="31"
-              placeholder="Ej. 5"
+              :placeholder="t('diaPagoPlaceholder')"
               class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
         </div>
 
         <div>
-          <label class="text-muted text-sm">Categoría</label>
+          <label class="text-muted text-sm">{{ t("categoria") }}</label>
           <select
             v-model="form.categoria"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
@@ -348,36 +409,36 @@ function guardar() {
 
         <!-- Comercio: texto libre opcional (Mercadona, Amazon…) -->
         <div>
-          <label class="text-muted text-sm">Comercio (opcional)</label>
+          <label class="text-muted text-sm">{{ t("comercio") }}</label>
           <input
             v-model="form.comercio"
             type="text"
-            placeholder="Ej. Mercadona"
+            :placeholder="t('comercioPlaceholder')"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
         </div>
 
         <!-- Etiquetas: texto separado por comas; se convierte a array al guardar -->
         <div>
-          <label class="text-muted text-sm">Etiquetas (opcional)</label>
+          <label class="text-muted text-sm">{{ t("etiquetas") }}</label>
           <input
             v-model="form.tagsTexto"
             type="text"
-            placeholder="Ej. vacaciones, regalo"
+            :placeholder="t('etiquetasPlaceholder')"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
-          <p class="text-faint text-xs mt-1">Sepáralas con comas.</p>
+          <p class="text-faint text-xs mt-1">{{ t("etiquetasAyuda") }}</p>
         </div>
 
         <!-- Cuenta/monedero: opcional, para puntuales y recurrentes -->
         <div>
-          <label class="text-muted text-sm">Cuenta (opcional)</label>
+          <label class="text-muted text-sm">{{ t("cuenta") }}</label>
           <select
             v-model="form.cuenta"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
             <!-- Opción vacía = sin cuenta asignada -->
-            <option value="">— Sin cuenta —</option>
+            <option value="">{{ t("sinCuenta") }}</option>
             <!-- Una opción por cada cuenta del store (value = id) -->
             <option v-for="c in f.cuentas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
@@ -388,7 +449,7 @@ function guardar() {
           <!-- Toggle para activar/desactivar el reparto en categorías -->
           <label class="flex items-center gap-2 text-sm text-ink cursor-pointer">
             <input v-model="dividido" type="checkbox" class="accent-brand" />
-            Dividir en categorías
+            {{ t("dividirEnCategorias") }}
           </label>
 
           <!-- Filas dinámicas: una por cada parte del gasto -->
@@ -414,7 +475,7 @@ function guardar() {
                 type="button"
                 class="px-2 text-faint hover:text-danger transition-colors disabled:opacity-30"
                 :disabled="partes.length <= 2"
-                title="Quitar parte"
+                :title="t('quitarParte')"
                 @click="quitarParte(i)"
               >
                 ✕
@@ -427,17 +488,17 @@ function guardar() {
               class="text-sm text-brand hover:text-brand-soft transition-colors"
               @click="anadirParte"
             >
-              + añadir parte
+              {{ t("anadirParte") }}
             </button>
 
             <!-- Suma de las partes (es el importe real del movimiento) -->
-            <p class="text-faint text-xs">Total dividido: {{ euro(sumaPartes) }}</p>
+            <p class="text-faint text-xs">{{ t("totalDividido") }}: {{ euro(sumaPartes) }}</p>
           </template>
         </div>
 
         <!-- Recibo: SOLO para puntuales (no recurrentes). Imagen redimensionada -->
         <div v-if="!esRecurrente">
-          <label class="text-muted text-sm">Recibo (opcional)</label>
+          <label class="text-muted text-sm">{{ t("recibo") }}</label>
           <!-- Si aún no hay imagen, mostramos el selector de fichero -->
           <input
             v-if="!form.recibo"
@@ -448,19 +509,19 @@ function guardar() {
           />
           <!-- Si ya hay imagen, miniatura + botón para quitarla -->
           <div v-else class="mt-1 flex items-center gap-3">
-            <img :src="form.recibo" alt="Recibo" class="h-20 w-20 rounded-lg object-cover border border-border" />
+            <img :src="form.recibo" :alt="t('reciboAlt')" class="h-20 w-20 rounded-lg object-cover border border-border" />
             <button
               type="button"
               class="rounded-lg border border-border px-3 py-1 text-sm text-muted hover:text-danger transition-colors"
               @click="quitarRecibo"
             >
-              Quitar
+              {{ t("quitar") }}
             </button>
           </div>
         </div>
 
         <p v-if="esRecurrente" class="text-faint text-xs">
-          Los fijos se repiten automáticamente en todos los meses desde hoy.
+          {{ t("avisoFijos") }}
         </p>
         <p v-if="error" class="text-danger text-sm">{{ error }}</p>
       </div>
@@ -470,13 +531,13 @@ function guardar() {
           class="flex-1 rounded-lg border border-border px-4 py-2 text-muted hover:text-ink transition-colors"
           @click="emit('cerrar')"
         >
-          Cancelar
+          {{ t("cancelar") }}
         </button>
         <button
           class="flex-1 rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
           @click="guardar"
         >
-          Guardar
+          {{ t("guardar") }}
         </button>
       </div>
     </div>

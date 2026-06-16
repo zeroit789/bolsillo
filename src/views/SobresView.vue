@@ -26,9 +26,49 @@ import { computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
 import { colorCategoria } from "../data/categorias";
+import { crearT } from "../i18n";
 
 // Store central de finanzas (ya inicializado en la app).
 const finanzas = useFinanzas();
+
+// Función de traducción ES/EN con todos los textos visibles de esta vista.
+// Claves cortas en camelCase; cada una con su versión española e inglesa.
+const t = crearT({
+  titulo: { es: "Sobres", en: "Envelopes" },
+  subtitulo: {
+    es: "Reparte tu dinero del mes en sobres y controla cada uno",
+    en: "Split your monthly money into envelopes and track each one",
+  },
+  ingresosMes: { es: "Ingresos del mes", en: "Monthly income" },
+  presupuestado: { es: "Presupuestado", en: "Budgeted" },
+  sumaSobres: { es: "Suma de todos tus sobres", en: "Sum of all your envelopes" },
+  sinPresupuestar: { es: "Sin presupuestar", en: "Unbudgeted" },
+  pasadoSobres: {
+    es: "Has metido en sobres más de lo que ingresas",
+    en: "You've put more into envelopes than you earn",
+  },
+  dineroLibre: { es: "Dinero libre, fuera de sobres", en: "Free money, outside envelopes" },
+  sinSobresTitulo: { es: "Aún no tienes ningún sobre", en: "You don't have any envelopes yet" },
+  sinSobresTexto1: { es: "Crea topes por categoría en la sección", en: "Create category limits in the" },
+  presupuestosSeccion: { es: "Presupuestos", en: "Budgets" },
+  sinSobresTexto2: {
+    es: "y aquí verás cómo se reparte el dinero del mes en cada sobre.",
+    en: "section and here you'll see how the monthly money splits into each envelope.",
+  },
+  gastado: { es: "Gastado", en: "Spent" },
+  de: { es: "de", en: "of" },
+  tePasaste: { es: "Te has pasado", en: "You're over by" },
+  quedan: { es: "Quedan", en: "Remaining" },
+  otrosGastos: { es: "Otros gastos (sin sobre)", en: "Other expenses (no envelope)" },
+  gastoSinTope: {
+    es: "Gasto del mes en categorías sin tope asignado",
+    en: "Monthly spending in categories with no assigned limit",
+  },
+  sinGastoFuera: {
+    es: "No tienes gastos fuera de tus sobres este mes",
+    en: "You have no spending outside your envelopes this month",
+  },
+});
 
 // --- Datos base del mes ---
 
@@ -116,9 +156,9 @@ function quedan(gastado: number, limite: number): number {
   <div class="min-h-full bg-base p-6 text-ink">
     <!-- 1. Cabecera: título + texto explicativo -->
     <header class="mb-6">
-      <h1 class="font-display text-2xl font-bold">Sobres</h1>
+      <h1 class="font-display text-2xl font-bold">{{ t("titulo") }}</h1>
       <p class="mt-1 text-sm text-muted">
-        Reparte tu dinero del mes en sobres y controla cada uno
+        {{ t("subtitulo") }}
       </p>
     </header>
 
@@ -126,7 +166,7 @@ function quedan(gastado: number, limite: number): number {
     <section class="mb-6 grid gap-4 sm:grid-cols-3">
       <!-- Ingresos del mes -->
       <article class="rounded-2xl bg-surface border border-border p-5">
-        <p class="text-sm text-muted">Ingresos del mes</p>
+        <p class="text-sm text-muted">{{ t("ingresosMes") }}</p>
         <p class="mt-1 font-display text-xl font-bold text-ink">
           {{ euro(finanzas.ingresos) }}
         </p>
@@ -134,16 +174,16 @@ function quedan(gastado: number, limite: number): number {
 
       <!-- Presupuestado (suma de todos los topes) -->
       <article class="rounded-2xl bg-surface border border-border p-5">
-        <p class="text-sm text-muted">Presupuestado</p>
+        <p class="text-sm text-muted">{{ t("presupuestado") }}</p>
         <p class="mt-1 font-display text-xl font-bold text-brand">
           {{ euro(presupuestado) }}
         </p>
-        <p class="mt-1 text-xs text-faint">Suma de todos tus sobres</p>
+        <p class="mt-1 text-xs text-faint">{{ t("sumaSobres") }}</p>
       </article>
 
       <!-- Sin presupuestar (ingresos - presupuestado) -->
       <article class="rounded-2xl bg-surface border border-border p-5">
-        <p class="text-sm text-muted">Sin presupuestar</p>
+        <p class="text-sm text-muted">{{ t("sinPresupuestar") }}</p>
         <!-- Verde si queda dinero libre, rojo si has presupuestado de más -->
         <p
           class="mt-1 font-display text-xl font-bold"
@@ -152,7 +192,7 @@ function quedan(gastado: number, limite: number): number {
           {{ euro(sinPresupuestar) }}
         </p>
         <p class="mt-1 text-xs text-faint">
-          {{ sinPresupuestar < 0 ? "Has metido en sobres más de lo que ingresas" : "Dinero libre, fuera de sobres" }}
+          {{ sinPresupuestar < 0 ? t("pasadoSobres") : t("dineroLibre") }}
         </p>
       </article>
     </section>
@@ -163,10 +203,10 @@ function quedan(gastado: number, limite: number): number {
       class="rounded-2xl bg-surface border border-border p-10 text-center"
     >
       <p class="text-4xl">✉️</p>
-      <p class="mt-3 font-display font-bold text-ink">Aún no tienes ningún sobre</p>
+      <p class="mt-3 font-display font-bold text-ink">{{ t("sinSobresTitulo") }}</p>
       <p class="mt-1 text-sm text-muted">
-        Crea topes por categoría en la sección <span class="font-medium text-ink">Presupuestos</span>
-        y aquí verás cómo se reparte el dinero del mes en cada sobre.
+        {{ t("sinSobresTexto1") }} <span class="font-medium text-ink">{{ t("presupuestosSeccion") }}</span>
+        {{ t("sinSobresTexto2") }}
       </p>
     </div>
 
@@ -202,7 +242,7 @@ function quedan(gastado: number, limite: number): number {
 
           <!-- Texto: gastado X de Y (N%) — el % es el REAL (puede pasar de 100) -->
           <p class="mt-2 text-xs text-muted">
-            Gastado {{ euro(gastoDe(p.categoria)) }} de {{ euro(p.limite) }}
+            {{ t("gastado") }} {{ euro(gastoDe(p.categoria)) }} {{ t("de") }} {{ euro(p.limite) }}
             (<span :class="colorTexto(gastoDe(p.categoria), p.limite)">{{ porcentajeReal(gastoDe(p.categoria), p.limite) }}%</span>)
           </p>
 
@@ -212,10 +252,10 @@ function quedan(gastado: number, limite: number): number {
             :class="quedan(gastoDe(p.categoria), p.limite) < 0 ? 'text-danger' : 'text-ok'"
           >
             <template v-if="quedan(gastoDe(p.categoria), p.limite) < 0">
-              Te has pasado {{ euro(-quedan(gastoDe(p.categoria), p.limite)) }}
+              {{ t("tePasaste") }} {{ euro(-quedan(gastoDe(p.categoria), p.limite)) }}
             </template>
             <template v-else>
-              Quedan {{ euro(quedan(gastoDe(p.categoria), p.limite)) }}
+              {{ t("quedan") }} {{ euro(quedan(gastoDe(p.categoria), p.limite)) }}
             </template>
           </p>
         </div>
@@ -227,7 +267,7 @@ function quedan(gastado: number, limite: number): number {
         <div class="flex items-center gap-2 min-w-0">
           <span class="h-3 w-3 shrink-0 rounded-full bg-faint"></span>
           <h2 class="font-display font-bold leading-tight truncate">
-            Otros gastos (sin sobre)
+            {{ t("otrosGastos") }}
           </h2>
         </div>
 
@@ -239,10 +279,10 @@ function quedan(gastado: number, limite: number): number {
           <!-- Texto según haya o no gasto fuera de sobres -->
           <p class="mt-1 text-xs text-muted">
             <template v-if="gastoSinSobre > 0">
-              Gasto del mes en categorías sin tope asignado
+              {{ t("gastoSinTope") }}
             </template>
             <template v-else>
-              No tienes gastos fuera de tus sobres este mes
+              {{ t("sinGastoFuera") }}
             </template>
           </p>
         </div>

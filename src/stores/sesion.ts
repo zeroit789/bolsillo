@@ -87,7 +87,7 @@ export const useSesion = defineStore("sesion", () => {
     try {
       const ok = await almacen.secretoValido(credencial);
       if (!ok) {
-        error.value = "Credencial incorrecta";
+        error.value = "credIncorrecta"; // clave i18n, se traduce en PantallaBloqueo
         return false;
       }
       almacen.usarSecreto(credencial);
@@ -95,7 +95,7 @@ export const useSesion = defineStore("sesion", () => {
       desbloqueado.value = true;
       return true;
     } catch {
-      error.value = "No se pudieron leer los datos";
+      error.value = "lecturaFallida"; // clave i18n, se traduce en PantallaBloqueo
       return false;
     }
   }

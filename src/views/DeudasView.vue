@@ -9,9 +9,61 @@ import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { TIPOS_DEUDA, type Deuda, type TipoDeuda } from "../types";
 import { euro, mesActual } from "../utils/format";
+import { crearT } from "../i18n";
 
 // Store central de finanzas (ya inicializado en la app).
 const finanzas = useFinanzas();
+
+// Función de traducción (ES/EN) con todos los textos visibles de la vista.
+const t = crearT({
+  // Cabecera y botones de alta
+  titulo: { es: "Deudas", en: "Debts" },
+  nuevaDeuda: { es: "+ Nueva deuda", en: "+ New debt" },
+  // Estado vacío
+  vacioTitulo: { es: "No tienes deudas registradas", en: "You have no debts registered" },
+  vacioSub: {
+    es: "Cuando añadas una deuda aparecerá aquí su progreso mes a mes.",
+    en: "When you add a debt, its month-by-month progress will appear here.",
+  },
+  vacioBoton: { es: "+ Añadir mi primera deuda", en: "+ Add my first debt" },
+  // Tarjeta de deuda
+  editar: { es: "Editar", en: "Edit" },
+  editarAria: { es: "Editar deuda", en: "Edit debt" },
+  eliminar: { es: "Eliminar", en: "Delete" },
+  eliminarAria: { es: "Eliminar deuda", en: "Delete debt" },
+  pagadoDe: { es: "Pagado", en: "Paid" },
+  de: { es: "de", en: "of" },
+  pendiente: { es: "Pendiente:", en: "Pending:" },
+  cuotaMensual: { es: "Cuota mensual:", en: "Monthly payment:" },
+  pagada: { es: "✓ Pagada", en: "✓ Paid off" },
+  teQuedan: { es: "Te quedan", en: "You have" },
+  mes: { es: "mes", en: "month" },
+  meses: { es: "meses", en: "months" },
+  // Modal de alta/edición
+  modalEditar: { es: "Editar deuda", en: "Edit debt" },
+  modalNueva: { es: "Nueva deuda", en: "New debt" },
+  labelConcepto: { es: "Concepto", en: "Concept" },
+  phConcepto: { es: "Ej: Tarjeta Visa", en: "E.g.: Visa card" },
+  labelTipo: { es: "Tipo", en: "Type" },
+  labelTotal: { es: "Total (€)", en: "Total (€)" },
+  labelCuotaMensual: { es: "Cuota mensual (€)", en: "Monthly payment (€)" },
+  labelYaPagado: { es: "Ya pagado (€)", en: "Already paid (€)" },
+  labelMesInicio: { es: "Mes de inicio", en: "Start month" },
+  labelDiaCobro: { es: "Día de cobro (1-31)", en: "Charge day (1-31)" },
+  phOpcional: { es: "Opcional", en: "Optional" },
+  cancelar: { es: "Cancelar", en: "Cancel" },
+  guardar: { es: "Guardar", en: "Save" },
+  // Mensajes de validación
+  errConcepto: { es: "El concepto no puede estar vacío.", en: "The concept cannot be empty." },
+  errTotal: { es: "El total debe ser mayor que 0.", en: "The total must be greater than 0." },
+  errCuota: { es: "La cuota mensual debe ser mayor que 0.", en: "The monthly payment must be greater than 0." },
+  errPagadoNeg: { es: "Lo ya pagado no puede ser negativo.", en: "The amount already paid cannot be negative." },
+  errPagadoTotal: { es: "Lo ya pagado no puede superar el total.", en: "The amount already paid cannot exceed the total." },
+  errMes: { es: "Indica un mes de inicio válido.", en: "Enter a valid start month." },
+  // Confirmación de borrado (con interpolación del concepto)
+  confirmBorrarPre: { es: '¿Eliminar la deuda "', en: 'Delete the debt "' },
+  confirmBorrarPost: { es: '"?', en: '"?' },
+});
 
 // --- Estado del modal de alta/edición ---
 // Si está abierto el modal.
@@ -38,7 +90,7 @@ const error = ref("");
 
 // Título del modal según estemos creando o editando.
 const tituloModal = computed(() =>
-  editandoId.value ? "Editar deuda" : "Nueva deuda"
+  editandoId.value ? t("modalEditar") : t("modalNueva")
 );
 
 // Devuelve los metadatos (etiqueta + icono) de un tipo de deuda.
@@ -88,12 +140,12 @@ function guardar() {
   const cuota = r2(form.cuotaMensual);
   const pagado = r2(form.pagadoInicial);
 
-  if (!form.concepto.trim()) { error.value = "El concepto no puede estar vacío."; return; }
-  if (total <= 0) { error.value = "El total debe ser mayor que 0."; return; }
-  if (cuota <= 0) { error.value = "La cuota mensual debe ser mayor que 0."; return; }
-  if (pagado < 0) { error.value = "Lo ya pagado no puede ser negativo."; return; }
-  if (pagado > total) { error.value = "Lo ya pagado no puede superar el total."; return; }
-  if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) { error.value = "Indica un mes de inicio válido."; return; }
+  if (!form.concepto.trim()) { error.value = t("errConcepto"); return; }
+  if (total <= 0) { error.value = t("errTotal"); return; }
+  if (cuota <= 0) { error.value = t("errCuota"); return; }
+  if (pagado < 0) { error.value = t("errPagadoNeg"); return; }
+  if (pagado > total) { error.value = t("errPagadoTotal"); return; }
+  if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) { error.value = t("errMes"); return; }
 
   // Día de cobro: se acepta entero 1-31; si está vacío/0/fuera de rango => undefined.
   const diaNum = Math.trunc(Number(form.diaPago) || 0);
@@ -122,7 +174,7 @@ function guardar() {
 
 // Elimina una deuda tras confirmación del navegador.
 function borrar(deuda: Deuda) {
-  if (confirm(`¿Eliminar la deuda "${deuda.concepto}"?`)) {
+  if (confirm(`${t("confirmBorrarPre")}${deuda.concepto}${t("confirmBorrarPost")}`)) {
     finanzas.eliminarDeuda(deuda.id);
   }
 }
@@ -133,12 +185,12 @@ function borrar(deuda: Deuda) {
   <div class="min-h-full bg-base p-6 text-ink">
     <!-- 1. Cabecera: título + botón de alta -->
     <header class="mb-6 flex items-center justify-between">
-      <h1 class="font-display text-2xl font-bold">Deudas</h1>
+      <h1 class="font-display text-2xl font-bold">{{ t("titulo") }}</h1>
       <button
         class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         @click="abrirNueva"
       >
-        + Nueva deuda
+        {{ t("nuevaDeuda") }}
       </button>
     </header>
 
@@ -148,15 +200,15 @@ function borrar(deuda: Deuda) {
       class="rounded-2xl bg-surface border border-border p-10 text-center"
     >
       <p class="text-4xl">🎉</p>
-      <p class="mt-3 font-display font-bold text-ink">No tienes deudas registradas</p>
+      <p class="mt-3 font-display font-bold text-ink">{{ t("vacioTitulo") }}</p>
       <p class="mt-1 text-sm text-muted">
-        Cuando añadas una deuda aparecerá aquí su progreso mes a mes.
+        {{ t("vacioSub") }}
       </p>
       <button
         class="mt-5 rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         @click="abrirNueva"
       >
-        + Añadir mi primera deuda
+        {{ t("vacioBoton") }}
       </button>
     </div>
 
@@ -183,16 +235,16 @@ function borrar(deuda: Deuda) {
           <div class="flex gap-1">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
-              title="Editar"
-              aria-label="Editar deuda"
+              :title="t('editar')"
+              :aria-label="t('editarAria')"
               @click="abrirEditar(estado.deuda)"
             >
               ✏️
             </button>
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-              title="Eliminar"
-              aria-label="Eliminar deuda"
+              :title="t('eliminar')"
+              :aria-label="t('eliminarAria')"
               @click="borrar(estado.deuda)"
             >
               🗑️
@@ -211,7 +263,7 @@ function borrar(deuda: Deuda) {
           </div>
           <!-- Texto: pagado X de Y (progreso%) -->
           <p class="mt-2 text-xs text-muted">
-            Pagado {{ euro(estado.pagado) }} de {{ euro(estado.deuda.total) }}
+            {{ t("pagadoDe") }} {{ euro(estado.pagado) }} {{ t("de") }} {{ euro(estado.deuda.total) }}
             ({{ Math.round(estado.progreso) }}%)
           </p>
         </div>
@@ -221,14 +273,14 @@ function borrar(deuda: Deuda) {
           <div class="space-y-1 text-sm">
             <!-- Pendiente (rojo si queda algo por pagar) -->
             <p>
-              <span class="text-muted">Pendiente: </span>
+              <span class="text-muted">{{ t("pendiente") }} </span>
               <span :class="estado.pendiente > 0 ? 'text-danger font-medium' : 'text-ok font-medium'">
                 {{ euro(estado.pendiente) }}
               </span>
             </p>
             <!-- Cuota mensual -->
             <p>
-              <span class="text-muted">Cuota mensual: </span>
+              <span class="text-muted">{{ t("cuotaMensual") }} </span>
               <span class="text-ink">{{ euro(estado.deuda.cuotaMensual) }}</span>
             </p>
           </div>
@@ -239,12 +291,12 @@ function borrar(deuda: Deuda) {
               v-if="estado.terminada"
               class="rounded-lg bg-surface-2 border border-border px-3 py-1 text-sm font-medium text-ok"
             >
-              ✓ Pagada
+              {{ t("pagada") }}
             </span>
             <span v-else class="text-sm text-muted">
-              Te quedan
+              {{ t("teQuedan") }}
               <span class="font-medium text-warn">{{ estado.mesesRestantes }}</span>
-              {{ estado.mesesRestantes === 1 ? "mes" : "meses" }}
+              {{ estado.mesesRestantes === 1 ? t("mes") : t("meses") }}
             </span>
           </div>
         </div>
@@ -265,18 +317,18 @@ function borrar(deuda: Deuda) {
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
           <!-- Concepto -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Concepto</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("labelConcepto") }}</label>
             <input
               v-model="form.concepto"
               type="text"
-              placeholder="Ej: Tarjeta Visa"
+              :placeholder="t('phConcepto')"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
 
           <!-- Tipo de deuda -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Tipo</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("labelTipo") }}</label>
             <select
               v-model="form.tipo"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
@@ -290,7 +342,7 @@ function borrar(deuda: Deuda) {
           <!-- Total y cuota mensual en dos columnas -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-sm text-muted">Total (€)</label>
+              <label class="mb-1 block text-sm text-muted">{{ t("labelTotal") }}</label>
               <input
                 v-model.number="form.total"
                 type="number"
@@ -300,7 +352,7 @@ function borrar(deuda: Deuda) {
               />
             </div>
             <div>
-              <label class="mb-1 block text-sm text-muted">Cuota mensual (€)</label>
+              <label class="mb-1 block text-sm text-muted">{{ t("labelCuotaMensual") }}</label>
               <input
                 v-model.number="form.cuotaMensual"
                 type="number"
@@ -314,7 +366,7 @@ function borrar(deuda: Deuda) {
           <!-- Ya pagado y mes de inicio en dos columnas -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-sm text-muted">Ya pagado (€)</label>
+              <label class="mb-1 block text-sm text-muted">{{ t("labelYaPagado") }}</label>
               <input
                 v-model.number="form.pagadoInicial"
                 type="number"
@@ -324,7 +376,7 @@ function borrar(deuda: Deuda) {
               />
             </div>
             <div>
-              <label class="mb-1 block text-sm text-muted">Mes de inicio</label>
+              <label class="mb-1 block text-sm text-muted">{{ t("labelMesInicio") }}</label>
               <input
                 v-model="form.inicioMes"
                 type="month"
@@ -335,14 +387,14 @@ function borrar(deuda: Deuda) {
 
           <!-- Día de cobro (opcional): día del mes en que se cobra la cuota (1-31) -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Día de cobro (1-31)</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("labelDiaCobro") }}</label>
             <input
               v-model.number="form.diaPago"
               type="number"
               min="1"
               max="31"
               step="1"
-              placeholder="Opcional"
+              :placeholder="t('phOpcional')"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
@@ -357,13 +409,13 @@ function borrar(deuda: Deuda) {
               class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-muted font-medium hover:text-ink"
               @click="cerrarModal"
             >
-              Cancelar
+              {{ t("cancelar") }}
             </button>
             <button
               type="submit"
               class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
             >
-              Guardar
+              {{ t("guardar") }}
             </button>
           </div>
         </form>

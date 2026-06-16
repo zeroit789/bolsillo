@@ -14,6 +14,41 @@ import { exportarHistorialXLSX, exportarHistorialPDF } from '../utils/export'
 import ResumenAnual from '../components/ResumenAnual.vue'
 // Componente de comparativa: mes seleccionado vs mes anterior
 import ComparativaPeriodos from '../components/ComparativaPeriodos.vue'
+// Sistema de traducción propio del proyecto (ES/EN reactivo según idioma activo)
+import { crearT } from '../i18n'
+
+// Función de traducción del componente (ES/EN) con todos los textos visibles de la vista.
+// Claves cortas en camelCase; cada una con su versión española e inglesa.
+const t = crearT({
+  // Tarjeta "Dónde gastas"
+  dondeGastas: { es: 'Dónde gastas (este mes)', en: 'Where you spend (this month)' },
+  rankingVacio: {
+    es: 'Añade el comercio a tus gastos para ver el ranking.',
+    en: 'Add the merchant to your expenses to see the ranking.',
+  },
+  // Cabecera y botones de exportación
+  historial: { es: 'Historial', en: 'History' },
+  exportarExcel: { es: 'Exportar Excel', en: 'Export Excel' },
+  exportarPDF: { es: 'Exportar PDF', en: 'Export PDF' },
+  // Estado vacío del historial
+  sinMeses: {
+    es: 'Todavía no hay meses registrados en tu historial.',
+    en: 'No months recorded in your history yet.',
+  },
+  sinMesesAyuda: {
+    es: 'Cuando cierres tu primer mes, aparecerá aquí el resumen.',
+    en: 'When you close your first month, the summary will appear here.',
+  },
+  // Encabezados de la tabla
+  colMes: { es: 'Mes', en: 'Month' },
+  colIngresos: { es: 'Ingresos', en: 'Income' },
+  colGastosFijos: { es: 'Gastos fijos', en: 'Fixed expenses' },
+  colGastosVariables: { es: 'Gastos variables', en: 'Variable expenses' },
+  colTotalGastos: { es: 'Total gastos', en: 'Total expenses' },
+  colDisponible: { es: 'Disponible', en: 'Available' },
+  // Pie de tabla
+  totales: { es: 'Totales', en: 'Totals' },
+})
 
 // Tipo del resumen de cada mes (espejo del que devuelve la store)
 interface ResumenMes {
@@ -114,11 +149,11 @@ async function alExportarPDF(): Promise<void> {
     <!-- Dónde gastas (este mes): ranking de gasto por comercio -->
     <div class="rounded-2xl bg-surface border border-border p-5">
       <!-- Título de la tarjeta -->
-      <h2 class="font-display font-bold text-lg text-ink">Dónde gastas (este mes)</h2>
+      <h2 class="font-display font-bold text-lg text-ink">{{ t('dondeGastas') }}</h2>
 
       <!-- Estado vacío: no hay comercios con gasto registrado -->
       <p v-if="!hayGastoPorComercio" class="mt-3 text-sm text-muted">
-        Añade el comercio a tus gastos para ver el ranking.
+        {{ t('rankingVacio') }}
       </p>
 
       <!-- Lista de comercios con su total y barra proporcional al mayor -->
@@ -142,7 +177,7 @@ async function alExportarPDF(): Promise<void> {
 
     <!-- Cabecera: título + botones de exportación -->
     <div class="flex items-center justify-between">
-      <h1 class="font-display font-bold text-2xl text-ink">Historial</h1>
+      <h1 class="font-display font-bold text-2xl text-ink">{{ t('historial') }}</h1>
 
       <!-- Botones de exportación a la derecha -->
       <div class="flex items-center gap-3">
@@ -152,7 +187,7 @@ async function alExportarPDF(): Promise<void> {
           class="rounded-lg border border-border px-4 py-2 text-muted hover:text-ink"
           @click="alExportarExcel"
         >
-          Exportar Excel
+          {{ t('exportarExcel') }}
         </button>
         <!-- Botón primario: Exportar PDF -->
         <button
@@ -160,7 +195,7 @@ async function alExportarPDF(): Promise<void> {
           class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
           @click="alExportarPDF"
         >
-          Exportar PDF
+          {{ t('exportarPDF') }}
         </button>
       </div>
     </div>
@@ -170,9 +205,9 @@ async function alExportarPDF(): Promise<void> {
       v-if="!hayHistorial"
       class="rounded-2xl bg-surface border border-border p-5 text-center"
     >
-      <p class="text-muted">Todavía no hay meses registrados en tu historial.</p>
+      <p class="text-muted">{{ t('sinMeses') }}</p>
       <p class="text-faint text-sm mt-1">
-        Cuando cierres tu primer mes, aparecerá aquí el resumen.
+        {{ t('sinMesesAyuda') }}
       </p>
     </div>
 
@@ -184,12 +219,12 @@ async function alExportarPDF(): Promise<void> {
           <!-- Cabecera de tabla sticky -->
           <thead class="sticky top-0 bg-surface-2">
             <tr class="text-left text-muted">
-              <th class="px-3 py-2 font-medium">Mes</th>
-              <th class="px-3 py-2 font-medium text-right">Ingresos</th>
-              <th class="px-3 py-2 font-medium text-right">Gastos fijos</th>
-              <th class="px-3 py-2 font-medium text-right">Gastos variables</th>
-              <th class="px-3 py-2 font-medium text-right">Total gastos</th>
-              <th class="px-3 py-2 font-medium text-right">Disponible</th>
+              <th class="px-3 py-2 font-medium">{{ t('colMes') }}</th>
+              <th class="px-3 py-2 font-medium text-right">{{ t('colIngresos') }}</th>
+              <th class="px-3 py-2 font-medium text-right">{{ t('colGastosFijos') }}</th>
+              <th class="px-3 py-2 font-medium text-right">{{ t('colGastosVariables') }}</th>
+              <th class="px-3 py-2 font-medium text-right">{{ t('colTotalGastos') }}</th>
+              <th class="px-3 py-2 font-medium text-right">{{ t('colDisponible') }}</th>
             </tr>
           </thead>
 
@@ -232,7 +267,7 @@ async function alExportarPDF(): Promise<void> {
           <tfoot class="border-t-2 border-border">
             <tr class="font-display font-bold text-ink">
               <!-- Etiqueta de la fila de totales -->
-              <td class="px-3 py-3">Totales</td>
+              <td class="px-3 py-3">{{ t('totales') }}</td>
               <!-- Total ingresos acumulado (verde) -->
               <td class="px-3 py-3 text-right text-ok">{{ euro(totalIngresos) }}</td>
               <!-- Total gastos fijos acumulado -->

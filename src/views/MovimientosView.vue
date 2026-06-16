@@ -6,6 +6,63 @@ import { euro, fechaLegible, mesActual } from "../utils/format";
 import { categoriasPorGrupo } from "../data/categorias";
 import type { LineaMes, Signo, Plantilla, Subdivision } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
+import { crearT } from "../i18n";
+
+// Diccionario de traducciones de esta vista (ES/EN). Claves cortas en camelCase.
+const t = crearT({
+  titulo: { es: "Movimientos", en: "Transactions" },
+  anadir: { es: "+ Añadir", en: "+ Add" },
+  registrarHoy: { es: "Registrar hoy", en: "Log today" },
+  eliminarAtajo: { es: "Eliminar atajo", en: "Delete shortcut" },
+  masPlantilla: { es: "+ Plantilla", en: "+ Template" },
+  ayudaPlantillas: {
+    es: "Crea atajos para tus gastos habituales",
+    en: "Create shortcuts for your usual expenses",
+  },
+  nuevoAtajo: { es: "Nuevo atajo", en: "New shortcut" },
+  concepto: { es: "Concepto", en: "Description" },
+  conceptoPlaceholder: { es: "Café, Gasolina…", en: "Coffee, Fuel…" },
+  importe: { es: "Importe (€)", en: "Amount (€)" },
+  tipo: { es: "Tipo", en: "Type" },
+  gasto: { es: "Gasto", en: "Expense" },
+  ingreso: { es: "Ingreso", en: "Income" },
+  categoria: { es: "Categoría", en: "Category" },
+  eligeCategoria: { es: "Elige categoría…", en: "Choose category…" },
+  cancelar: { es: "Cancelar", en: "Cancel" },
+  guardar: { es: "Guardar", en: "Save" },
+  buscarPlaceholder: {
+    es: "Buscar por concepto o categoría…",
+    en: "Search by description or category…",
+  },
+  todos: { es: "Todos", en: "All" },
+  ingresos: { es: "Ingresos", en: "Income" },
+  gastosFijos: { es: "Gastos fijos", en: "Fixed expenses" },
+  gastosVariables: { es: "Gastos variables", en: "Variable expenses" },
+  apuntes: { es: "apuntes", en: "entries" },
+  sinResultados: { es: "Sin resultados para ese filtro.", en: "No results for that filter." },
+  sinMovimientos: {
+    es: "No hay movimientos. Pulsa + Añadir.",
+    en: "No transactions. Tap + Add.",
+  },
+  fijo: { es: "Fijo", en: "Fixed" },
+  dividido: { es: "Dividido", en: "Split" },
+  verRecibo: { es: "Ver recibo", en: "View receipt" },
+  editar: { es: "Editar", en: "Edit" },
+  darDeBajaTitulo: {
+    es: "Dar de baja a partir de este mes",
+    en: "Cancel from this month onward",
+  },
+  eliminar: { es: "Eliminar", en: "Delete" },
+  gestionadoDeudas: { es: "Se gestiona en Deudas", en: "Managed in Debts" },
+  reciboAlt: { es: "Recibo", en: "Receipt" },
+  // Mensajes de confirmación (texto fijo; el concepto se concatena aparte).
+  confirmEliminar: { es: "¿Eliminar", en: "Delete" },
+  confirmEliminarAtajo: { es: "¿Eliminar el atajo", en: "Delete shortcut" },
+  confirmDarDeBaja: {
+    es: "¿Dar de baja este fijo a partir de este mes?",
+    en: "Cancel this fixed item from this month onward?",
+  },
+});
 
 const f = useFinanzas();
 const modal = ref(false);
@@ -185,13 +242,14 @@ function onGuardar(mov: {
 
 function eliminar(linea: LineaMes) {
   if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
-  if (confirm(`¿Eliminar "${linea.concepto}"?`)) f.eliminarLinea(linea);
+  // Texto fijo traducido + el concepto (dato del usuario, sin traducir).
+  if (confirm(`${t("confirmEliminar")} "${linea.concepto}"?`)) f.eliminarLinea(linea);
 }
 
 // Da de baja un fijo (recurrente) a partir del mes seleccionado.
 function darDeBaja(linea: LineaMes) {
   if (linea.origen !== "recurrente") return;
-  if (confirm("¿Dar de baja este fijo a partir de este mes?")) {
+  if (confirm(t("confirmDarDeBaja"))) {
     f.darDeBajaRecurrente(linea.id, f.mesSeleccionado);
   }
 }
@@ -224,7 +282,8 @@ function usarPlantilla(p: Plantilla): void {
 
 // Elimina una plantilla previa confirmación.
 function quitarPlantilla(p: Plantilla): void {
-  if (confirm(`¿Eliminar el atajo "${p.concepto}"?`)) f.eliminarPlantilla(p.id);
+  // Texto fijo traducido + el concepto (dato del usuario, sin traducir).
+  if (confirm(`${t("confirmEliminarAtajo")} "${p.concepto}"?`)) f.eliminarPlantilla(p.id);
 }
 
 // Estado del mini-formulario inline para crear una plantilla nueva.
@@ -268,12 +327,12 @@ function guardarPlantilla(): void {
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h2 class="font-display text-2xl font-bold">Movimientos</h2>
+      <h2 class="font-display text-2xl font-bold">{{ t("titulo") }}</h2>
       <button
         class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
         @click="abrirAlta"
       >
-        + Añadir
+        {{ t("anadir") }}
       </button>
     </div>
 
@@ -286,13 +345,13 @@ function guardarPlantilla(): void {
         class="inline-flex items-center gap-1.5 rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
       >
         <!-- Texto del chip: registra el movimiento al hacer clic -->
-        <button class="text-ink" :title="`Registrar hoy: ${p.concepto}`" @click="usarPlantilla(p)">
+        <button class="text-ink" :title="`${t('registrarHoy')}: ${p.concepto}`" @click="usarPlantilla(p)">
           {{ p.concepto }} · {{ euro(p.importe) }}
         </button>
         <!-- Aspa para eliminar el atajo -->
         <button
           class="text-faint hover:text-danger transition-colors"
-          title="Eliminar atajo"
+          :title="t('eliminarAtajo')"
           @click="quitarPlantilla(p)"
         >
           ✕
@@ -304,12 +363,12 @@ function guardarPlantilla(): void {
         class="rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
         @click="abrirFormPlantilla"
       >
-        + Plantilla
+        {{ t("masPlantilla") }}
       </button>
 
       <!-- Texto tenue de ayuda cuando todavía no hay plantillas -->
       <span v-if="!f.plantillas.length" class="text-faint text-sm">
-        Crea atajos para tus gastos habituales
+        {{ t("ayudaPlantillas") }}
       </span>
     </div>
 
@@ -320,22 +379,22 @@ function guardarPlantilla(): void {
       @click.self="cerrarFormPlantilla"
     >
       <div class="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 space-y-4">
-        <h3 class="font-display text-lg font-bold">Nuevo atajo</h3>
+        <h3 class="font-display text-lg font-bold">{{ t("nuevoAtajo") }}</h3>
 
         <!-- Concepto -->
         <div>
-          <label class="text-faint text-xs">Concepto</label>
+          <label class="text-faint text-xs">{{ t("concepto") }}</label>
           <input
             v-model="formConcepto"
             type="text"
-            placeholder="Café, Gasolina…"
+            :placeholder="t('conceptoPlaceholder')"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
           />
         </div>
 
         <!-- Importe (acepta coma decimal, se redondea al guardar) -->
         <div>
-          <label class="text-faint text-xs">Importe (€)</label>
+          <label class="text-faint text-xs">{{ t("importe") }}</label>
           <input
             v-model="formImporte"
             type="text"
@@ -347,24 +406,24 @@ function guardarPlantilla(): void {
 
         <!-- Signo: gasto por defecto -->
         <div>
-          <label class="text-faint text-xs">Tipo</label>
+          <label class="text-faint text-xs">{{ t("tipo") }}</label>
           <select
             v-model="formSigno"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
           >
-            <option value="gasto">Gasto</option>
-            <option value="ingreso">Ingreso</option>
+            <option value="gasto">{{ t("gasto") }}</option>
+            <option value="ingreso">{{ t("ingreso") }}</option>
           </select>
         </div>
 
         <!-- Categoría: select con optgroups por grupo -->
         <div>
-          <label class="text-faint text-xs">Categoría</label>
+          <label class="text-faint text-xs">{{ t("categoria") }}</label>
           <select
             v-model="formCategoria"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
           >
-            <option value="" disabled>Elige categoría…</option>
+            <option value="" disabled>{{ t("eligeCategoria") }}</option>
             <optgroup v-for="g in grupos" :key="g.grupo" :label="g.grupo">
               <option v-for="c in g.items" :key="c" :value="c">{{ c }}</option>
             </optgroup>
@@ -377,13 +436,13 @@ function guardarPlantilla(): void {
             class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-sm hover:border-brand transition-colors"
             @click="cerrarFormPlantilla"
           >
-            Cancelar
+            {{ t("cancelar") }}
           </button>
           <button
             class="rounded-lg bg-brand px-4 py-2 text-sm text-white font-medium hover:bg-brand-soft transition-colors"
             @click="guardarPlantilla"
           >
-            Guardar
+            {{ t("guardar") }}
           </button>
         </div>
       </div>
@@ -394,23 +453,23 @@ function guardarPlantilla(): void {
         <input
           v-model="busqueda"
           type="text"
-          placeholder="Buscar por concepto o categoría…"
+          :placeholder="t('buscarPlaceholder')"
           class="flex-1 min-w-40 rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
         />
         <select
           v-model="filtroTipo"
           class="rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
         >
-          <option value="todos">Todos</option>
-          <option value="ingreso">Ingresos</option>
-          <option value="fijo">Gastos fijos</option>
-          <option value="variable">Gastos variables</option>
+          <option value="todos">{{ t("todos") }}</option>
+          <option value="ingreso">{{ t("ingresos") }}</option>
+          <option value="fijo">{{ t("gastosFijos") }}</option>
+          <option value="variable">{{ t("gastosVariables") }}</option>
         </select>
-        <span class="text-faint text-sm shrink-0">{{ lineasFiltradas.length }} apuntes</span>
+        <span class="text-faint text-sm shrink-0">{{ lineasFiltradas.length }} {{ t("apuntes") }}</span>
       </div>
 
       <div v-if="!lineasFiltradas.length" class="px-5 py-12 text-center text-muted">
-        {{ f.lineasDelMes.length ? "Sin resultados para ese filtro." : "No hay movimientos. Pulsa + Añadir." }}
+        {{ f.lineasDelMes.length ? t("sinResultados") : t("sinMovimientos") }}
       </div>
 
       <ul v-else class="divide-y divide-border">
@@ -425,14 +484,14 @@ function guardarPlantilla(): void {
             <p class="truncate">{{ l.concepto }}</p>
             <p class="text-faint text-xs mt-0.5 flex flex-wrap items-center gap-1.5">
               <span class="rounded-full bg-surface-2 px-2 py-0.5">{{ l.categoria }}</span>
-              <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">Fijo</span>
+              <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">{{ t("fijo") }}</span>
               <!-- Chip "Dividido": el gasto se reparte en varias categorías -->
               <span
                 v-if="l.subdivisiones?.length"
                 class="rounded-full bg-brand/15 text-brand px-2 py-0.5"
                 :title="l.subdivisiones.map((s) => s.categoria).join(', ')"
               >
-                Dividido
+                {{ t("dividido") }}
               </span>
               <!-- Comercio: dónde se hizo (ej. "· Mercadona") -->
               <span v-if="l.comercio">· {{ l.comercio }}</span>
@@ -449,7 +508,7 @@ function guardarPlantilla(): void {
               <button
                 v-if="l.recibo"
                 class="hover:text-ink transition-colors"
-                title="Ver recibo"
+                :title="t('verRecibo')"
                 @click.stop="reciboVisible = l.recibo ?? null"
               >
                 📎
@@ -468,7 +527,7 @@ function guardarPlantilla(): void {
           <template v-if="l.origen !== 'deuda'">
             <button
               class="opacity-0 group-hover:opacity-100 text-faint hover:text-ink transition-all shrink-0"
-              title="Editar"
+              :title="t('editar')"
               @click="editar(l)"
             >
               ✏️
@@ -477,20 +536,20 @@ function guardarPlantilla(): void {
             <button
               v-if="l.origen === 'recurrente'"
               class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
-              title="Dar de baja a partir de este mes"
+              :title="t('darDeBajaTitulo')"
               @click="darDeBaja(l)"
             >
               🚫
             </button>
             <button
               class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
-              title="Eliminar"
+              :title="t('eliminar')"
               @click="eliminar(l)"
             >
               ✕
             </button>
           </template>
-          <span v-else class="text-faint text-xs shrink-0" title="Se gestiona en Deudas">🔒</span>
+          <span v-else class="text-faint text-xs shrink-0" :title="t('gestionadoDeudas')">🔒</span>
         </li>
       </ul>
     </div>
@@ -510,7 +569,7 @@ function guardarPlantilla(): void {
     >
       <img
         :src="reciboVisible"
-        alt="Recibo"
+        :alt="t('reciboAlt')"
         class="max-h-[90vh] max-w-full rounded-lg shadow-2xl"
       />
     </div>

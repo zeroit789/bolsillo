@@ -9,9 +9,46 @@ import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
 import type { Cuenta } from "../types";
+import { crearT } from "../i18n";
 
 // Store central de finanzas (ya inicializado en la app).
 const finanzas = useFinanzas();
+
+// Función de traducción (ES/EN) con todos los textos visibles de la vista.
+const t = crearT({
+  // Cabecera y botón de alta
+  titulo: { es: "Cuentas", en: "Accounts" },
+  subtitulo: { es: "Tus monederos y su saldo", en: "Your wallets and their balance" },
+  nuevaCuenta: { es: "+ Nueva cuenta", en: "+ New account" },
+  // KPI patrimonio total
+  patrimonioTotal: { es: "Patrimonio total", en: "Total net worth" },
+  sumaCuentas: { es: "Suma de todas tus cuentas", en: "Sum of all your accounts" },
+  // Estado vacío
+  vacioTitulo: { es: "Todavía no tienes cuentas", en: "You don't have any accounts yet" },
+  vacioSub: {
+    es: "Las cuentas son tus monederos (efectivo, banco, tarjeta…) y sirven para llevar el control de tu patrimonio. Los movimientos se asignan a una cuenta desde el formulario de movimiento.",
+    en: "Accounts are your wallets (cash, bank, card…) and help you keep track of your net worth. Transactions are assigned to an account from the transaction form.",
+  },
+  vacioBoton: { es: "+ Añadir mi primera cuenta", en: "+ Add my first account" },
+  // Tarjeta de cuenta
+  editar: { es: "Editar", en: "Edit" },
+  editarAria: { es: "Editar cuenta", en: "Edit account" },
+  eliminar: { es: "Eliminar", en: "Delete" },
+  eliminarAria: { es: "Eliminar cuenta", en: "Delete account" },
+  saldoInicialRef: { es: "Saldo inicial:", en: "Initial balance:" },
+  // Modal de alta/edición
+  modalEditar: { es: "Editar cuenta", en: "Edit account" },
+  modalNueva: { es: "Nueva cuenta", en: "New account" },
+  labelNombre: { es: "Nombre", en: "Name" },
+  phNombre: { es: "Ej: Cuenta nómina", en: "E.g.: Salary account" },
+  labelSaldoInicial: { es: "Saldo inicial (€)", en: "Initial balance (€)" },
+  phSaldo: { es: "0,00", en: "0.00" },
+  cancelar: { es: "Cancelar", en: "Cancel" },
+  guardar: { es: "Guardar", en: "Save" },
+  // Mensajes de validación y confirmación
+  errNombre: { es: "El nombre no puede estar vacío.", en: "The name cannot be empty." },
+  confirmEliminar: { es: "¿Eliminar la cuenta", en: "Delete account" },
+});
 
 // --- Estado del modal de alta/edición ---
 // Si el modal está abierto.
@@ -32,7 +69,7 @@ const form = reactive<FormCuenta>({
 
 // Título del modal según estemos creando o editando.
 const tituloModal = computed(() =>
-  editandoId.value ? "Editar cuenta" : "Nueva cuenta"
+  editandoId.value ? t("modalEditar") : t("modalNueva")
 );
 
 // Abre el modal en modo "nueva cuenta" con valores por defecto.
@@ -67,7 +104,7 @@ function guardar() {
 
   // Validación: el nombre no puede estar vacío.
   if (!form.nombre.trim()) {
-    error.value = "El nombre no puede estar vacío.";
+    error.value = t("errNombre");
     return;
   }
 
@@ -89,7 +126,8 @@ function guardar() {
 
 // Elimina una cuenta tras confirmación del navegador.
 function borrar(cuenta: Cuenta) {
-  if (confirm(`¿Eliminar la cuenta "${cuenta.nombre}"?`)) {
+  // Confirmación bilingüe: el nombre de la cuenta es dato del usuario y no se traduce.
+  if (confirm(`${t("confirmEliminar")} "${cuenta.nombre}"?`)) {
     finanzas.eliminarCuenta(cuenta.id);
   }
 }
@@ -101,27 +139,27 @@ function borrar(cuenta: Cuenta) {
     <!-- 1. Cabecera: título + subtítulo + botón de alta -->
     <header class="mb-6 flex items-start justify-between gap-3">
       <div>
-        <h1 class="font-display text-2xl font-bold">Cuentas</h1>
-        <p class="mt-1 text-sm text-muted">Tus monederos y su saldo</p>
+        <h1 class="font-display text-2xl font-bold">{{ t("titulo") }}</h1>
+        <p class="mt-1 text-sm text-muted">{{ t("subtitulo") }}</p>
       </div>
       <button
         class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         @click="abrirNueva"
       >
-        + Nueva cuenta
+        {{ t("nuevaCuenta") }}
       </button>
     </header>
 
     <!-- 2. KPI grande: patrimonio total (suma de todas las cuentas) -->
     <section class="mb-6 rounded-2xl bg-surface border border-border p-5">
-      <p class="text-sm text-muted">Patrimonio total</p>
+      <p class="text-sm text-muted">{{ t("patrimonioTotal") }}</p>
       <p
         class="mt-1 font-display text-4xl font-bold"
         :class="finanzas.patrimonioTotal >= 0 ? 'text-ok' : 'text-danger'"
       >
         {{ euro(finanzas.patrimonioTotal) }}
       </p>
-      <p class="mt-1 text-xs text-faint">Suma de todas tus cuentas</p>
+      <p class="mt-1 text-xs text-faint">{{ t("sumaCuentas") }}</p>
     </section>
 
     <!-- 3. Estado vacío: aún no hay cuentas -->
@@ -130,17 +168,15 @@ function borrar(cuenta: Cuenta) {
       class="rounded-2xl bg-surface border border-border p-10 text-center"
     >
       <p class="text-4xl">👛</p>
-      <p class="mt-3 font-display font-bold text-ink">Todavía no tienes cuentas</p>
+      <p class="mt-3 font-display font-bold text-ink">{{ t("vacioTitulo") }}</p>
       <p class="mt-1 text-sm text-muted">
-        Las cuentas son tus monederos (efectivo, banco, tarjeta…) y sirven para
-        llevar el control de tu patrimonio. Los movimientos se asignan a una
-        cuenta desde el formulario de movimiento.
+        {{ t("vacioSub") }}
       </p>
       <button
         class="mt-5 rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
         @click="abrirNueva"
       >
-        + Añadir mi primera cuenta
+        {{ t("vacioBoton") }}
       </button>
     </div>
 
@@ -160,16 +196,16 @@ function borrar(cuenta: Cuenta) {
           <div class="flex shrink-0 gap-1">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
-              title="Editar"
-              aria-label="Editar cuenta"
+              :title="t('editar')"
+              :aria-label="t('editarAria')"
               @click="abrirEditar(item.cuenta)"
             >
               ✏️
             </button>
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-              title="Eliminar"
-              aria-label="Eliminar cuenta"
+              :title="t('eliminar')"
+              :aria-label="t('eliminarAria')"
               @click="borrar(item.cuenta)"
             >
               🗑️
@@ -186,7 +222,7 @@ function borrar(cuenta: Cuenta) {
         </p>
         <!-- Saldo inicial en pequeño como referencia -->
         <p class="mt-1 text-xs text-faint">
-          Saldo inicial: {{ euro(item.cuenta.saldoInicial) }}
+          {{ t("saldoInicialRef") }} {{ euro(item.cuenta.saldoInicial) }}
         </p>
       </article>
     </div>
@@ -205,23 +241,23 @@ function borrar(cuenta: Cuenta) {
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
           <!-- Nombre de la cuenta -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Nombre</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("labelNombre") }}</label>
             <input
               v-model="form.nombre"
               type="text"
-              placeholder="Ej: Cuenta nómina"
+              :placeholder="t('phNombre')"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
 
           <!-- Saldo inicial (acepta coma decimal; se redondea a céntimos al guardar) -->
           <div>
-            <label class="mb-1 block text-sm text-muted">Saldo inicial (€)</label>
+            <label class="mb-1 block text-sm text-muted">{{ t("labelSaldoInicial") }}</label>
             <input
               v-model="form.saldoInicial"
               type="text"
               inputmode="decimal"
-              placeholder="0,00"
+              :placeholder="t('phSaldo')"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
           </div>
@@ -236,13 +272,13 @@ function borrar(cuenta: Cuenta) {
               class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-muted font-medium hover:text-ink"
               @click="cerrarModal"
             >
-              Cancelar
+              {{ t("cancelar") }}
             </button>
             <button
               type="submit"
               class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
             >
-              Guardar
+              {{ t("guardar") }}
             </button>
           </div>
         </form>

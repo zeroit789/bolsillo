@@ -4,9 +4,24 @@
 import { ref, computed } from "vue";
 import { useSesion } from "../stores/sesion";
 import { useAjustes } from "../stores/ajustes";
+import { crearT } from "../i18n";
 
 const sesion = useSesion();
 const ajustes = useAjustes();
+
+// Diccionario de textos visibles de la pantalla de bloqueo (ES/EN).
+const t = crearT({
+  introducePin: { es: "Introduce tu PIN", en: "Enter your PIN" },
+  introducePassword: { es: "Introduce tu contraseña", en: "Enter your password" },
+  comprobando: { es: "Comprobando…", en: "Checking…" },
+  desbloquear: { es: "Desbloquear", en: "Unlock" },
+  credIncorrecta: { es: "Credencial incorrecta", en: "Wrong credential" },
+  lecturaFallida: { es: "No se pudieron leer los datos", en: "Could not read the data" },
+  datosCifrados: {
+    es: "Tus datos están cifrados en este equipo.",
+    en: "Your data is encrypted on this device.",
+  },
+});
 
 const credencial = ref("");
 const cargando = ref(false);
@@ -30,7 +45,7 @@ async function entrar() {
         Bolsillo<span class="text-brand">.</span>
       </h1>
       <p class="text-muted text-sm mb-6">
-        {{ esPin ? "Introduce tu PIN" : "Introduce tu contraseña" }}
+        {{ esPin ? t("introducePin") : t("introducePassword") }}
       </p>
 
       <input
@@ -44,17 +59,17 @@ async function entrar() {
         @keyup.enter="entrar"
       />
 
-      <p v-if="sesion.error" class="text-danger text-sm mt-3">{{ sesion.error }}</p>
+      <p v-if="sesion.error" class="text-danger text-sm mt-3">{{ t(sesion.error) }}</p>
 
       <button
         class="mt-5 w-full rounded-lg bg-brand px-4 py-2.5 text-white font-medium hover:bg-brand-soft transition-colors disabled:opacity-50"
         :disabled="cargando || !credencial"
         @click="entrar"
       >
-        {{ cargando ? "Comprobando…" : "Desbloquear" }}
+        {{ cargando ? t("comprobando") : t("desbloquear") }}
       </button>
 
-      <p class="text-faint text-xs mt-6">Tus datos están cifrados en este equipo.</p>
+      <p class="text-faint text-xs mt-6">{{ t("datosCifrados") }}</p>
     </div>
   </div>
 </template>

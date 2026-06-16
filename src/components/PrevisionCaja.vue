@@ -9,8 +9,29 @@
 import { computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { mesActual, sumarMeses, mesLegible, euro } from "../utils/format";
+import { crearT } from "../i18n";
 
 const f = useFinanzas();
+
+// Diccionario de textos visibles del componente (ES/EN).
+const t = crearT({
+  titulo: {
+    es: "Previsión de caja (próximos meses)",
+    en: "Cash flow forecast (next months)",
+  },
+  explicacion: {
+    es: "Proyección de flujo: ingresos fijos − gastos fijos − cuotas. Parte de 0 €, así que muestra cómo evoluciona el saldo, no el dinero real en el banco.",
+    en: "Flow projection: fixed income − fixed expenses − installments. Starts from €0, so it shows how the balance evolves, not the actual money in the bank.",
+  },
+  sinDatos: {
+    es: "Añade ingresos/gastos fijos o deudas para ver la previsión.",
+    en: "Add fixed income/expenses or debts to see the forecast.",
+  },
+  ariaGrafica: {
+    es: "Gráfica de previsión de saldo acumulado por mes",
+    en: "Chart of projected accumulated balance per month",
+  },
+});
 
 // Cuántos meses se proyectan (incluido el actual).
 const MESES_PROYECTADOS = 6;
@@ -119,16 +140,15 @@ const lineaAcumulado = computed<string>(() =>
 <template>
   <!-- Tarjeta de previsión de caja -->
   <div class="rounded-2xl bg-surface border border-border p-5">
-    <h3 class="font-display font-bold mb-1">Previsión de caja (próximos meses)</h3>
+    <h3 class="font-display font-bold mb-1">{{ t("titulo") }}</h3>
     <!-- Texto explicativo: aclara que es una proyección de flujo, no el saldo real -->
     <p class="text-sm text-muted mb-4">
-      Proyección de flujo: ingresos fijos − gastos fijos − cuotas. Parte de 0 €,
-      así que muestra cómo evoluciona el saldo, no el dinero real en el banco.
+      {{ t("explicacion") }}
     </p>
 
     <!-- Caso sin datos: no hay recurrentes ni deudas con los que proyectar -->
     <div v-if="!hayDatos" class="text-muted text-sm">
-      Añade ingresos/gastos fijos o deudas para ver la previsión.
+      {{ t("sinDatos") }}
     </div>
 
     <template v-else>
@@ -138,7 +158,7 @@ const lineaAcumulado = computed<string>(() =>
         class="w-full h-auto"
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="Gráfica de previsión de saldo acumulado por mes"
+        :aria-label="t('ariaGrafica')"
       >
         <!-- Línea base del 0 € -->
         <line
