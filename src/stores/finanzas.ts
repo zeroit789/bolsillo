@@ -141,6 +141,8 @@ export const useFinanzas = defineStore("finanzas", () => {
         signo: r.signo,
         importe: r.importe,
         fijo: true,
+        comercio: r.comercio,
+        tags: r.tags,
       });
     }
     for (const e of deudasEn(mes)) {
@@ -166,6 +168,9 @@ export const useFinanzas = defineStore("finanzas", () => {
         importe: p.importe,
         fijo: false,
         fecha: p.fecha,
+        comercio: p.comercio,
+        tags: p.tags,
+        recibo: p.recibo,
       });
     }
     // Ingresos primero, luego por importe descendente.
@@ -184,6 +189,18 @@ export const useFinanzas = defineStore("finanzas", () => {
     }
     return [...mapa.entries()]
       .map(([categoria, total]) => ({ categoria, total }))
+      .sort((a, b) => b.total - a.total);
+  });
+
+  // Reparto del gasto del mes por comercio (para el ranking "dónde se va el dinero").
+  const gastoPorComercio = computed(() => {
+    const mapa = new Map<string, number>();
+    for (const l of lineasDelMes.value) {
+      if (l.signo !== "gasto" || !l.comercio) continue;
+      mapa.set(l.comercio, (mapa.get(l.comercio) ?? 0) + l.importe);
+    }
+    return [...mapa.entries()]
+      .map(([comercio, total]) => ({ comercio, total }))
       .sort((a, b) => b.total - a.total);
   });
 
@@ -330,6 +347,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     estadosDeuda,
     lineasDelMes,
     gastoPorCategoria,
+    gastoPorComercio,
     mesesDisponibles,
     historial,
     resumenDe,

@@ -12,6 +12,8 @@ import { euro, mesLegible } from '../utils/format'
 import { exportarHistorialXLSX, exportarHistorialPDF } from '../utils/export'
 // Componente de resumen anual (KPIs del año más reciente del historial)
 import ResumenAnual from '../components/ResumenAnual.vue'
+// Componente de comparativa: mes seleccionado vs mes anterior
+import ComparativaPeriodos from '../components/ComparativaPeriodos.vue'
 
 // Tipo del resumen de cada mes (espejo del que devuelve la store)
 interface ResumenMes {
@@ -56,6 +58,22 @@ const ahorroAcumulado = computed<number>(() =>
 // Indica si hay datos en el historial (para mostrar estado vacío)
 const hayHistorial = computed<boolean>(() => finanzas.historial.length > 0)
 
+// --- Ranking de gasto por comercio (tarjeta "Dónde gastas") ---
+
+// ¿Hay comercios con gasto este mes? (para el estado vacío del ranking)
+const hayGastoPorComercio = computed<boolean>(() => finanzas.gastoPorComercio.length > 0)
+
+// Gasto del comercio que más gasta (el primero, ya viene ordenado desc).
+// Sirve de referencia (100 %) para calcular el ancho de las barras.
+const maxGastoComercio = computed<number>(() => finanzas.gastoPorComercio[0]?.total ?? 0)
+
+// Ancho de la barra de un comercio en %, proporcional al mayor gasto.
+function anchoBarra(total: number): string {
+  if (maxGastoComercio.value <= 0) return '0%'
+  const pct = (total / maxGastoComercio.value) * 100
+  return `${pct}%`
+}
+
 // --- Acciones ---
 
 // Marca un mes como seleccionado en la store al pulsar sobre él
@@ -89,6 +107,38 @@ async function alExportarPDF(): Promise<void> {
   <div class="space-y-5">
     <!-- Resumen anual: KPIs del año más reciente, arriba del todo -->
     <ResumenAnual :meses="finanzas.historial" class="mb-6 block" />
+
+    <!-- Comparativa del mes seleccionado con el mes anterior -->
+    <ComparativaPeriodos class="mb-6 block" />
+
+    <!-- Dónde gastas (este mes): ranking de gasto por comercio -->
+    <div class="rounded-2xl bg-surface border border-border p-5">
+      <!-- Título de la tarjeta -->
+      <h2 class="font-display font-bold text-lg text-ink">Dónde gastas (este mes)</h2>
+
+      <!-- Estado vacío: no hay comercios con gasto registrado -->
+      <p v-if="!hayGastoPorComercio" class="mt-3 text-sm text-muted">
+        Añade el comercio a tus gastos para ver el ranking.
+      </p>
+
+      <!-- Lista de comercios con su total y barra proporcional al mayor -->
+      <ul v-else class="mt-4 space-y-3">
+        <li v-for="item in finanzas.gastoPorComercio" :key="item.comercio">
+          <!-- Fila: nombre del comercio + total gastado -->
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-ink">{{ item.comercio }}</span>
+            <span class="font-medium text-danger">{{ euro(item.total) }}</span>
+          </div>
+          <!-- Barra de progreso proporcional al comercio que más gasta -->
+          <div class="mt-1 h-2 w-full rounded-full bg-surface-2">
+            <div
+              class="h-2 rounded-full bg-danger"
+              :style="{ width: anchoBarra(item.total) }"
+            ></div>
+          </div>
+        </li>
+      </ul>
+    </div>
 
     <!-- Cabecera: título + botones de exportación -->
     <div class="flex items-center justify-between">

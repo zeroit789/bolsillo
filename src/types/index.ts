@@ -21,6 +21,8 @@ export interface Recurrente {
   desde: string; // "YYYY-MM" mes de alta
   hasta: string | null; // "YYYY-MM" mes de baja (incl.) o null = sin fin
   diaPago?: number; // día del mes (1-31) para recordatorios; opcional
+  comercio?: string; // dónde se hizo (Mercadona, Amazon…); opcional
+  tags?: string[]; // etiquetas transversales (#vacaciones…); opcional
 }
 
 // Apunte puntual de un mes concreto.
@@ -31,6 +33,9 @@ export interface Puntual {
   signo: Signo;
   categoria: string;
   fecha: string; // "YYYY-MM-DD"
+  comercio?: string; // dónde se hizo (Mercadona, Amazon…); opcional
+  tags?: string[]; // etiquetas transversales (#vacaciones…); opcional
+  recibo?: string; // imagen del recibo en base64 (data URL); opcional
 }
 
 // Tipos de deuda admitidos.
@@ -87,6 +92,9 @@ export interface LineaMes {
   importe: number;
   fijo: boolean; // true = gasto/ingreso fijo; false = puntual
   fecha?: string; // solo puntuales
+  comercio?: string; // opcional
+  tags?: string[]; // opcional
+  recibo?: string; // imagen base64 (solo puntuales); opcional
 }
 
 // Tope de gasto mensual para una categoría (presupuesto).

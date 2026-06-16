@@ -18,6 +18,7 @@ import MovimientosView from "./views/MovimientosView.vue";
 import DeudasView from "./views/DeudasView.vue";
 import PlanesView from "./views/PlanesView.vue";
 import PresupuestosView from "./views/PresupuestosView.vue";
+import CalendarioView from "./views/CalendarioView.vue";
 import HistorialView from "./views/HistorialView.vue";
 import AjustesView from "./views/AjustesView.vue";
 
@@ -29,6 +30,7 @@ const f = useFinanzas();
 const NAV = [
   { id: "resumen", etiqueta: "Resumen", icono: "📊", comp: DashboardView },
   { id: "movimientos", etiqueta: "Movimientos", icono: "🧾", comp: MovimientosView },
+  { id: "calendario", etiqueta: "Calendario", icono: "🗓️", comp: CalendarioView },
   { id: "deudas", etiqueta: "Deudas", icono: "💳", comp: DeudasView },
   { id: "planes", etiqueta: "Planes", icono: "🎯", comp: PlanesView },
   { id: "presupuestos", etiqueta: "Presupuestos", icono: "🧮", comp: PresupuestosView },
@@ -40,7 +42,7 @@ const vista = ref<(typeof NAV)[number]["id"]>("resumen");
 const compActual = computed(() => NAV.find((n) => n.id === vista.value)!.comp);
 // El selector de mes solo tiene sentido en estas vistas.
 const mostrarMes = computed(() =>
-  ["resumen", "movimientos", "deudas", "presupuestos"].includes(vista.value)
+  ["resumen", "movimientos", "calendario", "deudas", "presupuestos"].includes(vista.value)
 );
 
 // Estado de pantalla: bloqueo / contenido / cargando.

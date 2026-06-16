@@ -20,7 +20,13 @@ const inicial = ref<{
   categoria: string;
   fecha: string;
   diaPago?: number;
+  comercio?: string; // opcional
+  tags?: string[]; // opcional (array; el modal lo convierte a texto)
+  recibo?: string; // imagen base64 (solo puntuales); opcional
 } | null>(null);
+
+// Recibo que se muestra en el lightbox (null = lightbox cerrado).
+const reciboVisible = ref<string | null>(null);
 
 // --- Buscador / filtro ---
 const busqueda = ref("");
@@ -29,8 +35,13 @@ const filtroTipo = ref<"todos" | "ingreso" | "fijo" | "variable">("todos");
 const lineasFiltradas = computed<LineaMes[]>(() => {
   const q = busqueda.value.trim().toLowerCase();
   return f.lineasDelMes.filter((l) => {
+    // Coincidencia de texto: concepto, categoría, comercio y etiquetas.
     const coincideTexto =
-      !q || l.concepto.toLowerCase().includes(q) || l.categoria.toLowerCase().includes(q);
+      !q ||
+      l.concepto.toLowerCase().includes(q) ||
+      l.categoria.toLowerCase().includes(q) ||
+      (l.comercio?.toLowerCase().includes(q) ?? false) ||
+      (l.tags?.some((t) => t.toLowerCase().includes(q)) ?? false);
     const coincideTipo =
       filtroTipo.value === "todos" ||
       (filtroTipo.value === "ingreso" && l.signo === "ingreso") ||
@@ -64,6 +75,9 @@ function editar(linea: LineaMes) {
       // fecha válida del mes seleccionado.
       fecha: `${f.mesSeleccionado}-01`,
       diaPago: r.diaPago,
+      // Campos opcionales nuevos (los recurrentes no llevan recibo).
+      comercio: r.comercio,
+      tags: r.tags,
     };
   } else {
     // Puntual: lo buscamos por id en el store.
@@ -76,6 +90,10 @@ function editar(linea: LineaMes) {
       importe: p.importe,
       categoria: p.categoria,
       fecha: p.fecha,
+      // Campos opcionales nuevos: comercio, tags y recibo (solo puntuales).
+      comercio: p.comercio,
+      tags: p.tags,
+      recibo: p.recibo,
     };
   }
   editando.value = linea;
@@ -91,6 +109,9 @@ function onGuardar(mov: {
   categoria: string;
   fecha: string;
   diaPago?: number;
+  comercio?: string;
+  tags?: string[];
+  recibo?: string;
 }) {
   if (editando.value) {
     // --- Modo edición ---
@@ -101,6 +122,8 @@ function onGuardar(mov: {
         signo: mov.signo,
         categoria: mov.categoria,
         diaPago: mov.diaPago,
+        comercio: mov.comercio,
+        tags: mov.tags,
       });
     } else if (editando.value.origen === "puntual") {
       f.actualizarPuntual(editando.value.id, {
@@ -109,6 +132,9 @@ function onGuardar(mov: {
         signo: mov.signo,
         categoria: mov.categoria,
         fecha: mov.fecha,
+        comercio: mov.comercio,
+        tags: mov.tags,
+        recibo: mov.recibo, // recibo solo en puntuales
       });
     }
   } else {
@@ -122,6 +148,8 @@ function onGuardar(mov: {
         desde: mesActual(),
         hasta: null,
         diaPago: mov.diaPago,
+        comercio: mov.comercio,
+        tags: mov.tags,
       });
     } else {
       f.addPuntual({
@@ -130,6 +158,9 @@ function onGuardar(mov: {
         signo: mov.signo,
         categoria: mov.categoria,
         fecha: mov.fecha,
+        comercio: mov.comercio,
+        tags: mov.tags,
+        recibo: mov.recibo, // recibo solo en puntuales
       });
     }
   }
@@ -379,10 +410,29 @@ function guardarPlantilla(): void {
 
           <div class="min-w-0 flex-1">
             <p class="truncate">{{ l.concepto }}</p>
-            <p class="text-faint text-xs mt-0.5 flex items-center gap-1.5">
+            <p class="text-faint text-xs mt-0.5 flex flex-wrap items-center gap-1.5">
               <span class="rounded-full bg-surface-2 px-2 py-0.5">{{ l.categoria }}</span>
               <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">Fijo</span>
+              <!-- Comercio: dónde se hizo (ej. "· Mercadona") -->
+              <span v-if="l.comercio">· {{ l.comercio }}</span>
               <span v-if="l.fecha">· {{ fechaLegible(l.fecha) }}</span>
+              <!-- Etiquetas como chips pequeños -->
+              <span
+                v-for="t in l.tags"
+                :key="t"
+                class="rounded-full bg-brand/15 text-brand px-2 py-0.5"
+              >
+                {{ t }}
+              </span>
+              <!-- Icono de recibo: abre el lightbox con la imagen -->
+              <button
+                v-if="l.recibo"
+                class="hover:text-ink transition-colors"
+                title="Ver recibo"
+                @click.stop="reciboVisible = l.recibo ?? null"
+              >
+                📎
+              </button>
             </p>
           </div>
 
@@ -430,5 +480,18 @@ function guardarPlantilla(): void {
       @guardar="onGuardar"
       @cerrar="cerrarModal"
     />
+
+    <!-- Lightbox del recibo: clic fuera o en la imagen lo cierra -->
+    <div
+      v-if="reciboVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      @click="reciboVisible = null"
+    >
+      <img
+        :src="reciboVisible"
+        alt="Recibo"
+        class="max-h-[90vh] max-w-full rounded-lg shadow-2xl"
+      />
+    </div>
   </div>
 </template>

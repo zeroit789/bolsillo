@@ -17,6 +17,9 @@ interface MovimientoInicial {
   categoria: string;
   fecha: string;
   diaPago?: number;
+  comercio?: string; // dónde se hizo (texto libre); opcional
+  tags?: string[]; // etiquetas; en el form se editan como texto separado por comas
+  recibo?: string; // imagen del recibo en base64 (solo gastos puntuales)
 }
 
 const props = defineProps<{
@@ -34,6 +37,9 @@ const emit = defineEmits<{
       categoria: string;
       fecha: string; // "YYYY-MM-DD" (solo se usa si es puntual)
       diaPago?: number; // día del mes (1-31) para fijos; opcional
+      comercio?: string; // dónde se hizo; opcional (undefined si vacío)
+      tags?: string[]; // etiquetas ya normalizadas (array, sin vacíos)
+      recibo?: string; // imagen del recibo en base64 (solo puntuales); opcional
     }
   ];
   cerrar: [];
@@ -80,8 +86,50 @@ const form = reactive({
   fecha: props.inicial?.fecha ?? hoy,
   // Día de pago para fijos: number si viene, "" si no (input number vacío).
   diaPago: (props.inicial?.diaPago ?? "") as number | "",
+  // Comercio: texto libre opcional.
+  comercio: props.inicial?.comercio ?? "",
+  // Etiquetas: en el form son TEXTO (separadas por comas). Si vienen como array
+  // en `inicial`, las unimos con ", " para que el usuario pueda editarlas.
+  tagsTexto: props.inicial?.tags ? props.inicial.tags.join(", ") : "",
+  // Recibo: data URL base64 (solo gastos puntuales). "" = sin recibo.
+  recibo: props.inicial?.recibo ?? "",
 });
 const error = ref("");
+
+// Lee el fichero de imagen elegido, lo REDIMENSIONA con canvas (máx 800px en el
+// lado mayor) y lo exporta a JPEG calidad 0.7 como data URL base64. Redimensionar
+// evita inflar el almacenamiento cifrado con fotos enormes del móvil.
+function onRecibo(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      // Calcula el factor de escala para que el lado mayor sea como mucho 800px.
+      const max = 800;
+      const escala = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * escala);
+      const h = Math.round(img.height * escala);
+      // Dibuja la imagen redimensionada en un canvas y la exporta a JPEG 0.7.
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, w, h);
+      form.recibo = canvas.toDataURL("image/jpeg", 0.7);
+    };
+    img.src = reader.result as string;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Quita el recibo cargado (vuelve a "sin recibo").
+function quitarRecibo() {
+  form.recibo = "";
+}
 
 const claseActual = computed(() => CLASES.find((c) => c.valor === form.clase)!);
 const esRecurrente = computed(() => claseActual.value.recurrente);
@@ -97,6 +145,20 @@ function guardar() {
   const diaPago =
     esRecurrente.value && form.diaPago !== "" ? Number(form.diaPago) : undefined;
 
+  // Comercio: undefined si está vacío (no guardamos cadenas en blanco).
+  const comercio = form.comercio.trim() || undefined;
+
+  // Etiquetas: del texto separado por comas a array (trim + sin vacíos).
+  // undefined si no queda ninguna etiqueta válida.
+  const tagsArr = form.tagsTexto
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  const tags = tagsArr.length > 0 ? tagsArr : undefined;
+
+  // Recibo: solo tiene sentido en puntuales y solo si hay imagen cargada.
+  const recibo = !esRecurrente.value && form.recibo ? form.recibo : undefined;
+
   emit("guardar", {
     recurrente: claseActual.value.recurrente,
     signo: claseActual.value.signo,
@@ -105,6 +167,9 @@ function guardar() {
     categoria: form.categoria,
     fecha: form.fecha,
     diaPago,
+    comercio,
+    tags,
+    recibo,
   });
 }
 </script>
@@ -186,6 +251,53 @@ function guardar() {
               <option v-for="c in g.items" :key="c" :value="c">{{ c }}</option>
             </optgroup>
           </select>
+        </div>
+
+        <!-- Comercio: texto libre opcional (Mercadona, Amazon…) -->
+        <div>
+          <label class="text-muted text-sm">Comercio (opcional)</label>
+          <input
+            v-model="form.comercio"
+            type="text"
+            placeholder="Ej. Mercadona"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+        </div>
+
+        <!-- Etiquetas: texto separado por comas; se convierte a array al guardar -->
+        <div>
+          <label class="text-muted text-sm">Etiquetas (opcional)</label>
+          <input
+            v-model="form.tagsTexto"
+            type="text"
+            placeholder="Ej. vacaciones, regalo"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <p class="text-faint text-xs mt-1">Sepáralas con comas.</p>
+        </div>
+
+        <!-- Recibo: SOLO para puntuales (no recurrentes). Imagen redimensionada -->
+        <div v-if="!esRecurrente">
+          <label class="text-muted text-sm">Recibo (opcional)</label>
+          <!-- Si aún no hay imagen, mostramos el selector de fichero -->
+          <input
+            v-if="!form.recibo"
+            type="file"
+            accept="image/*"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1 file:text-white"
+            @change="onRecibo"
+          />
+          <!-- Si ya hay imagen, miniatura + botón para quitarla -->
+          <div v-else class="mt-1 flex items-center gap-3">
+            <img :src="form.recibo" alt="Recibo" class="h-20 w-20 rounded-lg object-cover border border-border" />
+            <button
+              type="button"
+              class="rounded-lg border border-border px-3 py-1 text-sm text-muted hover:text-danger transition-colors"
+              @click="quitarRecibo"
+            >
+              Quitar
+            </button>
+          </div>
         </div>
 
         <p v-if="esRecurrente" class="text-faint text-xs">

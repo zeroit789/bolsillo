@@ -8,6 +8,7 @@ import { TIPOS_DEUDA, type TipoDeuda } from "../types";
 import { exportarMesXLSX, exportarMesPDF } from "../utils/export";
 import KpiCard from "../components/KpiCard.vue";
 import GraficaEvolucion from "../components/GraficaEvolucion.vue";
+import PrevisionCaja from "../components/PrevisionCaja.vue";
 
 const f = useFinanzas();
 
@@ -189,5 +190,8 @@ async function exportar(tipo: "xlsx" | "pdf") {
 
     <!-- Evolución mensual (ingresos vs gastos) -->
     <GraficaEvolucion :meses="f.historial" class="mt-8 block" />
+
+    <!-- Previsión de caja: saldo acumulado proyectado de los próximos meses -->
+    <PrevisionCaja class="mt-8 block" />
   </div>
 </template>
