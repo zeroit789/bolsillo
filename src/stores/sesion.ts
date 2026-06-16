@@ -54,7 +54,16 @@ export const useSesion = defineStore("sesion", () => {
       desbloqueado.value = false;
     } else {
       almacen.usarOfuscacion();
-      await cargarEHidratar();
+      try {
+        await cargarEHidratar();
+      } catch {
+        // Blob ilegible/corrupto: arrancamos con demo para no quedarnos colgados
+        // en "Cargando…" para siempre.
+        const f = useFinanzas();
+        f.hidratar(datosDemo());
+        activarGuardado();
+        await almacen.guardar(f.snapshot());
+      }
       desbloqueado.value = true;
     }
   }

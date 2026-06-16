@@ -79,27 +79,26 @@ function cerrarModal() {
 
 // Valida y guarda: crea o actualiza la deuda según el modo.
 function guardar() {
-  // Validación básica.
-  if (!form.concepto.trim()) {
-    error.value = "El concepto no puede estar vacío.";
-    return;
-  }
-  if (form.total <= 0) {
-    error.value = "El total debe ser mayor que 0.";
-    return;
-  }
-  if (form.cuotaMensual <= 0) {
-    error.value = "La cuota mensual debe ser mayor que 0.";
-    return;
-  }
+  // Redondeo a céntimos y saneo (evita NaN/negativos que contaminarían los KPIs).
+  const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+  const total = r2(form.total);
+  const cuota = r2(form.cuotaMensual);
+  const pagado = r2(form.pagadoInicial);
+
+  if (!form.concepto.trim()) { error.value = "El concepto no puede estar vacío."; return; }
+  if (total <= 0) { error.value = "El total debe ser mayor que 0."; return; }
+  if (cuota <= 0) { error.value = "La cuota mensual debe ser mayor que 0."; return; }
+  if (pagado < 0) { error.value = "Lo ya pagado no puede ser negativo."; return; }
+  if (pagado > total) { error.value = "Lo ya pagado no puede superar el total."; return; }
+  if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) { error.value = "Indica un mes de inicio válido."; return; }
 
   // Objeto saneado a partir del formulario.
   const datos: FormDeuda = {
     concepto: form.concepto.trim(),
     tipo: form.tipo,
-    total: form.total,
-    cuotaMensual: form.cuotaMensual,
-    pagadoInicial: form.pagadoInicial,
+    total,
+    cuotaMensual: cuota,
+    pagadoInicial: pagado,
     inicioMes: form.inicioMes,
   };
 
@@ -162,14 +161,14 @@ function borrar(deuda: Deuda) {
       >
         <!-- Cabecera de la tarjeta: icono + concepto + tipo + acciones -->
         <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 min-w-0">
             <!-- Icono del tipo de deuda -->
-            <span class="text-2xl">{{ metaTipo(estado.deuda.tipo).icono }}</span>
-            <div>
-              <h2 class="font-display font-bold leading-tight">
+            <span class="text-2xl shrink-0">{{ metaTipo(estado.deuda.tipo).icono }}</span>
+            <div class="min-w-0">
+              <h2 class="font-display font-bold leading-tight truncate">
                 {{ estado.deuda.concepto }}
               </h2>
-              <p class="text-xs text-muted">{{ metaTipo(estado.deuda.tipo).etiqueta }}</p>
+              <p class="text-xs text-muted truncate">{{ metaTipo(estado.deuda.tipo).etiqueta }}</p>
             </div>
           </div>
           <!-- Botones de editar y eliminar -->
@@ -177,6 +176,7 @@ function borrar(deuda: Deuda) {
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
               title="Editar"
+              aria-label="Editar deuda"
               @click="abrirEditar(estado.deuda)"
             >
               ✏️
@@ -184,6 +184,7 @@ function borrar(deuda: Deuda) {
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
               title="Eliminar"
+              aria-label="Eliminar deuda"
               @click="borrar(estado.deuda)"
             >
               🗑️

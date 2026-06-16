@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Gestor de gastos personales de escritorio — offline, privado y rápido.</strong><br>
-  App nativa multiplataforma hecha con Tauri 2 + Vue 3.
+  App nativa para Windows hecha con Tauri 2 + Vue 3.
 </p>
 
 <p align="center">
@@ -21,22 +21,22 @@
 
 ## Qué es
 
-**Bolsillo** es una app de escritorio para llevar tus gastos e ingresos mes a mes, sin servidores ni cuentas: **todo se queda en tu equipo**. Pensada para ser rápida, bonita en modo oscuro y fácil de mantener y ampliar.
+**Bolsillo** es una app de escritorio para llevar tus gastos e ingresos mes a mes, sin servidores ni cuentas: **todo se queda cifrado en tu equipo**. Rápida, cuidada y pensada para crecer.
 
 > Los datos que trae al abrir son de **ejemplo** (genéricos). No contiene información personal de nadie.
 
 ## Características
 
-- 📊 **Dashboard** con KPIs del mes: ingresos, gastos totales, disponible y gastos fijos.
-- 🧾 **Movimientos** con tipo (ingreso / gasto fijo / gasto variable), categoría y fecha.
-- 📅 **Vista por mes** con selector entre los meses con datos.
-- 🏷️ **Gasto por categoría** con barras de reparto.
-- 💾 **Offline** — persistencia local, sin backend ni telemetría.
-- 🌙 **Modo oscuro** cuidado (tipografías Syne + DM Sans).
-
-### En camino
-
-- Deudas y patrimonio · situaciones de vida · exportar a XLSX/PDF · bloqueo por PIN.
+- 📊 **Resumen del mes**: KPIs (ingresos, gastos totales, disponible, gastos fijos) y reparto de gasto por categoría.
+- 🧾 **Movimientos**: ingresos y gastos **fijos** (recurrentes, se repiten cada mes) o **variables** (puntuales), con categoría y fecha.
+- 💳 **Deudas**: tarjeta, préstamo, coche, moto, hipoteca… con **total**, **cuota mensual** y lo ya pagado. La cuota cuenta como gasto fijo y la deuda **se salda sola mes a mes** (barra de progreso y meses restantes). **Aviso del sistema al terminar de pagarla**.
+- 📅 **Historial** de todos los meses con totales y ahorro acumulado.
+- 📤 **Exportación a Excel (XLSX) y PDF** con el diálogo de guardar nativo.
+- 🌗 **Tema claro y oscuro** a elegir en Ajustes.
+- 🔒 **Bloqueo opcional** al abrir, por **PIN (4–6 dígitos)** o **contraseña**.
+- 🔐 **Datos cifrados** en disco (AES-GCM): solo la app los lee.
+- 💾 **Copia de seguridad**: exporta e importa todos tus datos en un archivo.
+- 🏷️ **Categorías** amplias y agrupadas por color.
 
 ## Stack
 
@@ -47,6 +47,8 @@
 | **Estilos** | Tailwind CSS 4 |
 | **Estado** | Pinia |
 | **Build** | Vite |
+| **Exportación** | ExcelJS (XLSX) · jsPDF (PDF) |
+| **Seguridad** | Web Crypto (AES-GCM + PBKDF2) |
 
 ## Desarrollo
 
@@ -56,8 +58,14 @@ Requisitos: [Node.js](https://nodejs.org) + [pnpm](https://pnpm.io), [Rust](http
 pnpm install        # instalar dependencias
 pnpm tauri dev      # app de escritorio en modo desarrollo
 pnpm dev            # solo el frontend en el navegador (http://localhost:1420)
-pnpm tauri build    # generar el ejecutable de producción
+pnpm tauri build    # generar el ejecutable y los instaladores
 ```
+
+Los instaladores quedan en `src-tauri/target/release/bundle/` (NSIS `.exe` y MSI).
+
+## Privacidad
+
+Bolsillo funciona **100% offline**. No hay servidores, cuentas ni telemetría. Tus datos se guardan **cifrados** en tu equipo; si activas PIN o contraseña, la clave de cifrado se deriva de ella (si la olvidas, los datos no se pueden recuperar).
 
 ## Licencia
 

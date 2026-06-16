@@ -93,3 +93,26 @@ export interface DatosBolsillo {
   puntuales: Puntual[];
   deudas: Deuda[];
 }
+
+// Valida (de forma laxa pero suficiente) que un objeto tenga la forma de
+// DatosBolsillo. Evita hidratar datos corruptos (de una copia importada o de
+// un blob dañado) que dejarían los KPIs en NaN o romperían el render.
+export function esDatosValidos(d: unknown): d is DatosBolsillo {
+  if (!d || typeof d !== "object") return false;
+  const o = d as Record<string, unknown>;
+  if (!Array.isArray(o.recurrentes) || !Array.isArray(o.puntuales) || !Array.isArray(o.deudas))
+    return false;
+  const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+  const str = (x: unknown) => typeof x === "string";
+  const signo = (x: unknown) => x === "ingreso" || x === "gasto";
+  const rec = o.recurrentes.every(
+    (r: any) => r && str(r.id) && num(r.importe) && signo(r.signo) && str(r.categoria) && str(r.desde) && (r.hasta === null || str(r.hasta))
+  );
+  const pun = o.puntuales.every(
+    (p: any) => p && str(p.id) && num(p.importe) && signo(p.signo) && str(p.categoria) && str(p.fecha) && p.fecha.length >= 7
+  );
+  const deu = o.deudas.every(
+    (x: any) => x && str(x.id) && num(x.total) && num(x.cuotaMensual) && num(x.pagadoInicial) && str(x.inicioMes) && x.inicioMes.length >= 7
+  );
+  return rec && pun && deu;
+}

@@ -29,9 +29,13 @@ const CLASES = [
 ];
 
 const grupos = categoriasPorGrupo();
-// Fecha por defecto dentro del mes que se está viendo (no el actual si difieren).
 const f = useFinanzas();
-const hoy = `${f.mesSeleccionado}-${String(new Date().getDate()).padStart(2, "0")}`;
+// Fecha por defecto: día de hoy ACOTADO al último día del mes que se está viendo
+// (evita fechas inválidas tipo "2026-02-31" que dejarían el apunte huérfano).
+const [aSel, mSel] = f.mesSeleccionado.split("-").map(Number);
+const ultimoDia = new Date(aSel, mSel, 0).getDate();
+const diaDef = Math.min(new Date().getDate(), ultimoDia);
+const hoy = `${f.mesSeleccionado}-${String(diaDef).padStart(2, "0")}`;
 
 const form = reactive({
   clase: "gasto-variable",
@@ -46,9 +50,11 @@ const claseActual = computed(() => CLASES.find((c) => c.valor === form.clase)!);
 const esRecurrente = computed(() => claseActual.value.recurrente);
 
 function guardar() {
-  const importe = Number(form.importe);
+  // Acepta coma decimal española y redondea a 2 decimales (céntimos).
+  const importe = Math.round(Number(String(form.importe).replace(",", ".")) * 100) / 100;
   if (!form.concepto.trim()) return (error.value = "Pon un concepto");
   if (!importe || importe <= 0) return (error.value = "El importe debe ser mayor que 0");
+  if (!esRecurrente.value && !form.fecha) return (error.value = "Pon una fecha válida");
 
   emit("guardar", {
     recurrente: claseActual.value.recurrente,

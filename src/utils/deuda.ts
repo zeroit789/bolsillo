@@ -35,7 +35,8 @@ export function estadoDeuda(deuda: Deuda, mes: string): EstadoDeuda {
   const mesesRestantes =
     deuda.cuotaMensual > 0 ? Math.ceil(pendiente / deuda.cuotaMensual) : 0;
 
-  const progreso = deuda.total > 0 ? Math.round((pagado / deuda.total) * 100) : 100;
+  const progreso =
+    deuda.total > 0 ? Math.min(100, Math.max(0, Math.round((pagado / deuda.total) * 100))) : 100;
 
   return { deuda, pagado, pendiente, cuotaDelMes, terminada, mesesRestantes, progreso };
 }

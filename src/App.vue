@@ -44,26 +44,38 @@ onMounted(() => {
 });
 
 // --- Notificación de deuda saldada ---
-// Avisa SOLO cuando una deuda pasa de pendiente a saldada DURANTE la sesión
-// (transición real), evaluada en el mes en curso. Así no spamea al cargar ni
-// al importar una copia (donde solo registramos el estado base sin avisar).
-const estadoPrevio = new Map<string, boolean>();
-let baseNotif = false;
-watch(
-  () => f.deudas,
-  (lista) => {
-    for (const d of lista) {
-      const terminada = estadoDeuda(d, mesActual()).terminada;
-      const antes = estadoPrevio.get(d.id);
-      if (baseNotif && antes === false && terminada) {
+// Una deuda se salda por el PASO DEL TIEMPO (no por mutar el array), así que no
+// basta observar f.deudas: revisamos al desbloquear (datos ya hidratados) y ante
+// ediciones de deudas. Persistimos las ya avisadas para no repetir; en el primer
+// arranque marcamos las ya saldadas SIN avisar (estado base, evita spam inicial).
+const NOTIF_KEY = "bolsillo.deudas.notificadas";
+function revisarDeudasSaldadas() {
+  const primeraVez = localStorage.getItem(NOTIF_KEY) === null;
+  let set: Set<string>;
+  try {
+    set = new Set<string>(JSON.parse(localStorage.getItem(NOTIF_KEY) ?? "[]"));
+  } catch {
+    set = new Set<string>();
+  }
+  let cambia = false;
+  for (const d of f.deudas) {
+    const terminada = estadoDeuda(d, mesActual()).terminada;
+    if (terminada && !set.has(d.id)) {
+      if (!primeraVez) {
         void notificar("¡Deuda saldada! 🎉", `Has terminado de pagar "${d.concepto}".`);
       }
-      estadoPrevio.set(d.id, terminada);
+      set.add(d.id);
+      cambia = true;
+    } else if (!terminada && set.has(d.id)) {
+      set.delete(d.id); // se editó y volvió a quedar pendiente
+      cambia = true;
     }
-    baseNotif = true;
-  },
-  { deep: true, immediate: true }
-);
+  }
+  if (cambia || primeraVez) localStorage.setItem(NOTIF_KEY, JSON.stringify([...set]));
+}
+// Revisar al desbloquear (datos ya cargados) y cuando cambian las deudas.
+watch(() => sesion.desbloqueado, (v) => { if (v) revisarDeudasSaldadas(); }, { immediate: true });
+watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
 </script>
 
 <template>

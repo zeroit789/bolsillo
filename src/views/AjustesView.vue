@@ -11,7 +11,7 @@ import { ref, computed } from "vue";
 import { useAjustes } from "../stores/ajustes";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
-import type { DatosBolsillo } from "../types";
+import { esDatosValidos } from "../types";
 
 // --- Stores ---
 const ajustes = useAjustes();
@@ -152,14 +152,10 @@ function importarCopia(evento: Event) {
   const lector = new FileReader();
   lector.onload = () => {
     try {
-      // Parsea el JSON y comprueba que tiene la forma mínima esperada.
-      const datos = JSON.parse(String(lector.result)) as DatosBolsillo;
-      if (
-        !datos ||
-        !Array.isArray(datos.recurrentes) ||
-        !Array.isArray(datos.puntuales) ||
-        !Array.isArray(datos.deudas)
-      ) {
+      // Parsea el JSON y valida a fondo la forma (cada item), no solo los arrays:
+      // así una copia corrupta no deja la app con KPIs en NaN o la rompe.
+      const datos = JSON.parse(String(lector.result));
+      if (!esDatosValidos(datos)) {
         errorCopia.value = "El fichero no es una copia válida de Bolsillo.";
         return;
       }
