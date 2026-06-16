@@ -1,50 +1,95 @@
 /* ===========================================================================
-   Tipos del dominio de Bolsillo.
-   Un "Movimiento" es cualquier apunte: un ingreso o un gasto.
-   El signo lo decide el `tipo`, por eso el importe se guarda siempre positivo.
+   Tipos del dominio de Bolsillo (v2).
+   Tres entidades:
+     - Recurrente: ingreso/gasto que se repite TODOS los meses (nómina, alquiler,
+       suscripción). Se da de alta una vez y aparece en cada mes desde su alta.
+     - Puntual: ingreso/gasto de un mes concreto (una compra, una venta).
+     - Deuda: total + cuota mensual; la cuota cuenta como gasto fijo y la deuda
+       se va saldando sola mes a mes hasta llegar a cero.
    =========================================================================== */
 
-// Tipo de apunte. Separamos gasto fijo (recurrente: alquiler, suscripciones)
-// de gasto variable (puntual: súper, gasolina) para poder analizarlos aparte.
-export type TipoMovimiento = "ingreso" | "gasto-fijo" | "gasto-variable";
+// Un apunte suma (ingreso) o resta (gasto). El importe se guarda positivo.
+export type Signo = "ingreso" | "gasto";
 
-// Categorías disponibles (lista cerrada para mantener consistencia en filtros
-// y gráficas). Genéricas, sin nada personal.
-export const CATEGORIAS = [
-  "Nómina",
-  "Alquiler",
-  "Comida",
-  "Transporte",
-  "Internet",
-  "Telefonía",
-  "Suscripciones",
-  "Ocio",
-  "Compras",
-  "Salud",
-  "Ahorro",
-  "Otros",
-] as const;
-
-export type Categoria = (typeof CATEGORIAS)[number];
-
-// Un apunte concreto del libro de cuentas.
-export interface Movimiento {
-  id: string; // identificador único
-  concepto: string; // descripción libre ("Supermercado")
-  importe: number; // SIEMPRE positivo (el tipo decide si suma o resta)
-  tipo: TipoMovimiento;
-  categoria: Categoria;
-  fecha: string; // ISO corto: "YYYY-MM-DD"
+// Gasto/ingreso recurrente: vivo entre `desde` y `hasta` (incluidos).
+export interface Recurrente {
+  id: string;
+  concepto: string;
+  importe: number; // siempre positivo
+  signo: Signo;
+  categoria: string;
+  desde: string; // "YYYY-MM" mes de alta
+  hasta: string | null; // "YYYY-MM" mes de baja (incl.) o null = sin fin
 }
 
-// Etiquetas legibles para cada tipo (para pintar en la UI).
-export const ETIQUETAS_TIPO: Record<TipoMovimiento, string> = {
-  ingreso: "Ingreso",
-  "gasto-fijo": "Gasto fijo",
-  "gasto-variable": "Gasto variable",
-};
+// Apunte puntual de un mes concreto.
+export interface Puntual {
+  id: string;
+  concepto: string;
+  importe: number;
+  signo: Signo;
+  categoria: string;
+  fecha: string; // "YYYY-MM-DD"
+}
 
-// Devuelve el mes ("YYYY-MM") al que pertenece una fecha ISO.
-export function mesDe(fechaISO: string): string {
-  return fechaISO.slice(0, 7);
+// Tipos de deuda admitidos.
+export type TipoDeuda =
+  | "tarjeta"
+  | "prestamo"
+  | "coche"
+  | "moto"
+  | "hipoteca"
+  | "personal"
+  | "otro";
+
+// Catálogo de tipos de deuda con etiqueta legible e icono.
+export const TIPOS_DEUDA: { valor: TipoDeuda; etiqueta: string; icono: string }[] = [
+  { valor: "tarjeta", etiqueta: "Tarjeta de crédito", icono: "💳" },
+  { valor: "prestamo", etiqueta: "Préstamo", icono: "🏦" },
+  { valor: "coche", etiqueta: "Coche", icono: "🚗" },
+  { valor: "moto", etiqueta: "Moto", icono: "🏍️" },
+  { valor: "hipoteca", etiqueta: "Hipoteca", icono: "🏠" },
+  { valor: "personal", etiqueta: "Préstamo personal", icono: "🤝" },
+  { valor: "otro", etiqueta: "Otra deuda", icono: "📄" },
+];
+
+// Una deuda: total a pagar, cuota mensual y lo ya pagado al darla de alta.
+export interface Deuda {
+  id: string;
+  concepto: string;
+  tipo: TipoDeuda;
+  total: number; // importe total a saldar
+  cuotaMensual: number; // pago de cada mes
+  pagadoInicial: number; // lo que ya llevabas pagado al registrarla
+  inicioMes: string; // "YYYY-MM" desde cuando cuenta en la app
+}
+
+// Estado de una deuda calculado para un mes concreto.
+export interface EstadoDeuda {
+  deuda: Deuda;
+  pagado: number; // total abonado hasta ese mes (incl.)
+  pendiente: number; // lo que falta
+  cuotaDelMes: number; // lo que cuenta como gasto fijo ese mes (0 si ya saldada)
+  terminada: boolean; // pagado >= total
+  mesesRestantes: number; // cuotas que faltan
+  progreso: number; // 0..100
+}
+
+// Una "línea" del mes para pintar en la lista (unifica recurrente/puntual/deuda).
+export interface LineaMes {
+  id: string;
+  origen: "recurrente" | "puntual" | "deuda";
+  concepto: string;
+  categoria: string;
+  signo: Signo;
+  importe: number;
+  fijo: boolean; // true = gasto/ingreso fijo; false = puntual
+  fecha?: string; // solo puntuales
+}
+
+// Estructura completa que se persiste (y se cifra) en disco.
+export interface DatosBolsillo {
+  recurrentes: Recurrente[];
+  puntuales: Puntual[];
+  deudas: Deuda[];
 }

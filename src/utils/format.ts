@@ -41,3 +41,19 @@ export function mesActual(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
+
+// Nº de meses entre dos "YYYY-MM" (b - a). Ej: ("2026-01","2026-04") = 3
+export function diffMeses(a: string, b: string): number {
+  const [a1, m1] = a.split("-").map(Number);
+  const [a2, m2] = b.split("-").map(Number);
+  return (a2 - a1) * 12 + (m2 - m1);
+}
+
+// Suma n meses a un "YYYY-MM" y devuelve el "YYYY-MM" resultante.
+export function sumarMeses(mes: string, n: number): string {
+  const [a, m] = mes.split("-").map(Number);
+  const total = a * 12 + (m - 1) + n;
+  const año = Math.floor(total / 12);
+  const mesNum = (total % 12) + 1;
+  return `${año}-${String(mesNum).padStart(2, "0")}`;
+}
