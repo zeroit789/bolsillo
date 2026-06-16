@@ -89,6 +89,21 @@ export interface LineaMes {
   fecha?: string; // solo puntuales
 }
 
+// Tope de gasto mensual para una categoría (presupuesto).
+export interface Presupuesto {
+  categoria: string;
+  limite: number; // importe máximo al mes
+}
+
+// Plantilla de movimiento para alta rápida (un clic).
+export interface Plantilla {
+  id: string;
+  concepto: string;
+  importe: number;
+  signo: Signo;
+  categoria: string;
+}
+
 // Un plan / meta de ahorro o de compra doméstica (ej. "Pintar el salón – 110 €").
 export interface Plan {
   id: string;
@@ -103,6 +118,8 @@ export interface DatosBolsillo {
   puntuales: Puntual[];
   deudas: Deuda[];
   planes: Plan[];
+  presupuestos: Presupuesto[];
+  plantillas: Plantilla[];
 }
 
 // Valida (de forma laxa pero suficiente) que un objeto tenga la forma de
@@ -128,10 +145,18 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const deu = o.deudas.every(
     (x: any) => x && str(x.id) && num(x.total) && num(x.cuotaMensual) && num(x.pagadoInicial) && mesOk(x.inicioMes)
   );
-  // planes es opcional (las copias antiguas no lo traen).
+  // planes/presupuestos/plantillas son opcionales (copias antiguas no los traen).
   const pla =
     o.planes === undefined ||
     (Array.isArray(o.planes) &&
       o.planes.every((x: any) => x && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)));
-  return rec && pun && deu && pla;
+  const pre =
+    o.presupuestos === undefined ||
+    (Array.isArray(o.presupuestos) &&
+      o.presupuestos.every((x: any) => x && str(x.categoria) && num(x.limite)));
+  const pll =
+    o.plantillas === undefined ||
+    (Array.isArray(o.plantillas) &&
+      o.plantillas.every((x: any) => x && str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)));
+  return rec && pun && deu && pla && pre && pll;
 }

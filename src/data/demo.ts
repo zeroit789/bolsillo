@@ -40,5 +40,16 @@ export function datosDemo(): DatosBolsillo {
       { id: nuevoId(), nombre: "Vacaciones de verano", objetivo: 800, aportado: 250 },
       { id: nuevoId(), nombre: "Pintar el salón", objetivo: 120, aportado: 40 },
     ],
+    // Presupuestos de ejemplo (topes por categoría)
+    presupuestos: [
+      { categoria: "Comida", limite: 350 },
+      { categoria: "Ocio", limite: 100 },
+    ],
+    // Plantillas de alta rápida
+    plantillas: [
+      { id: nuevoId(), concepto: "Café", importe: 1.5, signo: "gasto", categoria: "Cafetería" },
+      { id: nuevoId(), concepto: "Gasolina", importe: 50, signo: "gasto", categoria: "Gasolina" },
+      { id: nuevoId(), concepto: "Compra súper", importe: 60, signo: "gasto", categoria: "Supermercado" },
+    ],
   };
 }

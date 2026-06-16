@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /* Vista Resumen: KPIs del mes, reparto de gasto por categoría y exportación. */
+import { computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
-import { euro, mesLegible } from "../utils/format";
+import { euro, mesLegible, mesActual } from "../utils/format";
 import { colorCategoria } from "../data/categorias";
 import { TIPOS_DEUDA, type TipoDeuda } from "../types";
 import { exportarMesXLSX, exportarMesPDF } from "../utils/export";
@@ -9,6 +10,48 @@ import KpiCard from "../components/KpiCard.vue";
 import GraficaEvolucion from "../components/GraficaEvolucion.vue";
 
 const f = useFinanzas();
+
+/* ---------------------------------------------------------------------------
+   Objetivo de gasto diario.
+   Reparte lo disponible del mes entre los días que quedan, para no pasarse.
+   Solo aplica al mes en curso (no tiene sentido en meses pasados/futuros).
+   --------------------------------------------------------------------------- */
+
+// ¿Estamos viendo el mes actual? La tarjeta solo se muestra en ese caso.
+const esMesActual = computed<boolean>(() => f.mesSeleccionado === mesActual());
+
+// Cadena "YYYY-MM-DD" del día de hoy (para comparar con la fecha de los puntuales).
+const hoyISO = computed<string>(() => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0"); // mes 0-indexado → +1
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+});
+
+// Días que quedan del mes contando hoy (hoy incluido).
+const diasRestantes = computed<number>(() => {
+  const d = new Date();
+  const hoy = d.getDate(); // día del mes (1..31)
+  // Día 0 del mes siguiente = último día del mes actual.
+  const diasMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return diasMes - hoy + 1;
+});
+
+// Objetivo de gasto por día: lo disponible repartido entre los días que quedan.
+const objetivoDiario = computed<number>(() =>
+  f.disponible > 0 ? f.disponible / diasRestantes.value : 0
+);
+
+// Lo que ya se ha gastado hoy (suma de puntuales de tipo gasto con fecha = hoy).
+const gastadoHoy = computed<number>(() =>
+  f.puntuales
+    .filter((p) => p.signo === "gasto" && p.fecha === hoyISO.value)
+    .reduce((acc, p) => acc + p.importe, 0)
+);
+
+// Lo que queda de presupuesto para hoy (positivo = margen; negativo = pasado).
+const restanteHoy = computed<number>(() => objetivoDiario.value - gastadoHoy.value);
 
 // % de una categoría respecto a la de mayor gasto (para el ancho de la barra).
 function pct(total: number): number {
@@ -69,6 +112,28 @@ async function exportar(tipo: "xlsx" | "pdf") {
         color="text-cyan"
         :nota="`Variables: ${euro(f.gastosVariables)}`"
       />
+    </section>
+
+    <!-- Objetivo de gasto diario: solo en el mes en curso -->
+    <section v-if="esMesActual" class="rounded-2xl bg-surface border border-border p-5 mb-8">
+      <h3 class="font-display font-bold mb-3">Objetivo diario</h3>
+      <!-- Cifra grande con el objetivo de gasto por día -->
+      <p class="text-brand">
+        <span class="font-display text-3xl font-bold tabular-nums">{{ euro(objetivoDiario) }}</span>
+        <span class="text-sm text-muted ml-1">/día</span>
+      </p>
+      <!-- Días que quedan y gasto acumulado de hoy -->
+      <p class="text-sm text-muted mt-2">
+        Te quedan {{ diasRestantes }} {{ diasRestantes === 1 ? "día" : "días" }}
+        · Hoy llevas {{ euro(gastadoHoy) }}
+      </p>
+      <!-- Restante de hoy: verde si hay margen, rojo si se ha pasado -->
+      <p v-if="restanteHoy >= 0" class="text-sm text-ok mt-1">
+        Te queda hoy {{ euro(restanteHoy) }}
+      </p>
+      <p v-else class="text-sm text-danger mt-1">
+        Te has pasado hoy {{ euro(restanteHoy) }}
+      </p>
     </section>
 
     <!-- Deudas activas: tarjetas bajo los KPIs con progreso, pagado y cuota -->

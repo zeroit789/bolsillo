@@ -17,6 +17,7 @@ import DashboardView from "./views/DashboardView.vue";
 import MovimientosView from "./views/MovimientosView.vue";
 import DeudasView from "./views/DeudasView.vue";
 import PlanesView from "./views/PlanesView.vue";
+import PresupuestosView from "./views/PresupuestosView.vue";
 import HistorialView from "./views/HistorialView.vue";
 import AjustesView from "./views/AjustesView.vue";
 
@@ -30,6 +31,7 @@ const NAV = [
   { id: "movimientos", etiqueta: "Movimientos", icono: "🧾", comp: MovimientosView },
   { id: "deudas", etiqueta: "Deudas", icono: "💳", comp: DeudasView },
   { id: "planes", etiqueta: "Planes", icono: "🎯", comp: PlanesView },
+  { id: "presupuestos", etiqueta: "Presupuestos", icono: "🧮", comp: PresupuestosView },
   { id: "historial", etiqueta: "Historial", icono: "📅", comp: HistorialView },
   { id: "ajustes", etiqueta: "Ajustes", icono: "⚙️", comp: AjustesView },
 ] as const;
@@ -37,7 +39,9 @@ const NAV = [
 const vista = ref<(typeof NAV)[number]["id"]>("resumen");
 const compActual = computed(() => NAV.find((n) => n.id === vista.value)!.comp);
 // El selector de mes solo tiene sentido en estas vistas.
-const mostrarMes = computed(() => ["resumen", "movimientos", "deudas"].includes(vista.value));
+const mostrarMes = computed(() =>
+  ["resumen", "movimientos", "deudas", "presupuestos"].includes(vista.value)
+);
 
 // Estado de pantalla: bloqueo / contenido / cargando.
 const bloqueado = computed(() => ajustes.bloqueoActivo && !sesion.desbloqueado);

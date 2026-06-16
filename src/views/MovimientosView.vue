@@ -3,7 +3,8 @@
 import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
-import type { LineaMes, Signo } from "../types";
+import { categoriasPorGrupo } from "../data/categorias";
+import type { LineaMes, Signo, Plantilla } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
 
 const f = useFinanzas();
@@ -164,6 +165,60 @@ function cerrarModal() {
   inicial.value = null;
   modal.value = false;
 }
+
+/* ===========================================================================
+   ENTRADA RÁPIDA — plantillas (atajos para gastos/ingresos habituales).
+   =========================================================================== */
+
+// Grupos de categorías para el <select> con <optgroup> del mini-formulario.
+const grupos = categoriasPorGrupo();
+
+// Usa una plantilla: registra al instante un movimiento de HOY (un clic).
+function usarPlantilla(p: Plantilla): void {
+  f.usarPlantilla(p.id);
+}
+
+// Elimina una plantilla previa confirmación.
+function quitarPlantilla(p: Plantilla): void {
+  if (confirm(`¿Eliminar el atajo "${p.concepto}"?`)) f.eliminarPlantilla(p.id);
+}
+
+// Estado del mini-formulario inline para crear una plantilla nueva.
+const formAbierto = ref(false);
+const formConcepto = ref("");
+const formImporte = ref(""); // texto: acepta coma decimal, se redondea al guardar
+const formSigno = ref<Signo>("gasto"); // por defecto gasto
+const formCategoria = ref(""); // nombre de categoría seleccionada
+
+// Abre el mini-formulario con valores limpios.
+function abrirFormPlantilla(): void {
+  formConcepto.value = "";
+  formImporte.value = "";
+  formSigno.value = "gasto";
+  formCategoria.value = "";
+  formAbierto.value = true;
+}
+
+// Cierra el mini-formulario sin guardar.
+function cerrarFormPlantilla(): void {
+  formAbierto.value = false;
+}
+
+// Guarda la nueva plantilla en el store.
+// Normaliza la coma decimal a punto y redondea el importe a céntimos.
+function guardarPlantilla(): void {
+  const concepto = formConcepto.value.trim();
+  const importe = Math.round(Number(formImporte.value.replace(",", ".")) * 100) / 100;
+  // Validación mínima: concepto, importe válido (>0) y categoría elegida.
+  if (!concepto || !Number.isFinite(importe) || importe <= 0 || !formCategoria.value) return;
+  f.addPlantilla({
+    concepto,
+    importe,
+    signo: formSigno.value,
+    categoria: formCategoria.value,
+  });
+  formAbierto.value = false;
+}
 </script>
 
 <template>
@@ -176,6 +231,118 @@ function cerrarModal() {
       >
         + Añadir
       </button>
+    </div>
+
+    <!-- ENTRADA RÁPIDA: chips de plantillas + alta de plantilla nueva -->
+    <div class="mb-6 flex flex-wrap items-center gap-2">
+      <!-- Un chip por plantilla: clic = registrar movimiento de hoy al instante -->
+      <span
+        v-for="p in f.plantillas"
+        :key="p.id"
+        class="inline-flex items-center gap-1.5 rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
+      >
+        <!-- Texto del chip: registra el movimiento al hacer clic -->
+        <button class="text-ink" :title="`Registrar hoy: ${p.concepto}`" @click="usarPlantilla(p)">
+          {{ p.concepto }} · {{ euro(p.importe) }}
+        </button>
+        <!-- Aspa para eliminar el atajo -->
+        <button
+          class="text-faint hover:text-danger transition-colors"
+          title="Eliminar atajo"
+          @click="quitarPlantilla(p)"
+        >
+          ✕
+        </button>
+      </span>
+
+      <!-- Chip "+ Plantilla": abre el mini-formulario para crear un atajo -->
+      <button
+        class="rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
+        @click="abrirFormPlantilla"
+      >
+        + Plantilla
+      </button>
+
+      <!-- Texto tenue de ayuda cuando todavía no hay plantillas -->
+      <span v-if="!f.plantillas.length" class="text-faint text-sm">
+        Crea atajos para tus gastos habituales
+      </span>
+    </div>
+
+    <!-- Mini-modal para crear una plantilla nueva -->
+    <div
+      v-if="formAbierto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+      @click.self="cerrarFormPlantilla"
+    >
+      <div class="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 space-y-4">
+        <h3 class="font-display text-lg font-bold">Nuevo atajo</h3>
+
+        <!-- Concepto -->
+        <div>
+          <label class="text-faint text-xs">Concepto</label>
+          <input
+            v-model="formConcepto"
+            type="text"
+            placeholder="Café, Gasolina…"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+          />
+        </div>
+
+        <!-- Importe (acepta coma decimal, se redondea al guardar) -->
+        <div>
+          <label class="text-faint text-xs">Importe (€)</label>
+          <input
+            v-model="formImporte"
+            type="text"
+            inputmode="decimal"
+            placeholder="1,50"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+          />
+        </div>
+
+        <!-- Signo: gasto por defecto -->
+        <div>
+          <label class="text-faint text-xs">Tipo</label>
+          <select
+            v-model="formSigno"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+          >
+            <option value="gasto">Gasto</option>
+            <option value="ingreso">Ingreso</option>
+          </select>
+        </div>
+
+        <!-- Categoría: select con optgroups por grupo -->
+        <div>
+          <label class="text-faint text-xs">Categoría</label>
+          <select
+            v-model="formCategoria"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+          >
+            <option value="" disabled>Elige categoría…</option>
+            <optgroup v-for="g in grupos" :key="g.grupo" :label="g.grupo">
+              <option v-for="c in g.items" :key="c" :value="c">{{ c }}</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- Acciones del mini-formulario -->
+        <div class="flex justify-end gap-2 pt-1">
+          <button
+            class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-sm hover:border-brand transition-colors"
+            @click="cerrarFormPlantilla"
+          >
+            Cancelar
+          </button>
+          <button
+            class="rounded-lg bg-brand px-4 py-2 text-sm text-white font-medium hover:bg-brand-soft transition-colors"
+            @click="guardarPlantilla"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="rounded-2xl bg-surface border border-border">

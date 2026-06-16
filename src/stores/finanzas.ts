@@ -11,6 +11,8 @@ import type {
   EstadoDeuda,
   LineaMes,
   Plan,
+  Plantilla,
+  Presupuesto,
   Puntual,
   Recurrente,
 } from "../types";
@@ -37,6 +39,8 @@ export const useFinanzas = defineStore("finanzas", () => {
   const puntuales = ref<Puntual[]>([]);
   const deudas = ref<Deuda[]>([]);
   const planes = ref<Plan[]>([]);
+  const presupuestos = ref<Presupuesto[]>([]);
+  const plantillas = ref<Plantilla[]>([]);
   const mesSeleccionado = ref<string>(mesActual());
 
   // Carga los datos en el store (desde almacén o demo). Lo llama el arranque.
@@ -45,6 +49,8 @@ export const useFinanzas = defineStore("finanzas", () => {
     puntuales.value = datos.puntuales ?? [];
     deudas.value = datos.deudas ?? [];
     planes.value = datos.planes ?? [];
+    presupuestos.value = datos.presupuestos ?? [];
+    plantillas.value = datos.plantillas ?? [];
   }
 
   // Snapshot serializable de todos los datos (para guardar / exportar).
@@ -54,6 +60,8 @@ export const useFinanzas = defineStore("finanzas", () => {
       puntuales: puntuales.value,
       deudas: deudas.value,
       planes: planes.value,
+      presupuestos: presupuestos.value,
+      plantillas: plantillas.value,
     };
   }
 
@@ -257,6 +265,33 @@ export const useFinanzas = defineStore("finanzas", () => {
       planes.value[i] = { ...planes.value[i], aportado };
     }
   }
+  // --- Presupuestos por categoría (topes mensuales) ---
+  function setPresupuesto(categoria: string, limite: number) {
+    const lim = Math.round((Number(limite) || 0) * 100) / 100;
+    presupuestos.value = presupuestos.value.filter((p) => p.categoria !== categoria);
+    if (lim > 0) presupuestos.value.push({ categoria, limite: lim });
+  }
+  function eliminarPresupuesto(categoria: string) {
+    presupuestos.value = presupuestos.value.filter((p) => p.categoria !== categoria);
+  }
+  function presupuestoDe(categoria: string): number | null {
+    return presupuestos.value.find((p) => p.categoria === categoria)?.limite ?? null;
+  }
+  // --- Plantillas de alta rápida ---
+  function addPlantilla(p: Omit<Plantilla, "id">) {
+    plantillas.value.push({ ...p, id: nuevoId() });
+  }
+  function eliminarPlantilla(id: string) {
+    plantillas.value = plantillas.value.filter((p) => p.id !== id);
+  }
+  // Crea un movimiento puntual del mes a partir de una plantilla (alta rápida).
+  function usarPlantilla(id: string) {
+    const t = plantillas.value.find((p) => p.id === id);
+    if (!t) return;
+    const hoy = `${mesActual()}-${String(new Date().getDate()).padStart(2, "0")}`;
+    addPuntual({ concepto: t.concepto, importe: t.importe, signo: t.signo, categoria: t.categoria, fecha: hoy });
+  }
+
   // Da de baja un recurrente a partir de un mes (en vez de borrarlo del histórico).
   function darDeBajaRecurrente(id: string, mes: string) {
     const r = recurrentes.value.find((x) => x.id === id);
@@ -279,6 +314,8 @@ export const useFinanzas = defineStore("finanzas", () => {
     puntuales,
     deudas,
     planes,
+    presupuestos,
+    plantillas,
     mesSeleccionado,
     // hidratación / persistencia
     hidratar,
@@ -310,6 +347,12 @@ export const useFinanzas = defineStore("finanzas", () => {
     actualizarPlan,
     eliminarPlan,
     aportarAPlan,
+    setPresupuesto,
+    eliminarPresupuesto,
+    presupuestoDe,
+    addPlantilla,
+    eliminarPlantilla,
+    usarPlantilla,
     darDeBajaRecurrente,
     eliminarLinea,
     seleccionarMes,
