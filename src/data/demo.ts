@@ -51,5 +51,10 @@ export function datosDemo(): DatosBolsillo {
       { id: nuevoId(), concepto: "Gasolina", importe: 50, signo: "gasto", categoria: "Gasolina" },
       { id: nuevoId(), concepto: "Compra súper", importe: 60, signo: "gasto", categoria: "Supermercado" },
     ],
+    // Cuentas de ejemplo (para el patrimonio)
+    cuentas: [
+      { id: nuevoId(), nombre: "Efectivo", saldoInicial: 200 },
+      { id: nuevoId(), nombre: "Banco", saldoInicial: 1500 },
+    ],
   };
 }

@@ -32,6 +32,18 @@ function elegirTema(t: "claro" | "oscuro") {
   ajustes.setTema(t);
 }
 
+// Monedas disponibles para el selector (código ISO + etiqueta legible).
+const MONEDAS: { codigo: string; etiqueta: string }[] = [
+  { codigo: "EUR", etiqueta: "Euro (€)" },
+  { codigo: "USD", etiqueta: "Dólar estadounidense ($)" },
+  { codigo: "GBP", etiqueta: "Libra esterlina (£)" },
+  { codigo: "MXN", etiqueta: "Peso mexicano" },
+  { codigo: "ARS", etiqueta: "Peso argentino" },
+  { codigo: "COP", etiqueta: "Peso colombiano" },
+  { codigo: "CLP", etiqueta: "Peso chileno" },
+  { codigo: "BRL", etiqueta: "Real brasileño" },
+];
+
 /* ===========================================================================
    SECCIÓN 2 — SEGURIDAD (bloqueo al abrir)
    =========================================================================== */
@@ -330,6 +342,22 @@ function quitarCategoria(nombre: string): void {
         >
           Claro
         </button>
+      </div>
+
+      <!-- Selector de moneda: enlazado directo al ref del store.
+           El watch del store sincroniza el formateador, así que toda la UI
+           (importes con euro()) se actualiza sola al cambiarla. -->
+      <div class="mt-5">
+        <label class="text-muted text-sm">Moneda</label>
+        <select
+          v-model="ajustes.moneda"
+          class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+        >
+          <option v-for="m in MONEDAS" :key="m.codigo" :value="m.codigo">
+            {{ m.etiqueta }}
+          </option>
+        </select>
+        <p class="text-faint text-xs mt-1">Moneda en la que se muestran los importes.</p>
       </div>
     </section>
 

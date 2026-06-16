@@ -4,7 +4,7 @@ import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
 import { categoriasPorGrupo } from "../data/categorias";
-import type { LineaMes, Signo, Plantilla } from "../types";
+import type { LineaMes, Signo, Plantilla, Subdivision } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
 
 const f = useFinanzas();
@@ -23,6 +23,8 @@ const inicial = ref<{
   comercio?: string; // opcional
   tags?: string[]; // opcional (array; el modal lo convierte a texto)
   recibo?: string; // imagen base64 (solo puntuales); opcional
+  cuenta?: string; // id de cuenta; opcional
+  subdivisiones?: Subdivision[]; // gasto dividido (solo puntuales); opcional
 } | null>(null);
 
 // Recibo que se muestra en el lightbox (null = lightbox cerrado).
@@ -78,6 +80,7 @@ function editar(linea: LineaMes) {
       // Campos opcionales nuevos (los recurrentes no llevan recibo).
       comercio: r.comercio,
       tags: r.tags,
+      cuenta: r.cuenta, // cuenta a la que pertenece; opcional
     };
   } else {
     // Puntual: lo buscamos por id en el store.
@@ -94,6 +97,8 @@ function editar(linea: LineaMes) {
       comercio: p.comercio,
       tags: p.tags,
       recibo: p.recibo,
+      cuenta: p.cuenta, // cuenta a la que pertenece; opcional
+      subdivisiones: p.subdivisiones, // gasto dividido en categorías; opcional
     };
   }
   editando.value = linea;
@@ -112,6 +117,8 @@ function onGuardar(mov: {
   comercio?: string;
   tags?: string[];
   recibo?: string;
+  cuenta?: string; // id de cuenta; opcional
+  subdivisiones?: Subdivision[]; // gasto dividido (solo puntuales); opcional
 }) {
   if (editando.value) {
     // --- Modo edición ---
@@ -124,6 +131,7 @@ function onGuardar(mov: {
         diaPago: mov.diaPago,
         comercio: mov.comercio,
         tags: mov.tags,
+        cuenta: mov.cuenta, // cuenta a la que pertenece
       });
     } else if (editando.value.origen === "puntual") {
       f.actualizarPuntual(editando.value.id, {
@@ -135,6 +143,8 @@ function onGuardar(mov: {
         comercio: mov.comercio,
         tags: mov.tags,
         recibo: mov.recibo, // recibo solo en puntuales
+        cuenta: mov.cuenta, // cuenta a la que pertenece
+        subdivisiones: mov.subdivisiones, // gasto dividido (solo puntuales)
       });
     }
   } else {
@@ -150,6 +160,7 @@ function onGuardar(mov: {
         diaPago: mov.diaPago,
         comercio: mov.comercio,
         tags: mov.tags,
+        cuenta: mov.cuenta, // cuenta a la que pertenece
       });
     } else {
       f.addPuntual({
@@ -161,6 +172,8 @@ function onGuardar(mov: {
         comercio: mov.comercio,
         tags: mov.tags,
         recibo: mov.recibo, // recibo solo en puntuales
+        cuenta: mov.cuenta, // cuenta a la que pertenece
+        subdivisiones: mov.subdivisiones, // gasto dividido (solo puntuales)
       });
     }
   }
@@ -413,6 +426,14 @@ function guardarPlantilla(): void {
             <p class="text-faint text-xs mt-0.5 flex flex-wrap items-center gap-1.5">
               <span class="rounded-full bg-surface-2 px-2 py-0.5">{{ l.categoria }}</span>
               <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">Fijo</span>
+              <!-- Chip "Dividido": el gasto se reparte en varias categorías -->
+              <span
+                v-if="l.subdivisiones?.length"
+                class="rounded-full bg-brand/15 text-brand px-2 py-0.5"
+                :title="l.subdivisiones.map((s) => s.categoria).join(', ')"
+              >
+                Dividido
+              </span>
               <!-- Comercio: dónde se hizo (ej. "· Mercadona") -->
               <span v-if="l.comercio">· {{ l.comercio }}</span>
               <span v-if="l.fecha">· {{ fechaLegible(l.fecha) }}</span>

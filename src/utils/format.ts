@@ -1,15 +1,27 @@
 /* ===========================================================================
    Utilidades de formato (moneda y fechas) en español de España.
    =========================================================================== */
+import { ref } from "vue";
 
-// Formatea un número como euros: 1234.5 -> "1.234,50 €"
-const FORMATO_EURO = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-});
+// Código ISO de la moneda activa (EUR por defecto). Es un ref para que
+// formatear importes sea REACTIVO: al cambiarlo, toda la UI que usa euro()
+// se vuelve a renderizar sola.
+export const monedaActual = ref<string>("EUR");
 
+// Cambia la moneda activa. La llama el store de ajustes al sincronizar.
+export function setMoneda(codigo: string): void {
+  monedaActual.value = codigo;
+}
+
+// Formatea un número en la moneda activa: 1234.5 -> "1.234,50 €" (o $, £...).
+// Importante: el formateador se crea EN CADA LLAMADA leyendo monedaActual.value.
+// Así Vue registra monedaActual como dependencia y reacciona a sus cambios.
+// (No cachear el formateador a nivel de módulo o se perdería la reactividad.)
 export function euro(n: number): string {
-  return FORMATO_EURO.format(n);
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: monedaActual.value,
+  }).format(n);
 }
 
 // Formatea una fecha ISO ("2026-06-16") como "16 jun 2026"

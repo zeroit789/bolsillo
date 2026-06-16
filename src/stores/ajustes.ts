@@ -4,6 +4,8 @@
    =========================================================================== */
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
+// Sincroniza el formateador de importes con la moneda guardada.
+import { setMoneda as setMonedaFormat } from "../utils/format";
 
 export type Tema = "oscuro" | "claro";
 export type TipoBloqueo = "pin" | "password";
@@ -15,6 +17,7 @@ interface AjustesGuardados {
   bloqueoActivo: boolean;
   bloqueoTipo: TipoBloqueo | null;
   nombre: string;
+  moneda: string; // código ISO de la moneda elegida (EUR, USD, GBP...)
   configurado: boolean; // true tras completar la bienvenida
 }
 
@@ -23,6 +26,7 @@ const POR_DEFECTO: AjustesGuardados = {
   bloqueoActivo: false,
   bloqueoTipo: null,
   nombre: "",
+  moneda: "EUR",
   configurado: false,
 };
 
@@ -43,6 +47,7 @@ export const useAjustes = defineStore("ajustes", () => {
   const bloqueoActivo = ref<boolean>(inicial.bloqueoActivo);
   const bloqueoTipo = ref<TipoBloqueo | null>(inicial.bloqueoTipo);
   const nombre = ref<string>(inicial.nombre);
+  const moneda = ref<string>(inicial.moneda);
   const configurado = ref<boolean>(inicial.configurado);
 
   // Aplica el tema al documento (clase que el CSS usa para invertir).
@@ -63,13 +68,16 @@ export const useAjustes = defineStore("ajustes", () => {
   function setNombre(n: string) {
     nombre.value = n;
   }
+  function setMoneda(c: string) {
+    moneda.value = c;
+  }
   function marcarConfigurado() {
     configurado.value = true;
   }
 
   // Persiste y aplica el tema ante cualquier cambio (también al iniciar).
   watch(
-    [tema, bloqueoActivo, bloqueoTipo, nombre, configurado],
+    [tema, bloqueoActivo, bloqueoTipo, nombre, moneda, configurado],
     () => {
       localStorage.setItem(
         CLAVE,
@@ -78,6 +86,7 @@ export const useAjustes = defineStore("ajustes", () => {
           bloqueoActivo: bloqueoActivo.value,
           bloqueoTipo: bloqueoTipo.value,
           nombre: nombre.value,
+          moneda: moneda.value,
           configurado: configurado.value,
         })
       );
@@ -86,17 +95,23 @@ export const useAjustes = defineStore("ajustes", () => {
     { immediate: true }
   );
 
+  // Sincroniza el formateador de importes con la moneda guardada.
+  // immediate: true -> al arrancar aplica la moneda persistida, no solo al cambiarla.
+  watch(moneda, (m) => setMonedaFormat(m), { immediate: true });
+
   return {
     tema,
     bloqueoActivo,
     bloqueoTipo,
     nombre,
+    moneda,
     configurado,
     aplicarTema,
     setTema,
     toggleTema,
     setBloqueo,
     setNombre,
+    setMoneda,
     marcarConfigurado,
   };
 });

@@ -6,6 +6,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import type {
+  Cuenta,
   DatosBolsillo,
   Deuda,
   EstadoDeuda,
@@ -41,6 +42,7 @@ export const useFinanzas = defineStore("finanzas", () => {
   const planes = ref<Plan[]>([]);
   const presupuestos = ref<Presupuesto[]>([]);
   const plantillas = ref<Plantilla[]>([]);
+  const cuentas = ref<Cuenta[]>([]);
   const mesSeleccionado = ref<string>(mesActual());
 
   // Carga los datos en el store (desde almacén o demo). Lo llama el arranque.
@@ -51,6 +53,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     planes.value = datos.planes ?? [];
     presupuestos.value = datos.presupuestos ?? [];
     plantillas.value = datos.plantillas ?? [];
+    cuentas.value = datos.cuentas ?? [];
   }
 
   // Snapshot serializable de todos los datos (para guardar / exportar).
@@ -62,6 +65,7 @@ export const useFinanzas = defineStore("finanzas", () => {
       planes: planes.value,
       presupuestos: presupuestos.value,
       plantillas: plantillas.value,
+      cuentas: cuentas.value,
     };
   }
 
@@ -171,6 +175,8 @@ export const useFinanzas = defineStore("finanzas", () => {
         comercio: p.comercio,
         tags: p.tags,
         recibo: p.recibo,
+        cuenta: p.cuenta,
+        subdivisiones: p.subdivisiones,
       });
     }
     // Ingresos primero, luego por importe descendente.
@@ -185,7 +191,14 @@ export const useFinanzas = defineStore("finanzas", () => {
     const mapa = new Map<string, number>();
     for (const l of lineasDelMes.value) {
       if (l.signo !== "gasto") continue;
-      mapa.set(l.categoria, (mapa.get(l.categoria) ?? 0) + l.importe);
+      // Si el gasto está dividido, reparte por sus subcategorías; si no, su categoría.
+      if (l.subdivisiones && l.subdivisiones.length) {
+        for (const s of l.subdivisiones) {
+          mapa.set(s.categoria, (mapa.get(s.categoria) ?? 0) + s.importe);
+        }
+      } else {
+        mapa.set(l.categoria, (mapa.get(l.categoria) ?? 0) + l.importe);
+      }
     }
     return [...mapa.entries()]
       .map(([categoria, total]) => ({ categoria, total }))
@@ -309,6 +322,32 @@ export const useFinanzas = defineStore("finanzas", () => {
     addPuntual({ concepto: t.concepto, importe: t.importe, signo: t.signo, categoria: t.categoria, fecha: hoy });
   }
 
+  // --- Cuentas / patrimonio ---
+  function addCuenta(c: Omit<Cuenta, "id">) {
+    cuentas.value.push({ ...c, id: nuevoId() });
+  }
+  function actualizarCuenta(id: string, cambios: Partial<Cuenta>) {
+    const i = cuentas.value.findIndex((c) => c.id === id);
+    if (i !== -1) cuentas.value[i] = { ...cuentas.value[i], ...cambios };
+  }
+  function eliminarCuenta(id: string) {
+    cuentas.value = cuentas.value.filter((c) => c.id !== id);
+  }
+  // Saldo de cada cuenta = saldo inicial + neto de sus movimientos puntuales.
+  const patrimonio = computed(() =>
+    cuentas.value.map((c) => {
+      let saldo = c.saldoInicial;
+      for (const p of puntuales.value) {
+        if (p.cuenta !== c.id) continue;
+        saldo += p.signo === "ingreso" ? p.importe : -p.importe;
+      }
+      return { cuenta: c, saldo: Math.round(saldo * 100) / 100 };
+    })
+  );
+  const patrimonioTotal = computed(() =>
+    patrimonio.value.reduce((a, x) => a + x.saldo, 0)
+  );
+
   // Da de baja un recurrente a partir de un mes (en vez de borrarlo del histórico).
   function darDeBajaRecurrente(id: string, mes: string) {
     const r = recurrentes.value.find((x) => x.id === id);
@@ -333,6 +372,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     planes,
     presupuestos,
     plantillas,
+    cuentas,
     mesSeleccionado,
     // hidratación / persistencia
     hidratar,
@@ -371,6 +411,11 @@ export const useFinanzas = defineStore("finanzas", () => {
     addPlantilla,
     eliminarPlantilla,
     usarPlantilla,
+    addCuenta,
+    actualizarCuenta,
+    eliminarCuenta,
+    patrimonio,
+    patrimonioTotal,
     darDeBajaRecurrente,
     eliminarLinea,
     seleccionarMes,

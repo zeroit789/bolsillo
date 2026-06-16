@@ -4,9 +4,10 @@
    Si recibe la prop `inicial`, el formulario se PRECARGA con esos valores y el
    modal pasa a modo edición. Los fijos pueden llevar un "día de pago" (1-31). */
 import { ref, reactive, computed } from "vue";
-import { categoriasPorGrupo } from "../data/categorias";
+import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
-import type { Signo } from "../types";
+import { euro } from "../utils/format";
+import type { Signo, Subdivision } from "../types";
 
 // Forma de los datos iniciales para precargar el formulario en modo edición.
 interface MovimientoInicial {
@@ -20,6 +21,8 @@ interface MovimientoInicial {
   comercio?: string; // dónde se hizo (texto libre); opcional
   tags?: string[]; // etiquetas; en el form se editan como texto separado por comas
   recibo?: string; // imagen del recibo en base64 (solo gastos puntuales)
+  cuenta?: string; // id de la cuenta a la que pertenece; opcional
+  subdivisiones?: Subdivision[]; // gasto dividido en varias categorías; opcional
 }
 
 const props = defineProps<{
@@ -40,6 +43,8 @@ const emit = defineEmits<{
       comercio?: string; // dónde se hizo; opcional (undefined si vacío)
       tags?: string[]; // etiquetas ya normalizadas (array, sin vacíos)
       recibo?: string; // imagen del recibo en base64 (solo puntuales); opcional
+      cuenta?: string; // id de la cuenta a la que pertenece; opcional (undefined si vacío)
+      subdivisiones?: Subdivision[]; // partes del gasto dividido (solo gasto puntual); opcional
     }
   ];
   cerrar: [];
@@ -93,8 +98,53 @@ const form = reactive({
   tagsTexto: props.inicial?.tags ? props.inicial.tags.join(", ") : "",
   // Recibo: data URL base64 (solo gastos puntuales). "" = sin recibo.
   recibo: props.inicial?.recibo ?? "",
+  // Cuenta/monedero al que pertenece el movimiento. "" = sin cuenta.
+  cuenta: props.inicial?.cuenta ?? "",
 });
+
+// --- Gasto dividido (split en varias categorías; solo gastos puntuales) ---
+// Activo si venimos editando un movimiento que ya traía subdivisiones.
+const dividido = ref<boolean>(
+  Array.isArray(props.inicial?.subdivisiones) && props.inicial!.subdivisiones!.length > 0
+);
+// Partes del gasto dividido. En el form el importe es texto (acepta coma decimal);
+// se normaliza a number al guardar. Precarga desde inicial si las trae.
+const partes = reactive<{ categoria: string; importe: string }[]>(
+  props.inicial?.subdivisiones?.length
+    ? props.inicial.subdivisiones.map((s) => ({ categoria: s.categoria, importe: String(s.importe) }))
+    : [
+        // Por defecto arrancamos con 2 filas vacías (mínimo válido).
+        { categoria: NOMBRES_CATEGORIA[0], importe: "" },
+        { categoria: NOMBRES_CATEGORIA[0], importe: "" },
+      ]
+);
+
+// Lista de nombres de categoría para los <select> de cada parte.
+const nombresCategoria = NOMBRES_CATEGORIA;
+
 const error = ref("");
+
+// Convierte un texto con coma/punto decimal a número redondeado a céntimos.
+// Devuelve 0 si no es un número válido.
+function aImporte(txt: string): number {
+  const n = Number(String(txt).replace(",", "."));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+// Añade una parte vacía al gasto dividido.
+function anadirParte() {
+  partes.push({ categoria: NOMBRES_CATEGORIA[0], importe: "" });
+}
+
+// Quita la parte indicada (mantenemos al menos 2 filas para no romper el mínimo).
+function quitarParte(i: number) {
+  if (partes.length > 2) partes.splice(i, 1);
+}
+
+// Suma de las partes del gasto dividido (number, céntimos).
+const sumaPartes = computed(() =>
+  Math.round(partes.reduce((acc, p) => acc + aImporte(p.importe), 0) * 100) / 100
+);
 
 // Lee el fichero de imagen elegido, lo REDIMENSIONA con canvas (máx 800px en el
 // lado mayor) y lo exporta a JPEG calidad 0.7 como data URL base64. Redimensionar
@@ -133,11 +183,31 @@ function quitarRecibo() {
 
 const claseActual = computed(() => CLASES.find((c) => c.valor === form.clase)!);
 const esRecurrente = computed(() => claseActual.value.recurrente);
+// El gasto dividido SOLO aplica a gastos puntuales (signo gasto y NO recurrente).
+const esGastoPuntual = computed(
+  () => !claseActual.value.recurrente && claseActual.value.signo === "gasto"
+);
 
 function guardar() {
-  // Acepta coma decimal española y redondea a 2 decimales (céntimos).
-  const importe = Math.round(Number(String(form.importe).replace(",", ".")) * 100) / 100;
   if (!form.concepto.trim()) return (error.value = "Pon un concepto");
+
+  // ¿Está activo el modo dividido? Solo tiene sentido en gastos puntuales.
+  const usandoDividido = esGastoPuntual.value && dividido.value;
+
+  // Cálculo del importe:
+  //  - dividido -> es la SUMA de las partes (se ignora el input normal).
+  //  - normal -> el input de importe (acepta coma decimal).
+  const importe = usandoDividido
+    ? sumaPartes.value
+    : Math.round(Number(String(form.importe).replace(",", ".")) * 100) / 100;
+
+  // Validación del gasto dividido: al menos 2 partes con importe > 0.
+  if (usandoDividido) {
+    const validas = partes.filter((p) => aImporte(p.importe) > 0);
+    if (validas.length < 2)
+      return (error.value = "Añade al menos 2 partes con importe mayor que 0");
+  }
+
   if (!importe || importe <= 0) return (error.value = "El importe debe ser mayor que 0");
   if (!esRecurrente.value && !form.fecha) return (error.value = "Pon una fecha válida");
 
@@ -159,6 +229,17 @@ function guardar() {
   // Recibo: solo tiene sentido en puntuales y solo si hay imagen cargada.
   const recibo = !esRecurrente.value && form.recibo ? form.recibo : undefined;
 
+  // Cuenta: undefined si no se ha elegido ninguna (no guardamos "").
+  const cuenta = form.cuenta || undefined;
+
+  // Subdivisiones: solo si está activo el modo dividido (gasto puntual).
+  // Normaliza cada parte a number y descarta las que queden a 0.
+  const subdivisiones = usandoDividido
+    ? partes
+        .map((p) => ({ categoria: p.categoria, importe: aImporte(p.importe) }))
+        .filter((p) => p.importe > 0)
+    : undefined;
+
   emit("guardar", {
     recurrente: claseActual.value.recurrente,
     signo: claseActual.value.signo,
@@ -170,6 +251,8 @@ function guardar() {
     comercio,
     tags,
     recibo,
+    cuenta,
+    subdivisiones,
   });
 }
 </script>
@@ -209,7 +292,17 @@ function guardar() {
         <div class="flex gap-3">
           <div class="flex-1">
             <label class="text-muted text-sm">Importe (€)</label>
+            <!-- Si el gasto está dividido, el importe es la SUMA de las partes:
+                 mostramos esa suma y deshabilitamos el input manual. -->
             <input
+              v-if="esGastoPuntual && dividido"
+              :value="euro(sumaPartes)"
+              type="text"
+              disabled
+              class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-muted outline-none opacity-60 cursor-not-allowed"
+            />
+            <input
+              v-else
               v-model="form.importe"
               type="number"
               min="0"
@@ -274,6 +367,72 @@ function guardar() {
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
           <p class="text-faint text-xs mt-1">Sepáralas con comas.</p>
+        </div>
+
+        <!-- Cuenta/monedero: opcional, para puntuales y recurrentes -->
+        <div>
+          <label class="text-muted text-sm">Cuenta (opcional)</label>
+          <select
+            v-model="form.cuenta"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          >
+            <!-- Opción vacía = sin cuenta asignada -->
+            <option value="">— Sin cuenta —</option>
+            <!-- Una opción por cada cuenta del store (value = id) -->
+            <option v-for="c in f.cuentas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+        </div>
+
+        <!-- Gasto dividido: SOLO para gastos puntuales (signo gasto, no recurrente) -->
+        <div v-if="esGastoPuntual" class="rounded-lg border border-border p-3 space-y-3">
+          <!-- Toggle para activar/desactivar el reparto en categorías -->
+          <label class="flex items-center gap-2 text-sm text-ink cursor-pointer">
+            <input v-model="dividido" type="checkbox" class="accent-brand" />
+            Dividir en categorías
+          </label>
+
+          <!-- Filas dinámicas: una por cada parte del gasto -->
+          <template v-if="dividido">
+            <div v-for="(p, i) in partes" :key="i" class="flex gap-2">
+              <!-- Categoría de la parte -->
+              <select
+                v-model="p.categoria"
+                class="flex-1 rounded-lg bg-surface-2 border border-border px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
+              >
+                <option v-for="n in nombresCategoria" :key="n" :value="n">{{ n }}</option>
+              </select>
+              <!-- Importe de la parte (acepta coma decimal) -->
+              <input
+                v-model="p.importe"
+                type="text"
+                inputmode="decimal"
+                placeholder="0,00"
+                class="w-24 rounded-lg bg-surface-2 border border-border px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
+              />
+              <!-- Quitar esta parte (solo si quedan más de 2) -->
+              <button
+                type="button"
+                class="px-2 text-faint hover:text-danger transition-colors disabled:opacity-30"
+                :disabled="partes.length <= 2"
+                title="Quitar parte"
+                @click="quitarParte(i)"
+              >
+                ✕
+              </button>
+            </div>
+
+            <!-- Añadir una parte nueva -->
+            <button
+              type="button"
+              class="text-sm text-brand hover:text-brand-soft transition-colors"
+              @click="anadirParte"
+            >
+              + añadir parte
+            </button>
+
+            <!-- Suma de las partes (es el importe real del movimiento) -->
+            <p class="text-faint text-xs">Total dividido: {{ euro(sumaPartes) }}</p>
+          </template>
         </div>
 
         <!-- Recibo: SOLO para puntuales (no recurrentes). Imagen redimensionada -->

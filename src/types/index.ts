@@ -23,6 +23,7 @@ export interface Recurrente {
   diaPago?: number; // día del mes (1-31) para recordatorios; opcional
   comercio?: string; // dónde se hizo (Mercadona, Amazon…); opcional
   tags?: string[]; // etiquetas transversales (#vacaciones…); opcional
+  cuenta?: string; // id de la cuenta a la que pertenece; opcional
 }
 
 // Apunte puntual de un mes concreto.
@@ -36,6 +37,8 @@ export interface Puntual {
   comercio?: string; // dónde se hizo (Mercadona, Amazon…); opcional
   tags?: string[]; // etiquetas transversales (#vacaciones…); opcional
   recibo?: string; // imagen del recibo en base64 (data URL); opcional
+  cuenta?: string; // id de la cuenta a la que pertenece; opcional
+  subdivisiones?: Subdivision[]; // gasto dividido en varias categorías; opcional
 }
 
 // Tipos de deuda admitidos.
@@ -95,6 +98,21 @@ export interface LineaMes {
   comercio?: string; // opcional
   tags?: string[]; // opcional
   recibo?: string; // imagen base64 (solo puntuales); opcional
+  cuenta?: string; // id de cuenta; opcional
+  subdivisiones?: Subdivision[]; // gasto dividido; opcional
+}
+
+// Una cuenta/monedero (efectivo, banco, tarjeta…) para el patrimonio.
+export interface Cuenta {
+  id: string;
+  nombre: string;
+  saldoInicial: number; // saldo de partida al crear la cuenta
+}
+
+// Una subdivisión de un gasto dividido (parte del importe en otra categoría).
+export interface Subdivision {
+  categoria: string;
+  importe: number;
 }
 
 // Tope de gasto mensual para una categoría (presupuesto).
@@ -128,6 +146,7 @@ export interface DatosBolsillo {
   planes: Plan[];
   presupuestos: Presupuesto[];
   plantillas: Plantilla[];
+  cuentas: Cuenta[];
 }
 
 // Valida (de forma laxa pero suficiente) que un objeto tenga la forma de
@@ -166,5 +185,9 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
     o.plantillas === undefined ||
     (Array.isArray(o.plantillas) &&
       o.plantillas.every((x: any) => x && str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)));
-  return rec && pun && deu && pla && pre && pll;
+  const cue =
+    o.cuentas === undefined ||
+    (Array.isArray(o.cuentas) &&
+      o.cuentas.every((x: any) => x && str(x.id) && str(x.nombre) && num(x.saldoInicial)));
+  return rec && pun && deu && pla && pre && pll && cue;
 }
