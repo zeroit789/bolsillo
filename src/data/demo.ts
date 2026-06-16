@@ -35,5 +35,10 @@ export function datosDemo(): DatosBolsillo {
       { id: nuevoId(), concepto: "Coche", tipo: "coche", total: 12000, cuotaMensual: 280, pagadoInicial: 3500, inicioMes: haceMeses(5) },
       { id: nuevoId(), concepto: "Tarjeta de crédito", tipo: "tarjeta", total: 1500, cuotaMensual: 150, pagadoInicial: 300, inicioMes: haceMeses(3) },
     ],
+    // Planes / metas de ejemplo
+    planes: [
+      { id: nuevoId(), nombre: "Vacaciones de verano", objetivo: 800, aportado: 250 },
+      { id: nuevoId(), nombre: "Pintar el salón", objetivo: 120, aportado: 40 },
+    ],
   };
 }

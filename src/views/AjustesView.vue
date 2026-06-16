@@ -12,6 +12,11 @@ import { useAjustes } from "../stores/ajustes";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
 import { esDatosValidos } from "../types";
+import {
+  categoriasCustom,
+  agregarCategoriaCustom,
+  eliminarCategoriaCustom,
+} from "../data/categorias";
 
 // --- Stores ---
 const ajustes = useAjustes();
@@ -101,6 +106,50 @@ async function desactivarBloqueo() {
   }
 }
 
+// --- Cambiar la credencial (actual + nueva + repetir) ---
+const credActual = ref("");
+const credNueva = ref("");
+const credNuevaRep = ref("");
+const tipoNuevo = ref<"pin" | "password">(ajustes.bloqueoTipo ?? "pin");
+const mensajeCambio = ref("");
+const errorCambio = ref("");
+
+async function cambiarCred() {
+  mensajeCambio.value = "";
+  errorCambio.value = "";
+  const act = credActual.value;
+  const nue = credNueva.value;
+  const rep = credNuevaRep.value;
+
+  if (!act) {
+    errorCambio.value = "Introduce tu credencial actual.";
+    return;
+  }
+  if (tipoNuevo.value === "pin") {
+    if (!REGEX_PIN.test(nue)) {
+      errorCambio.value = "El nuevo PIN debe tener entre 4 y 6 dígitos.";
+      return;
+    }
+  } else if (nue.length < 4) {
+    errorCambio.value = "La nueva contraseña debe tener al menos 4 caracteres.";
+    return;
+  }
+  if (nue !== rep) {
+    errorCambio.value = "La nueva credencial no coincide.";
+    return;
+  }
+
+  const ok = await sesion.cambiarCredencial(act, nue, tipoNuevo.value);
+  if (!ok) {
+    errorCambio.value = "La credencial actual no es correcta.";
+    return;
+  }
+  credActual.value = "";
+  credNueva.value = "";
+  credNuevaRep.value = "";
+  mensajeCambio.value = "Credencial actualizada.";
+}
+
 /* ===========================================================================
    SECCIÓN 3 — COPIA DE SEGURIDAD
    =========================================================================== */
@@ -181,6 +230,52 @@ function importarCopia(evento: Event) {
     input.value = "";
   };
   lector.readAsText(fichero);
+}
+
+/* ===========================================================================
+   SECCIÓN 4 — CATEGORÍAS PERSONALIZADAS
+   El usuario puede crear/eliminar sus propias categorías. Se guardan en
+   localStorage (no reactivo), así que mantenemos una copia local en un ref
+   que refrescamos manualmente tras cada cambio.
+   =========================================================================== */
+// Copia local reactiva de las categorías personalizadas (estado inicial leído de localStorage).
+const categoriasPropias = ref<string[]>(categoriasCustom());
+// Texto del input para crear una categoría nueva.
+const nuevaCategoria = ref("");
+// Mensajes de feedback de la sección.
+const errorCategoria = ref("");
+
+// Refresca la copia local desde localStorage tras añadir/eliminar.
+function refrescarCategorias(): void {
+  categoriasPropias.value = categoriasCustom();
+}
+
+// Añade la categoría escrita en el input.
+function anadirCategoria(): void {
+  errorCategoria.value = "";
+  const limpio = nuevaCategoria.value.trim();
+  // Validación mínima: no vacío.
+  if (!limpio) {
+    errorCategoria.value = "Escribe un nombre para la categoría.";
+    return;
+  }
+  // Avisa si ya existe (base o personalizada) antes de intentar guardar.
+  if (categoriasPropias.value.includes(limpio)) {
+    errorCategoria.value = "Esa categoría ya existe.";
+    return;
+  }
+  // Delega la normalización y guardado en la función del módulo de datos.
+  agregarCategoriaCustom(limpio);
+  refrescarCategorias();
+  // Limpia el input para la siguiente.
+  nuevaCategoria.value = "";
+}
+
+// Elimina una categoría personalizada por nombre.
+function quitarCategoria(nombre: string): void {
+  errorCategoria.value = "";
+  eliminarCategoriaCustom(nombre);
+  refrescarCategorias();
 }
 </script>
 
@@ -303,6 +398,51 @@ function importarCopia(evento: Event) {
         >
           Quitar bloqueo
         </button>
+
+        <!-- Cambiar la credencial: actual + nueva + repetir -->
+        <div class="mt-2 border-t border-border pt-4 space-y-3">
+          <p class="text-sm font-medium text-ink">Cambiar credencial</p>
+          <div>
+            <label class="text-muted text-sm">Tipo nuevo</label>
+            <select
+              v-model="tipoNuevo"
+              class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+            >
+              <option value="pin">PIN (4 a 6 dígitos)</option>
+              <option value="password">Contraseña</option>
+            </select>
+          </div>
+          <input
+            v-model="credActual"
+            type="password"
+            placeholder="Credencial actual"
+            class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <input
+            v-model="credNueva"
+            :type="tipoNuevo === 'pin' ? 'tel' : 'password'"
+            :inputmode="tipoNuevo === 'pin' ? 'numeric' : 'text'"
+            :maxlength="tipoNuevo === 'pin' ? 6 : undefined"
+            :placeholder="tipoNuevo === 'pin' ? 'Nuevo PIN (4-6 dígitos)' : 'Nueva contraseña'"
+            class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <input
+            v-model="credNuevaRep"
+            :type="tipoNuevo === 'pin' ? 'tel' : 'password'"
+            :inputmode="tipoNuevo === 'pin' ? 'numeric' : 'text'"
+            :maxlength="tipoNuevo === 'pin' ? 6 : undefined"
+            placeholder="Repetir nueva credencial"
+            class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <button
+            class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
+            @click="cambiarCred"
+          >
+            Cambiar
+          </button>
+          <p v-if="errorCambio" class="text-danger text-sm">{{ errorCambio }}</p>
+          <p v-else-if="mensajeCambio" class="text-ok text-sm">{{ mensajeCambio }}</p>
+        </div>
       </div>
 
       <!-- Mensajes de feedback de la sección de seguridad -->
@@ -356,6 +496,57 @@ function importarCopia(evento: Event) {
       <!-- Mensajes de feedback de la sección de copia -->
       <p v-if="errorCopia" class="text-danger text-sm mt-3">{{ errorCopia }}</p>
       <p v-else-if="mensajeCopia" class="text-ok text-sm mt-3">{{ mensajeCopia }}</p>
+    </section>
+
+    <!-- =====================================================================
+         SECCIÓN 4 — CATEGORÍAS PERSONALIZADAS
+         ===================================================================== -->
+    <section class="rounded-2xl bg-surface border border-border p-5">
+      <h2 class="font-display font-bold text-lg text-ink">Categorías</h2>
+      <p class="text-muted text-sm mt-1">
+        Crea tus propias categorías. Aparecerán en el desplegable al añadir un movimiento, dentro
+        del grupo "Personalizadas".
+      </p>
+
+      <!-- Input + botón para crear una categoría nueva -->
+      <div class="flex gap-3 mt-4">
+        <input
+          v-model="nuevaCategoria"
+          type="text"
+          placeholder="Ej. Suscripción gimnasio"
+          class="flex-1 rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          @keyup.enter="anadirCategoria"
+        />
+        <button
+          class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
+          @click="anadirCategoria"
+        >
+          Añadir
+        </button>
+      </div>
+
+      <!-- Mensaje de error de la sección -->
+      <p v-if="errorCategoria" class="text-danger text-sm mt-3">{{ errorCategoria }}</p>
+
+      <!-- Lista de categorías personalizadas con botón de eliminar -->
+      <ul v-if="categoriasPropias.length" class="mt-4 space-y-2">
+        <li
+          v-for="cat in categoriasPropias"
+          :key="cat"
+          class="flex items-center justify-between rounded-lg bg-surface-2 border border-border px-3 py-2"
+        >
+          <span class="text-ink">{{ cat }}</span>
+          <button
+            class="rounded-lg border border-danger px-3 py-1 text-danger text-sm font-medium hover:bg-surface transition-colors"
+            @click="quitarCategoria(cat)"
+          >
+            Eliminar
+          </button>
+        </li>
+      </ul>
+
+      <!-- Aviso cuando todavía no hay categorías propias -->
+      <p v-else class="text-faint text-xs mt-3">Aún no has creado ninguna categoría propia.</p>
     </section>
   </div>
 </template>

@@ -28,6 +28,10 @@ const CLASES = [
   { valor: "ingreso-fijo", etiqueta: "Ingreso fijo (cada mes)", recurrente: true, signo: "ingreso" as Signo },
 ];
 
+// Grupos de categorías para el <select> con <optgroup>.
+// El modal se monta con v-if cada vez que se abre, así que este setup se
+// re-ejecuta en cada apertura y categoriasPorGrupo() lee las personalizadas
+// (localStorage) frescas, incluyendo el grupo "Personalizadas" si existe.
 const grupos = categoriasPorGrupo();
 const f = useFinanzas();
 // Fecha por defecto: día de hoy ACOTADO al último día del mes que se está viendo

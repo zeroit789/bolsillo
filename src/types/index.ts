@@ -87,11 +87,20 @@ export interface LineaMes {
   fecha?: string; // solo puntuales
 }
 
+// Un plan / meta de ahorro o de compra doméstica (ej. "Pintar el salón – 110 €").
+export interface Plan {
+  id: string;
+  nombre: string;
+  objetivo: number; // importe que quieres reunir
+  aportado: number; // lo que llevas reunido
+}
+
 // Estructura completa que se persiste (y se cifra) en disco.
 export interface DatosBolsillo {
   recurrentes: Recurrente[];
   puntuales: Puntual[];
   deudas: Deuda[];
+  planes: Plan[];
 }
 
 // Valida (de forma laxa pero suficiente) que un objeto tenga la forma de
@@ -114,5 +123,10 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const deu = o.deudas.every(
     (x: any) => x && str(x.id) && num(x.total) && num(x.cuotaMensual) && num(x.pagadoInicial) && str(x.inicioMes) && x.inicioMes.length >= 7
   );
-  return rec && pun && deu;
+  // planes es opcional (las copias antiguas no lo traen).
+  const pla =
+    o.planes === undefined ||
+    (Array.isArray(o.planes) &&
+      o.planes.every((x: any) => x && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)));
+  return rec && pun && deu && pla;
 }

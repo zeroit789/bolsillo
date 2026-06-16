@@ -8,13 +8,15 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useSesion } from "./stores/sesion";
 import { useAjustes } from "./stores/ajustes";
 import { useFinanzas } from "./stores/finanzas";
-import { mesActual, mesLegible } from "./utils/format";
+import { mesActual, mesLegible, euro } from "./utils/format";
 import { estadoDeuda } from "./utils/deuda";
 import { notificar } from "./utils/notificar";
 import PantallaBloqueo from "./components/PantallaBloqueo.vue";
+import Onboarding from "./components/Onboarding.vue";
 import DashboardView from "./views/DashboardView.vue";
 import MovimientosView from "./views/MovimientosView.vue";
 import DeudasView from "./views/DeudasView.vue";
+import PlanesView from "./views/PlanesView.vue";
 import HistorialView from "./views/HistorialView.vue";
 import AjustesView from "./views/AjustesView.vue";
 
@@ -27,6 +29,7 @@ const NAV = [
   { id: "resumen", etiqueta: "Resumen", icono: "📊", comp: DashboardView },
   { id: "movimientos", etiqueta: "Movimientos", icono: "🧾", comp: MovimientosView },
   { id: "deudas", etiqueta: "Deudas", icono: "💳", comp: DeudasView },
+  { id: "planes", etiqueta: "Planes", icono: "🎯", comp: PlanesView },
   { id: "historial", etiqueta: "Historial", icono: "📅", comp: HistorialView },
   { id: "ajustes", etiqueta: "Ajustes", icono: "⚙️", comp: AjustesView },
 ] as const;
@@ -73,14 +76,40 @@ function revisarDeudasSaldadas() {
   }
   if (cambia || primeraVez) localStorage.setItem(NOTIF_KEY, JSON.stringify([...set]));
 }
-// Revisar al desbloquear (datos ya cargados) y cuando cambian las deudas.
-watch(() => sesion.desbloqueado, (v) => { if (v) revisarDeudasSaldadas(); }, { immediate: true });
+// Recordatorio mensual: una vez al mes avisa del total de gastos fijos + cuotas.
+function recordatorioMensual() {
+  const mes = mesActual();
+  if (localStorage.getItem("bolsillo.recordatorio-mes") === mes) return;
+  const r = f.resumenDe(mes);
+  if (r.gastosFijos > 0) {
+    void notificar(
+      "Recordatorio del mes",
+      `Este mes tienes ${euro(r.gastosFijos)} en gastos fijos y cuotas.`
+    );
+  }
+  localStorage.setItem("bolsillo.recordatorio-mes", mes);
+}
+
+// Al desbloquear (datos ya cargados): revisar deudas saldadas + recordatorio.
+watch(
+  () => sesion.desbloqueado,
+  (v) => {
+    if (v) {
+      revisarDeudasSaldadas();
+      recordatorioMensual();
+    }
+  },
+  { immediate: true }
+);
 watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
 </script>
 
 <template>
+  <!-- Bienvenida (primer arranque) -->
+  <Onboarding v-if="sesion.necesitaOnboarding" />
+
   <!-- Pantalla de bloqueo -->
-  <PantallaBloqueo v-if="bloqueado" />
+  <PantallaBloqueo v-else-if="bloqueado" />
 
   <!-- App desbloqueada -->
   <div v-else-if="sesion.desbloqueado" class="min-h-screen flex">
@@ -108,7 +137,10 @@ watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
     <!-- Contenido -->
     <div class="flex-1 min-w-0 flex flex-col">
       <!-- Barra superior con el selector de mes -->
-      <header class="flex items-center justify-end gap-3 px-8 py-4 border-b border-border">
+      <header class="flex items-center justify-between gap-3 px-8 py-4 border-b border-border">
+        <p class="text-muted text-sm truncate">
+          <span v-if="ajustes.nombre">Hola, <span class="text-ink font-medium">{{ ajustes.nombre }}</span></span>
+        </p>
         <select
           v-if="mostrarMes"
           :value="f.mesSeleccionado"

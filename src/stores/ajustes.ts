@@ -1,6 +1,6 @@
 /* ===========================================================================
-   Store de ajustes: tema (claro/oscuro) y configuración del bloqueo.
-   Se guarda en claro (no es información sensible) y aplica el tema al <html>.
+   Store de ajustes: tema, configuración del bloqueo, nombre del usuario y si ya
+   pasó por la bienvenida (onboarding). Se guarda en claro (no es sensible).
    =========================================================================== */
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
@@ -14,16 +14,27 @@ interface AjustesGuardados {
   tema: Tema;
   bloqueoActivo: boolean;
   bloqueoTipo: TipoBloqueo | null;
+  nombre: string;
+  configurado: boolean; // true tras completar la bienvenida
 }
+
+const POR_DEFECTO: AjustesGuardados = {
+  tema: "oscuro",
+  bloqueoActivo: false,
+  bloqueoTipo: null,
+  nombre: "",
+  configurado: false,
+};
 
 function cargar(): AjustesGuardados {
   try {
     const c = localStorage.getItem(CLAVE);
-    if (c) return JSON.parse(c) as AjustesGuardados;
+    // El spread con POR_DEFECTO rellena campos nuevos en ajustes antiguos.
+    if (c) return { ...POR_DEFECTO, ...JSON.parse(c) };
   } catch {
-    /* valores por defecto si está corrupto */
+    /* corrupto -> valores por defecto */
   }
-  return { tema: "oscuro", bloqueoActivo: false, bloqueoTipo: null };
+  return { ...POR_DEFECTO };
 }
 
 export const useAjustes = defineStore("ajustes", () => {
@@ -31,8 +42,10 @@ export const useAjustes = defineStore("ajustes", () => {
   const tema = ref<Tema>(inicial.tema);
   const bloqueoActivo = ref<boolean>(inicial.bloqueoActivo);
   const bloqueoTipo = ref<TipoBloqueo | null>(inicial.bloqueoTipo);
+  const nombre = ref<string>(inicial.nombre);
+  const configurado = ref<boolean>(inicial.configurado);
 
-  // Aplica el tema al documento (clase 'tema-claro' que el CSS usa para invertir).
+  // Aplica el tema al documento (clase que el CSS usa para invertir).
   function aplicarTema() {
     document.documentElement.classList.toggle("tema-claro", tema.value === "claro");
   }
@@ -47,10 +60,16 @@ export const useAjustes = defineStore("ajustes", () => {
     bloqueoActivo.value = activo;
     bloqueoTipo.value = tipo;
   }
+  function setNombre(n: string) {
+    nombre.value = n;
+  }
+  function marcarConfigurado() {
+    configurado.value = true;
+  }
 
   // Persiste y aplica el tema ante cualquier cambio (también al iniciar).
   watch(
-    [tema, bloqueoActivo, bloqueoTipo],
+    [tema, bloqueoActivo, bloqueoTipo, nombre, configurado],
     () => {
       localStorage.setItem(
         CLAVE,
@@ -58,6 +77,8 @@ export const useAjustes = defineStore("ajustes", () => {
           tema: tema.value,
           bloqueoActivo: bloqueoActivo.value,
           bloqueoTipo: bloqueoTipo.value,
+          nombre: nombre.value,
+          configurado: configurado.value,
         })
       );
       aplicarTema();
@@ -65,5 +86,17 @@ export const useAjustes = defineStore("ajustes", () => {
     { immediate: true }
   );
 
-  return { tema, bloqueoActivo, bloqueoTipo, aplicarTema, setTema, toggleTema, setBloqueo };
+  return {
+    tema,
+    bloqueoActivo,
+    bloqueoTipo,
+    nombre,
+    configurado,
+    aplicarTema,
+    setTema,
+    toggleTema,
+    setBloqueo,
+    setNombre,
+    marcarConfigurado,
+  };
 });

@@ -10,6 +10,7 @@ import type {
   Deuda,
   EstadoDeuda,
   LineaMes,
+  Plan,
   Puntual,
   Recurrente,
 } from "../types";
@@ -35,6 +36,7 @@ export const useFinanzas = defineStore("finanzas", () => {
   const recurrentes = ref<Recurrente[]>([]);
   const puntuales = ref<Puntual[]>([]);
   const deudas = ref<Deuda[]>([]);
+  const planes = ref<Plan[]>([]);
   const mesSeleccionado = ref<string>(mesActual());
 
   // Carga los datos en el store (desde almacén o demo). Lo llama el arranque.
@@ -42,6 +44,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     recurrentes.value = datos.recurrentes ?? [];
     puntuales.value = datos.puntuales ?? [];
     deudas.value = datos.deudas ?? [];
+    planes.value = datos.planes ?? [];
   }
 
   // Snapshot serializable de todos los datos (para guardar / exportar).
@@ -50,6 +53,7 @@ export const useFinanzas = defineStore("finanzas", () => {
       recurrentes: recurrentes.value,
       puntuales: puntuales.value,
       deudas: deudas.value,
+      planes: planes.value,
     };
   }
 
@@ -227,6 +231,22 @@ export const useFinanzas = defineStore("finanzas", () => {
   function eliminarDeuda(id: string) {
     deudas.value = deudas.value.filter((d) => d.id !== id);
   }
+  // --- Planes / metas ---
+  function addPlan(p: Omit<Plan, "id">) {
+    planes.value.push({ ...p, id: nuevoId() });
+  }
+  function actualizarPlan(id: string, cambios: Partial<Plan>) {
+    const i = planes.value.findIndex((p) => p.id === id);
+    if (i !== -1) planes.value[i] = { ...planes.value[i], ...cambios };
+  }
+  function eliminarPlan(id: string) {
+    planes.value = planes.value.filter((p) => p.id !== id);
+  }
+  // Suma una cantidad a lo aportado de un plan (sin pasar de... se permite superar).
+  function aportarAPlan(id: string, cantidad: number) {
+    const i = planes.value.findIndex((p) => p.id === id);
+    if (i !== -1) planes.value[i] = { ...planes.value[i], aportado: planes.value[i].aportado + cantidad };
+  }
   // Da de baja un recurrente a partir de un mes (en vez de borrarlo del histórico).
   function darDeBajaRecurrente(id: string, mes: string) {
     const r = recurrentes.value.find((x) => x.id === id);
@@ -248,6 +268,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     recurrentes,
     puntuales,
     deudas,
+    planes,
     mesSeleccionado,
     // hidratación / persistencia
     hidratar,
@@ -274,6 +295,10 @@ export const useFinanzas = defineStore("finanzas", () => {
     eliminarRecurrente,
     eliminarPuntual,
     eliminarDeuda,
+    addPlan,
+    actualizarPlan,
+    eliminarPlan,
+    aportarAPlan,
     darDeBajaRecurrente,
     eliminarLinea,
     seleccionarMes,

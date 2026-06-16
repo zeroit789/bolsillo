@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* Vista Movimientos: lista del mes (fijos + variables + cuotas de deuda) y alta. */
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
 import type { LineaMes, Signo } from "../types";
@@ -8,6 +8,24 @@ import ModalMovimiento from "../components/ModalMovimiento.vue";
 
 const f = useFinanzas();
 const modal = ref(false);
+
+// --- Buscador / filtro ---
+const busqueda = ref("");
+const filtroTipo = ref<"todos" | "ingreso" | "fijo" | "variable">("todos");
+
+const lineasFiltradas = computed<LineaMes[]>(() => {
+  const q = busqueda.value.trim().toLowerCase();
+  return f.lineasDelMes.filter((l) => {
+    const coincideTexto =
+      !q || l.concepto.toLowerCase().includes(q) || l.categoria.toLowerCase().includes(q);
+    const coincideTipo =
+      filtroTipo.value === "todos" ||
+      (filtroTipo.value === "ingreso" && l.signo === "ingreso") ||
+      (filtroTipo.value === "fijo" && l.signo === "gasto" && l.fijo) ||
+      (filtroTipo.value === "variable" && l.signo === "gasto" && !l.fijo);
+    return coincideTexto && coincideTipo;
+  });
+});
 
 // Color del punto según el signo (ingreso verde, gasto rojo).
 function colorPunto(signo: Signo): string {
@@ -63,17 +81,32 @@ function eliminar(linea: LineaMes) {
     </div>
 
     <div class="rounded-2xl bg-surface border border-border">
-      <div class="flex items-center justify-between px-5 py-4 border-b border-border">
-        <span class="text-muted text-sm">{{ f.lineasDelMes.length }} apuntes este mes</span>
+      <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-border">
+        <input
+          v-model="busqueda"
+          type="text"
+          placeholder="Buscar por concepto o categoría…"
+          class="flex-1 min-w-40 rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+        />
+        <select
+          v-model="filtroTipo"
+          class="rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+        >
+          <option value="todos">Todos</option>
+          <option value="ingreso">Ingresos</option>
+          <option value="fijo">Gastos fijos</option>
+          <option value="variable">Gastos variables</option>
+        </select>
+        <span class="text-faint text-sm shrink-0">{{ lineasFiltradas.length }} apuntes</span>
       </div>
 
-      <div v-if="!f.lineasDelMes.length" class="px-5 py-12 text-center text-muted">
-        No hay movimientos. Pulsa <span class="text-brand">+ Añadir</span>.
+      <div v-if="!lineasFiltradas.length" class="px-5 py-12 text-center text-muted">
+        {{ f.lineasDelMes.length ? "Sin resultados para ese filtro." : "No hay movimientos. Pulsa + Añadir." }}
       </div>
 
       <ul v-else class="divide-y divide-border">
         <li
-          v-for="l in f.lineasDelMes"
+          v-for="l in lineasFiltradas"
           :key="l.origen + l.id"
           class="group flex items-center gap-3 px-5 py-3 hover:bg-surface-2 transition-colors"
         >

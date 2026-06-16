@@ -71,17 +71,19 @@ body {
    color. Como las utilidades de Tailwind v4 usan var(--color-*), toda la UI
    cambia de golpe a la versión clara. Pensado para quien prefiere fondo blanco. */
 html.tema-claro {
-  --color-base: #f5f6f8;
-  --color-surface: #ffffff;
-  --color-surface-2: #eceef2;
-  --color-border: #dde0e6;
+  /* Tonos un poco más marcados que un blanco lavado, para que las tarjetas y los
+     bordes se distingan mejor y el texto tenga más contraste. */
+  --color-base: #e6e8ef; /* fondo gris claro (no casi blanco) */
+  --color-surface: #f7f8fb; /* tarjetas */
+  --color-surface-2: #dce0e9; /* inputs / elevado */
+  --color-border: #c2c8d4; /* bordes más visibles */
   --color-brand: #6a4ff0;
   --color-brand-soft: #5a3fe0;
-  --color-cyan: #2399a3;
-  --color-ok: #2fa85a;
-  --color-warn: #c79213;
-  --color-danger: #e0484a;
-  --color-ink: #1a1c22;
-  --color-muted: #5b606b;
-  --color-faint: #9aa0ac;
+  --color-cyan: #1f8c96;
+  --color-ok: #2a9c53;
+  --color-warn: #b9870f;
+  --color-danger: #d83f41;
+  --color-ink: #13151b; /* texto principal más oscuro */
+  --color-muted: #474c57; /* secundario más oscuro */
+  --color-faint: #767c88;
 }

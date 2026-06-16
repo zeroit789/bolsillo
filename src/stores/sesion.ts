@@ -1,7 +1,9 @@
 /* ===========================================================================
-   Store de sesión: orquesta el arranque, el bloqueo y el guardado cifrado.
-   - Si hay credencial activa, la app arranca BLOQUEADA hasta que se introduce.
-   - El guardado automático cifra los datos en cada cambio.
+   Store de sesión: orquesta arranque, bienvenida (onboarding), bloqueo y el
+   guardado cifrado. Estados de pantalla posibles:
+     - necesitaOnboarding: primer arranque (mostrar bienvenida)
+     - bloqueado (bloqueoActivo && !desbloqueado): pedir credencial
+     - desbloqueado: app en marcha
    =========================================================================== */
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
@@ -12,6 +14,7 @@ import { datosDemo } from "../data/demo";
 
 export const useSesion = defineStore("sesion", () => {
   const desbloqueado = ref(false);
+  const necesitaOnboarding = ref(false);
   const error = ref("");
   let guardadoActivo = false;
 
@@ -20,8 +23,6 @@ export const useSesion = defineStore("sesion", () => {
     if (guardadoActivo) return;
     guardadoActivo = true;
     const f = useFinanzas();
-    // OJO: observamos el snapshot (arrays .value desenvueltos), NO los refs del
-    // store; así el deep watch sí detecta los push/splice y guarda de verdad.
     watch(
       () => f.snapshot(),
       () => {
@@ -44,31 +45,42 @@ export const useSesion = defineStore("sesion", () => {
     activarGuardado();
   }
 
-  // Arranque de la app: ¿pedir credencial o entrar directo?
-  async function arrancar() {
-    const ajustes = useAjustes();
-    ajustes.aplicarTema();
-    if (ajustes.bloqueoActivo) {
-      // Con bloqueo activo SIEMPRE esperamos la credencial; nunca sembramos
-      // demo con ofuscación (eso dejaría los datos reales inaccesibles).
-      desbloqueado.value = false;
-    } else {
-      almacen.usarOfuscacion();
-      try {
-        await cargarEHidratar();
-      } catch {
-        // Blob ilegible/corrupto: arrancamos con demo para no quedarnos colgados
-        // en "Cargando…" para siempre.
-        const f = useFinanzas();
-        f.hidratar(datosDemo());
-        activarGuardado();
-        await almacen.guardar(f.snapshot());
-      }
-      desbloqueado.value = true;
+  // Igual que cargarEHidratar pero tolerante: si el blob está corrupto, demo.
+  async function cargarSeguro() {
+    try {
+      await cargarEHidratar();
+    } catch {
+      const f = useFinanzas();
+      f.hidratar(datosDemo());
+      activarGuardado();
+      await almacen.guardar(f.snapshot());
     }
   }
 
-  // Intenta desbloquear con la credencial introducida en la pantalla de bloqueo.
+  // Arranque: decide la pantalla inicial.
+  async function arrancar() {
+    const ajustes = useAjustes();
+    ajustes.aplicarTema();
+
+    // Primer arranque -> bienvenida (con datos demo de fondo).
+    if (!ajustes.configurado) {
+      almacen.usarOfuscacion();
+      await cargarSeguro();
+      necesitaOnboarding.value = true;
+      return;
+    }
+    // Con bloqueo -> esperar credencial.
+    if (ajustes.bloqueoActivo) {
+      desbloqueado.value = false;
+      return;
+    }
+    // Sin bloqueo -> entrar directo.
+    almacen.usarOfuscacion();
+    await cargarSeguro();
+    desbloqueado.value = true;
+  }
+
+  // Desbloqueo con la credencial introducida en la pantalla de bloqueo.
   async function desbloquear(credencial: string): Promise<boolean> {
     error.value = "";
     try {
@@ -87,7 +99,7 @@ export const useSesion = defineStore("sesion", () => {
     }
   }
 
-  // Activa el bloqueo: re-cifra los datos con la nueva credencial.
+  // Activa el bloqueo: re-cifra con la nueva credencial.
   async function configurarBloqueo(tipo: TipoBloqueo, credencial: string) {
     const f = useFinanzas();
     almacen.usarSecreto(credencial);
@@ -103,5 +115,45 @@ export const useSesion = defineStore("sesion", () => {
     useAjustes().setBloqueo(false, null);
   }
 
-  return { desbloqueado, error, arrancar, desbloquear, configurarBloqueo, quitarBloqueo };
+  // Cambia la credencial: verifica la actual y re-cifra con la nueva.
+  async function cambiarCredencial(
+    antigua: string,
+    nueva: string,
+    tipo: TipoBloqueo
+  ): Promise<boolean> {
+    const ok = await almacen.secretoValido(antigua);
+    if (!ok) return false;
+    const f = useFinanzas();
+    almacen.usarSecreto(nueva);
+    await almacen.guardar(f.snapshot());
+    useAjustes().setBloqueo(true, tipo);
+    return true;
+  }
+
+  // Completa la bienvenida: guarda nombre, activa bloqueo si se eligió, y entra.
+  async function completarOnboarding(opts: {
+    nombre: string;
+    bloqueo: { tipo: TipoBloqueo; credencial: string } | null;
+  }) {
+    const ajustes = useAjustes();
+    ajustes.setNombre(opts.nombre.trim());
+    if (opts.bloqueo) {
+      await configurarBloqueo(opts.bloqueo.tipo, opts.bloqueo.credencial);
+    }
+    ajustes.marcarConfigurado();
+    necesitaOnboarding.value = false;
+    desbloqueado.value = true;
+  }
+
+  return {
+    desbloqueado,
+    necesitaOnboarding,
+    error,
+    arrancar,
+    desbloquear,
+    configurarBloqueo,
+    quitarBloqueo,
+    cambiarCredencial,
+    completarOnboarding,
+  };
 });
