@@ -1,5 +1,26 @@
 <script setup lang="ts">
-/* Vista Movimientos: lista del mes (fijos + variables + cuotas de deuda) y alta. */
+/* =============================================================================
+ * MovimientosView.vue — Monthly transactions / Movimientos del mes
+ * -----------------------------------------------------------------------------
+ * EN: Lists the selected month's entries (fixed + variable + debt instalments),
+ *     lets the user add/edit/delete them, manages quick-entry templates (one-tap
+ *     shortcuts) and shows receipts in a lightbox. All UI text is bilingual via
+ *     crearT(); only fixed strings are translated, never user data.
+ * ES: Lista los apuntes del mes seleccionado (fijos + variables + cuotas de deuda),
+ *     permite añadir/editar/eliminar, gestiona plantillas de entrada rápida (atajos
+ *     de un clic) y muestra recibos en un lightbox. Todo el texto de UI es bilingüe
+ *     vía crearT(); solo se traducen textos fijos, nunca datos del usuario.
+ * -----------------------------------------------------------------------------
+ * INDEX / ÍNDICE:
+ *   1. Imports & translations / Imports y traducciones
+ *   2. State (store, modal, editing, filters) / Estado (store, modal, edición, filtros)
+ *   3. Filtered list / Lista filtrada
+ *   4. Add / edit modal logic / Lógica del modal de alta y edición
+ *   5. Delete & cancel actions / Acciones de eliminar y dar de baja
+ *   6. Quick entry — templates / Entrada rápida — plantillas
+ * ===========================================================================*/
+
+// ── 1. Imports & translations / Imports y traducciones ────────────────────────
 import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
@@ -64,11 +85,16 @@ const t = crearT({
   },
 });
 
+// ── 2. State (store, modal, editing, filters) / Estado (store, modal, edición, filtros) ──
+// EN: Finance store (single source of truth) and modal open/closed flag.
+// ES: Store de finanzas (única fuente de verdad) y flag de modal abierto/cerrado.
 const f = useFinanzas();
 const modal = ref(false);
-// Línea que se está editando (null = el modal está en modo alta).
+// EN: Line currently being edited (null = modal is in "add new" mode).
+// ES: Línea que se está editando (null = el modal está en modo alta).
 const editando = ref<LineaMes | null>(null);
-// Datos iniciales que se pasan al modal cuando editamos (null = alta limpia).
+// EN: Initial data passed to the modal when editing (null = clean add).
+// ES: Datos iniciales que se pasan al modal cuando editamos (null = alta limpia).
 const inicial = ref<{
   recurrente: boolean;
   signo: Signo;
@@ -84,13 +110,20 @@ const inicial = ref<{
   subdivisiones?: Subdivision[]; // gasto dividido (solo puntuales); opcional
 } | null>(null);
 
-// Recibo que se muestra en el lightbox (null = lightbox cerrado).
+// EN: Receipt shown in the lightbox (null = lightbox closed).
+// ES: Recibo que se muestra en el lightbox (null = lightbox cerrado).
 const reciboVisible = ref<string | null>(null);
 
-// --- Buscador / filtro ---
+// EN: Search box text and type filter (all/income/fixed/variable).
+// ES: Texto del buscador y filtro de tipo (todos/ingreso/fijo/variable).
 const busqueda = ref("");
 const filtroTipo = ref<"todos" | "ingreso" | "fijo" | "variable">("todos");
 
+// ── 3. Filtered list / Lista filtrada ─────────────────────────────────────────
+// EN: Month lines filtered by the search text (concept, category, merchant, tags)
+//     and the selected type. Recomputes reactively as inputs change.
+// ES: Líneas del mes filtradas por el texto de búsqueda (concepto, categoría,
+//     comercio, etiquetas) y el tipo elegido. Se recalcula sola al cambiar inputs.
 const lineasFiltradas = computed<LineaMes[]>(() => {
   const q = busqueda.value.trim().toLowerCase();
   return f.lineasDelMes.filter((l) => {
@@ -110,13 +143,17 @@ const lineasFiltradas = computed<LineaMes[]>(() => {
   });
 });
 
-// Color del punto según el signo (ingreso verde, gasto rojo).
+// ── 4. Add / edit modal logic / Lógica del modal de alta y edición ────────────
+// EN: Dot color by sign (income = green, expense = red).
+// ES: Color del punto según el signo (ingreso verde, gasto rojo).
 function colorPunto(signo: Signo): string {
   return signo === "ingreso" ? "bg-ok" : "bg-danger";
 }
 
-// Abre el modal en modo edición: busca el objeto completo en el store, monta
-// los datos iniciales y abre el modal precargado.
+// EN: Opens the modal in edit mode: finds the full object in the store, builds
+//     the initial data and opens the modal preloaded.
+// ES: Abre el modal en modo edición: busca el objeto completo en el store, monta
+//     los datos iniciales y abre el modal precargado.
 function editar(linea: LineaMes) {
   if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
 
@@ -162,7 +199,8 @@ function editar(linea: LineaMes) {
   modal.value = true;
 }
 
-// Guardar desde el modal. Si hay `editando` -> actualiza; si no -> alta nueva.
+// EN: Save handler from the modal. If `editando` is set -> update; else -> add.
+// ES: Guardar desde el modal. Si hay `editando` -> actualiza; si no -> alta nueva.
 function onGuardar(mov: {
   recurrente: boolean;
   signo: Signo;
@@ -234,19 +272,24 @@ function onGuardar(mov: {
       });
     }
   }
-  // Cerramos y reseteamos el estado de edición.
+  // EN: Close the modal and reset the editing state.
+  // ES: Cerramos y reseteamos el estado de edición.
   editando.value = null;
   inicial.value = null;
   modal.value = false;
 }
 
+// ── 5. Delete & cancel actions / Acciones de eliminar y dar de baja ───────────
+// EN: Deletes a line after confirmation (debt instalments are managed in Debts).
+// ES: Elimina una línea previa confirmación (las cuotas se gestionan en Deudas).
 function eliminar(linea: LineaMes) {
   if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
   // Texto fijo traducido + el concepto (dato del usuario, sin traducir).
   if (confirm(`${t("confirmEliminar")} "${linea.concepto}"?`)) f.eliminarLinea(linea);
 }
 
-// Da de baja un fijo (recurrente) a partir del mes seleccionado.
+// EN: Cancels a fixed (recurring) item from the selected month onward.
+// ES: Da de baja un fijo (recurrente) a partir del mes seleccionado.
 function darDeBaja(linea: LineaMes) {
   if (linea.origen !== "recurrente") return;
   if (confirm(t("confirmDarDeBaja"))) {
@@ -254,46 +297,60 @@ function darDeBaja(linea: LineaMes) {
   }
 }
 
-// Abre el modal en modo alta limpio (sin datos precargados).
+// EN: Opens the modal in clean "add new" mode (no preloaded data).
+// ES: Abre el modal en modo alta limpio (sin datos precargados).
 function abrirAlta() {
   editando.value = null;
   inicial.value = null;
   modal.value = true;
 }
 
-// Cierra el modal y resetea el estado de edición.
+// EN: Closes the modal and resets the editing state.
+// ES: Cierra el modal y resetea el estado de edición.
 function cerrarModal() {
   editando.value = null;
   inicial.value = null;
   modal.value = false;
 }
 
-/* ===========================================================================
-   ENTRADA RÁPIDA — plantillas (atajos para gastos/ingresos habituales).
-   =========================================================================== */
+// ── 6. Quick entry — templates / Entrada rápida — plantillas ──────────────────
+// EN: Templates are one-tap shortcuts for usual expenses/income. This section
+//     covers using a template, deleting it and the inline mini-form to create one.
+// ES: Las plantillas son atajos de un clic para gastos/ingresos habituales. Esta
+//     sección cubre usar una plantilla, eliminarla y el mini-formulario para crear.
 
-// Grupos de categorías para el <select> con <optgroup> del mini-formulario.
+// EN: Category groups for the <select> with <optgroup> in the mini-form.
+// ES: Grupos de categorías para el <select> con <optgroup> del mini-formulario.
 const grupos = categoriasPorGrupo();
 
-// Usa una plantilla: registra al instante un movimiento de HOY (un clic).
+// EN: Uses a template: instantly logs a movement dated TODAY (one click).
+// ES: Usa una plantilla: registra al instante un movimiento de HOY (un clic).
 function usarPlantilla(p: Plantilla): void {
   f.usarPlantilla(p.id);
+  // EN: The new entry is logged in the CURRENT month; jump there so it is
+  //     visible even if another month was being viewed.
+  // ES: El apunte recién creado se registra en el mes ACTUAL; saltamos a él
+  //     para que sea visible aunque se estuviera viendo otro mes.
+  f.seleccionarMes(mesActual());
 }
 
-// Elimina una plantilla previa confirmación.
+// EN: Deletes a template after confirmation.
+// ES: Elimina una plantilla previa confirmación.
 function quitarPlantilla(p: Plantilla): void {
   // Texto fijo traducido + el concepto (dato del usuario, sin traducir).
   if (confirm(`${t("confirmEliminarAtajo")} "${p.concepto}"?`)) f.eliminarPlantilla(p.id);
 }
 
-// Estado del mini-formulario inline para crear una plantilla nueva.
+// EN: Inline mini-form state to create a new template.
+// ES: Estado del mini-formulario inline para crear una plantilla nueva.
 const formAbierto = ref(false);
 const formConcepto = ref("");
-const formImporte = ref(""); // texto: acepta coma decimal, se redondea al guardar
-const formSigno = ref<Signo>("gasto"); // por defecto gasto
-const formCategoria = ref(""); // nombre de categoría seleccionada
+const formImporte = ref(""); // EN: text, accepts decimal comma / ES: texto, acepta coma decimal
+const formSigno = ref<Signo>("gasto"); // EN: expense by default / ES: gasto por defecto
+const formCategoria = ref(""); // EN: selected category name / ES: nombre de categoría seleccionada
 
-// Abre el mini-formulario con valores limpios.
+// EN: Opens the mini-form with clean values.
+// ES: Abre el mini-formulario con valores limpios.
 function abrirFormPlantilla(): void {
   formConcepto.value = "";
   formImporte.value = "";
@@ -302,13 +359,16 @@ function abrirFormPlantilla(): void {
   formAbierto.value = true;
 }
 
-// Cierra el mini-formulario sin guardar.
+// EN: Closes the mini-form without saving.
+// ES: Cierra el mini-formulario sin guardar.
 function cerrarFormPlantilla(): void {
   formAbierto.value = false;
 }
 
-// Guarda la nueva plantilla en el store.
-// Normaliza la coma decimal a punto y redondea el importe a céntimos.
+// EN: Saves the new template into the store. Normalizes the decimal comma to a
+//     dot and rounds the amount to cents.
+// ES: Guarda la nueva plantilla en el store. Normaliza la coma decimal a punto y
+//     redondea el importe a céntimos.
 function guardarPlantilla(): void {
   const concepto = formConcepto.value.trim();
   const importe = Math.round(Number(formImporte.value.replace(",", ".")) * 100) / 100;
@@ -326,6 +386,8 @@ function guardarPlantilla(): void {
 
 <template>
   <div>
+    <!-- EN: Header: title + "Add" button (opens the modal in add mode). -->
+    <!-- ES: Cabecera: título + botón "Añadir" (abre el modal en modo alta). -->
     <div class="flex items-center justify-between mb-6">
       <h2 class="font-display text-2xl font-bold">{{ t("titulo") }}</h2>
       <button
@@ -336,7 +398,8 @@ function guardarPlantilla(): void {
       </button>
     </div>
 
-    <!-- ENTRADA RÁPIDA: chips de plantillas + alta de plantilla nueva -->
+    <!-- EN: Quick entry: template chips + create-new-template chip. -->
+    <!-- ES: ENTRADA RÁPIDA: chips de plantillas + alta de plantilla nueva. -->
     <div class="mb-6 flex flex-wrap items-center gap-2">
       <!-- Un chip por plantilla: clic = registrar movimiento de hoy al instante -->
       <span
@@ -372,7 +435,8 @@ function guardarPlantilla(): void {
       </span>
     </div>
 
-    <!-- Mini-modal para crear una plantilla nueva -->
+    <!-- EN: Mini-modal to create a new template. -->
+    <!-- ES: Mini-modal para crear una plantilla nueva. -->
     <div
       v-if="formAbierto"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
@@ -448,7 +512,11 @@ function guardarPlantilla(): void {
       </div>
     </div>
 
+    <!-- EN: Transactions card: search/filter toolbar + the list of lines. -->
+    <!-- ES: Tarjeta de movimientos: barra de buscar/filtrar + la lista de líneas. -->
     <div class="rounded-2xl bg-surface border border-border">
+      <!-- EN: Toolbar: free-text search, type filter and entry count. -->
+      <!-- ES: Barra: búsqueda libre, filtro de tipo y contador de apuntes. -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-border">
         <input
           v-model="busqueda"
@@ -468,14 +536,18 @@ function guardarPlantilla(): void {
         <span class="text-faint text-sm shrink-0">{{ lineasFiltradas.length }} {{ t("apuntes") }}</span>
       </div>
 
+      <!-- EN: Empty state: distinguishes "no results for filter" vs "no entries". -->
+      <!-- ES: Estado vacío: distingue "sin resultados del filtro" vs "sin apuntes". -->
       <div v-if="!lineasFiltradas.length" class="px-5 py-12 text-center text-muted">
         {{ f.lineasDelMes.length ? t("sinResultados") : t("sinMovimientos") }}
       </div>
 
+      <!-- EN: List of lines: dot + concept/meta + amount + per-row actions. -->
+      <!-- ES: Lista de líneas: punto + concepto/meta + importe + acciones por fila. -->
       <ul v-else class="divide-y divide-border">
         <li
           v-for="l in lineasFiltradas"
-          :key="l.origen + l.id"
+          :key="l.origen + ':' + l.id"
           class="group flex items-center gap-3 px-5 py-3 hover:bg-surface-2 transition-colors"
         >
           <span class="size-2.5 rounded-full shrink-0" :class="colorPunto(l.signo)" />
@@ -554,14 +626,20 @@ function guardarPlantilla(): void {
       </ul>
     </div>
 
+    <!-- EN: Add/edit modal. :key forces a remount per edited line (or "alta" for
+         add) so the form is never reused with stale data. -->
+    <!-- ES: Modal de alta/edición. El :key fuerza remontar por línea editada (o
+         "alta" para alta) para que el formulario nunca reuse datos viejos. -->
     <ModalMovimiento
       v-if="modal"
+      :key="editando ? editando.origen + ':' + editando.id : 'alta'"
       :inicial="inicial ?? undefined"
       @guardar="onGuardar"
       @cerrar="cerrarModal"
     />
 
-    <!-- Lightbox del recibo: clic fuera o en la imagen lo cierra -->
+    <!-- EN: Receipt lightbox: click outside or on the image closes it. -->
+    <!-- ES: Lightbox del recibo: clic fuera o en la imagen lo cierra. -->
     <div
       v-if="reciboVisible"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"

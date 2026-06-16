@@ -1,20 +1,39 @@
 <script setup lang="ts">
-/* ===========================================================================
-   Vista de Deudas.
-   Lista las deudas evaluadas al mes seleccionado (estadosDeuda del store) con
-   barra de progreso, pendiente, cuota y meses restantes. Permite dar de alta,
-   editar y eliminar deudas mediante un modal inline.
-   =========================================================================== */
+/* =============================================================================
+ * DeudasView.vue — Debts view / Vista de deudas
+ * -----------------------------------------------------------------------------
+ * EN: Lists the debts evaluated at the selected month (estadosDeuda from the
+ *     store) with a progress bar, pending amount, monthly payment and remaining
+ *     months. Allows creating, editing and deleting debts via an inline modal.
+ * ES: Lista las deudas evaluadas al mes seleccionado (estadosDeuda del store) con
+ *     barra de progreso, pendiente, cuota y meses restantes. Permite dar de alta,
+ *     editar y eliminar deudas mediante un modal inline.
+ * -----------------------------------------------------------------------------
+ * INDEX / ÍNDICE:
+ *   1. Imports & store / Imports y store
+ *   2. Translations (i18n) / Traducciones (i18n)
+ *   3. Modal state / Estado del modal
+ *   4. Form & derived state / Formulario y estado derivado
+ *   5. Type metadata helper / Ayudante de metadatos del tipo
+ *   6. Open/close modal / Abrir/cerrar modal
+ *   7. Validate & save / Validar y guardar
+ *   8. Delete debt / Eliminar deuda
+ * ===========================================================================*/
+
+// ── 1. Imports & store / Imports y store ──────────────────────────────────────
 import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { TIPOS_DEUDA, type Deuda, type TipoDeuda } from "../types";
 import { euro, mesActual } from "../utils/format";
 import { crearT } from "../i18n";
 
-// Store central de finanzas (ya inicializado en la app).
+// EN: Central finances store (already initialized in the app).
+// ES: Store central de finanzas (ya inicializado en la app).
 const finanzas = useFinanzas();
 
-// Función de traducción (ES/EN) con todos los textos visibles de la vista.
+// ── 2. Translations (i18n) / Traducciones (i18n) ──────────────────────────────
+// EN: Translation function (ES/EN) holding every visible text in the view.
+// ES: Función de traducción (ES/EN) con todos los textos visibles de la vista.
 const t = crearT({
   // Cabecera y botones de alta
   titulo: { es: "Deudas", en: "Debts" },
@@ -65,16 +84,20 @@ const t = crearT({
   confirmBorrarPost: { es: '"?', en: '"?' },
 });
 
-// --- Estado del modal de alta/edición ---
-// Si está abierto el modal.
+// ── 3. Modal state / Estado del modal ─────────────────────────────────────────
+// EN: Whether the add/edit modal is open. / ES: Si está abierto el modal de alta/edición.
 const modalAbierto = ref(false);
-// Id de la deuda en edición (null = estamos creando una nueva).
+// EN: Id of the debt being edited (null = creating a new one).
+// ES: Id de la deuda en edición (null = estamos creando una nueva).
 const editandoId = ref<string | null>(null);
 
-// Tipo del formulario: los mismos campos que Deuda salvo el id.
+// ── 4. Form & derived state / Formulario y estado derivado ────────────────────
+// EN: Form type: same fields as Deuda except the id.
+// ES: Tipo del formulario: los mismos campos que Deuda salvo el id.
 type FormDeuda = Omit<Deuda, "id">;
 
-// Datos del formulario (reactivos). Se rellenan al abrir el modal.
+// EN: Reactive form data. Filled in when the modal opens.
+// ES: Datos del formulario (reactivos). Se rellenan al abrir el modal.
 const form = reactive<FormDeuda>({
   concepto: "",
   tipo: "tarjeta",
@@ -85,21 +108,28 @@ const form = reactive<FormDeuda>({
   diaPago: undefined, // día de cobro opcional (1-31)
 });
 
-// Mensaje de error de validación (vacío = sin error).
+// EN: Validation error message (empty = no error).
+// ES: Mensaje de error de validación (vacío = sin error).
 const error = ref("");
 
-// Título del modal según estemos creando o editando.
+// EN: Modal title depending on whether we are creating or editing.
+// ES: Título del modal según estemos creando o editando.
 const tituloModal = computed(() =>
   editandoId.value ? t("modalEditar") : t("modalNueva")
 );
 
-// Devuelve los metadatos (etiqueta + icono) de un tipo de deuda.
+// ── 5. Type metadata helper / Ayudante de metadatos del tipo ──────────────────
+// EN: Returns the metadata (label + icon) of a debt type.
+// ES: Devuelve los metadatos (etiqueta + icono) de un tipo de deuda.
 function metaTipo(tipo: TipoDeuda) {
-  // Si no se encuentra (no debería), se usa el último tipo "otro" como respaldo.
+  // EN: If not found (shouldn't happen), falls back to the last type "otro".
+  // ES: Si no se encuentra (no debería), se usa el último tipo "otro" como respaldo.
   return TIPOS_DEUDA.find((t) => t.valor === tipo) ?? TIPOS_DEUDA[TIPOS_DEUDA.length - 1];
 }
 
-// Abre el modal en modo "nueva deuda" con valores por defecto.
+// ── 6. Open/close modal / Abrir/cerrar modal ──────────────────────────────────
+// EN: Opens the modal in "new debt" mode with default values.
+// ES: Abre el modal en modo "nueva deuda" con valores por defecto.
 function abrirNueva() {
   editandoId.value = null;
   error.value = "";
@@ -113,7 +143,8 @@ function abrirNueva() {
   modalAbierto.value = true;
 }
 
-// Abre el modal en modo "editar" precargando los datos de la deuda.
+// EN: Opens the modal in "edit" mode preloading the debt data.
+// ES: Abre el modal en modo "editar" precargando los datos de la deuda.
 function abrirEditar(deuda: Deuda) {
   editandoId.value = deuda.id;
   error.value = "";
@@ -127,14 +158,17 @@ function abrirEditar(deuda: Deuda) {
   modalAbierto.value = true;
 }
 
-// Cierra el modal sin guardar.
+// EN: Closes the modal without saving. / ES: Cierra el modal sin guardar.
 function cerrarModal() {
   modalAbierto.value = false;
 }
 
-// Valida y guarda: crea o actualiza la deuda según el modo.
+// ── 7. Validate & save / Validar y guardar ────────────────────────────────────
+// EN: Validates and saves: creates or updates the debt depending on the mode.
+// ES: Valida y guarda: crea o actualiza la deuda según el modo.
 function guardar() {
-  // Redondeo a céntimos y saneo (evita NaN/negativos que contaminarían los KPIs).
+  // EN: Round to cents and sanitize (avoids NaN/negatives polluting the KPIs).
+  // ES: Redondeo a céntimos y saneo (evita NaN/negativos que contaminarían los KPIs).
   const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
   const total = r2(form.total);
   const cuota = r2(form.cuotaMensual);
@@ -147,11 +181,13 @@ function guardar() {
   if (pagado > total) { error.value = t("errPagadoTotal"); return; }
   if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) { error.value = t("errMes"); return; }
 
-  // Día de cobro: se acepta entero 1-31; si está vacío/0/fuera de rango => undefined.
+  // EN: Charge day: an integer 1-31 is accepted; if empty/0/out of range => undefined.
+  // ES: Día de cobro: se acepta entero 1-31; si está vacío/0/fuera de rango => undefined.
   const diaNum = Math.trunc(Number(form.diaPago) || 0);
   const diaPago = diaNum >= 1 && diaNum <= 31 ? diaNum : undefined;
 
-  // Objeto saneado a partir del formulario.
+  // EN: Sanitized object built from the form.
+  // ES: Objeto saneado a partir del formulario.
   const datos: FormDeuda = {
     concepto: form.concepto.trim(),
     tipo: form.tipo,
@@ -162,7 +198,8 @@ function guardar() {
     diaPago, // día de cobro opcional (undefined si no se indicó)
   };
 
-  // Editar existente o crear nueva.
+  // EN: Edit existing or create new.
+  // ES: Editar existente o crear nueva.
   if (editandoId.value) {
     finanzas.actualizarDeuda(editandoId.value, datos);
   } else {
@@ -172,7 +209,9 @@ function guardar() {
   cerrarModal();
 }
 
-// Elimina una deuda tras confirmación del navegador.
+// ── 8. Delete debt / Eliminar deuda ───────────────────────────────────────────
+// EN: Deletes a debt after a browser confirmation.
+// ES: Elimina una deuda tras confirmación del navegador.
 function borrar(deuda: Deuda) {
   if (confirm(`${t("confirmBorrarPre")}${deuda.concepto}${t("confirmBorrarPost")}`)) {
     finanzas.eliminarDeuda(deuda.id);
@@ -181,9 +220,9 @@ function borrar(deuda: Deuda) {
 </script>
 
 <template>
-  <!-- Contenedor de la vista -->
+  <!-- EN: View container / ES: Contenedor de la vista -->
   <div class="min-h-full bg-base p-6 text-ink">
-    <!-- 1. Cabecera: título + botón de alta -->
+    <!-- EN: 1. Header: title + add button / ES: 1. Cabecera: título + botón de alta -->
     <header class="mb-6 flex items-center justify-between">
       <h1 class="font-display text-2xl font-bold">{{ t("titulo") }}</h1>
       <button
@@ -194,7 +233,7 @@ function borrar(deuda: Deuda) {
       </button>
     </header>
 
-    <!-- 2. Estado vacío: no hay deudas registradas -->
+    <!-- EN: 2. Empty state: no debts registered / ES: 2. Estado vacío: no hay deudas registradas -->
     <div
       v-if="finanzas.estadosDeuda.length === 0"
       class="rounded-2xl bg-surface border border-border p-10 text-center"
@@ -212,17 +251,17 @@ function borrar(deuda: Deuda) {
       </button>
     </div>
 
-    <!-- 3. Listado de deudas: una tarjeta por estado de deuda -->
+    <!-- EN: 3. Debt list: one card per debt state / ES: 3. Listado de deudas: una tarjeta por estado de deuda -->
     <div v-else class="grid gap-4 sm:grid-cols-2">
       <article
         v-for="estado in finanzas.estadosDeuda"
         :key="estado.deuda.id"
         class="rounded-2xl bg-surface border border-border p-5"
       >
-        <!-- Cabecera de la tarjeta: icono + concepto + tipo + acciones -->
+        <!-- EN: Card header: icon + concept + type + actions / ES: Cabecera de la tarjeta: icono + concepto + tipo + acciones -->
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
-            <!-- Icono del tipo de deuda -->
+            <!-- EN: Debt type icon / ES: Icono del tipo de deuda -->
             <span class="text-2xl shrink-0">{{ metaTipo(estado.deuda.tipo).icono }}</span>
             <div class="min-w-0">
               <h2 class="font-display font-bold leading-tight truncate">
@@ -231,7 +270,7 @@ function borrar(deuda: Deuda) {
               <p class="text-xs text-muted truncate">{{ metaTipo(estado.deuda.tipo).etiqueta }}</p>
             </div>
           </div>
-          <!-- Botones de editar y eliminar -->
+          <!-- EN: Edit and delete buttons / ES: Botones de editar y eliminar -->
           <div class="flex gap-1">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
@@ -252,40 +291,40 @@ function borrar(deuda: Deuda) {
           </div>
         </div>
 
-        <!-- Barra de progreso de pago -->
+        <!-- EN: Payment progress bar / ES: Barra de progreso de pago -->
         <div class="mt-4">
           <div class="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-            <!-- Relleno proporcional al progreso (0..100) -->
+            <!-- EN: Fill proportional to progress (0..100) / ES: Relleno proporcional al progreso (0..100) -->
             <div
               class="h-full rounded-full bg-brand transition-all"
               :style="{ width: estado.progreso + '%' }"
             ></div>
           </div>
-          <!-- Texto: pagado X de Y (progreso%) -->
+          <!-- EN: Text: paid X of Y (progress%) / ES: Texto: pagado X de Y (progreso%) -->
           <p class="mt-2 text-xs text-muted">
             {{ t("pagadoDe") }} {{ euro(estado.pagado) }} {{ t("de") }} {{ euro(estado.deuda.total) }}
             ({{ Math.round(estado.progreso) }}%)
           </p>
         </div>
 
-        <!-- Detalle: pendiente, cuota y estado/meses restantes -->
+        <!-- EN: Detail: pending, payment and status/remaining months / ES: Detalle: pendiente, cuota y estado/meses restantes -->
         <div class="mt-4 flex items-end justify-between gap-3">
           <div class="space-y-1 text-sm">
-            <!-- Pendiente (rojo si queda algo por pagar) -->
+            <!-- EN: Pending (red if something is left to pay) / ES: Pendiente (rojo si queda algo por pagar) -->
             <p>
               <span class="text-muted">{{ t("pendiente") }} </span>
               <span :class="estado.pendiente > 0 ? 'text-danger font-medium' : 'text-ok font-medium'">
                 {{ euro(estado.pendiente) }}
               </span>
             </p>
-            <!-- Cuota mensual -->
+            <!-- EN: Monthly payment / ES: Cuota mensual -->
             <p>
               <span class="text-muted">{{ t("cuotaMensual") }} </span>
               <span class="text-ink">{{ euro(estado.deuda.cuotaMensual) }}</span>
             </p>
           </div>
 
-          <!-- Badge de estado: pagada o meses restantes -->
+          <!-- EN: Status badge: paid off or remaining months / ES: Badge de estado: pagada o meses restantes -->
           <div>
             <span
               v-if="estado.terminada"
@@ -303,19 +342,19 @@ function borrar(deuda: Deuda) {
       </article>
     </div>
 
-    <!-- 4. Modal de alta/edición (inline con v-if) -->
+    <!-- EN: 4. Add/edit modal (inline with v-if) / ES: 4. Modal de alta/edición (inline con v-if) -->
     <div
       v-if="modalAbierto"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       @click.self="cerrarModal"
     >
-      <!-- Tarjeta del modal -->
+      <!-- EN: Modal card / ES: Tarjeta del modal -->
       <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-5">
         <h3 class="font-display font-bold text-lg">{{ tituloModal }}</h3>
 
-        <!-- Formulario -->
+        <!-- EN: Form / ES: Formulario -->
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
-          <!-- Concepto -->
+          <!-- EN: Concept / ES: Concepto -->
           <div>
             <label class="mb-1 block text-sm text-muted">{{ t("labelConcepto") }}</label>
             <input
@@ -326,7 +365,7 @@ function borrar(deuda: Deuda) {
             />
           </div>
 
-          <!-- Tipo de deuda -->
+          <!-- EN: Debt type / ES: Tipo de deuda -->
           <div>
             <label class="mb-1 block text-sm text-muted">{{ t("labelTipo") }}</label>
             <select
@@ -339,7 +378,7 @@ function borrar(deuda: Deuda) {
             </select>
           </div>
 
-          <!-- Total y cuota mensual en dos columnas -->
+          <!-- EN: Total and monthly payment in two columns / ES: Total y cuota mensual en dos columnas -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="mb-1 block text-sm text-muted">{{ t("labelTotal") }}</label>
@@ -363,7 +402,7 @@ function borrar(deuda: Deuda) {
             </div>
           </div>
 
-          <!-- Ya pagado y mes de inicio en dos columnas -->
+          <!-- EN: Already paid and start month in two columns / ES: Ya pagado y mes de inicio en dos columnas -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="mb-1 block text-sm text-muted">{{ t("labelYaPagado") }}</label>
@@ -385,7 +424,8 @@ function borrar(deuda: Deuda) {
             </div>
           </div>
 
-          <!-- Día de cobro (opcional): día del mes en que se cobra la cuota (1-31) -->
+          <!-- EN: Charge day (optional): day of the month the payment is charged (1-31) -->
+          <!-- ES: Día de cobro (opcional): día del mes en que se cobra la cuota (1-31) -->
           <div>
             <label class="mb-1 block text-sm text-muted">{{ t("labelDiaCobro") }}</label>
             <input
@@ -399,10 +439,10 @@ function borrar(deuda: Deuda) {
             />
           </div>
 
-          <!-- Mensaje de error de validación -->
+          <!-- EN: Validation error message / ES: Mensaje de error de validación -->
           <p v-if="error" class="text-sm text-danger">{{ error }}</p>
 
-          <!-- Botones del modal -->
+          <!-- EN: Modal buttons / ES: Botones del modal -->
           <div class="flex justify-end gap-2 pt-2">
             <button
               type="button"
