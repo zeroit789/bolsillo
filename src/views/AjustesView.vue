@@ -21,7 +21,7 @@
  *   5. Backup: export/import (.json) / Copia: exportar/importar (.json)
  *   6. Custom categories / Categorías personalizadas
  * ===========================================================================*/
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useAjustes } from "../stores/ajustes";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
@@ -320,6 +320,16 @@ const credActual = ref("");
 const credNueva = ref("");
 const credNuevaRep = ref("");
 const tipoNuevo = ref<"pin" | "password">(ajustes.bloqueoTipo ?? "pin");
+// EN: Keep the "new type" selector in sync with the active lock type, so opening
+//     "change credential" with a password set validates as password, not as PIN.
+// ES: Mantén el selector de "tipo nuevo" sincronizado con el tipo de bloqueo activo,
+//     para que abrir "cambiar credencial" con contraseña valide como contraseña, no PIN.
+watch(
+  () => ajustes.bloqueoTipo,
+  (tipo) => {
+    if (tipo) tipoNuevo.value = tipo;
+  }
+);
 const mensajeCambio = ref("");
 const errorCambio = ref("");
 

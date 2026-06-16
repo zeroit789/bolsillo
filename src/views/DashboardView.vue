@@ -110,7 +110,9 @@ const diasRestantes = computed<number>(() => {
 // EN: Per-day spend target: the available amount split across the days left.
 // ES: Objetivo de gasto por día: lo disponible repartido entre los días que quedan.
 const objetivoDiario = computed<number>(() =>
-  f.disponible > 0 ? f.disponible / diasRestantes.value : 0
+  // EN: Guard diasRestantes > 0 too, so we never divide by zero (→ Infinity).
+  // ES: Protege también diasRestantes > 0, para no dividir por cero (→ Infinity).
+  f.disponible > 0 && diasRestantes.value > 0 ? f.disponible / diasRestantes.value : 0
 );
 
 // ── 4. Today's spending / Gasto de hoy ────────────────────────────────────────

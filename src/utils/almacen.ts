@@ -97,15 +97,23 @@ let cola: Promise<void> = Promise.resolve();
 export function guardar(datos: DatosBolsillo): Promise<void> {
   const secreto = secretoActual;
   const json = JSON.stringify(datos);
-  cola = cola
-    // EN: Swallow a previous failure so one bad save doesn't break the chain.
-    // ES: Traga un fallo previo para que un guardado malo no rompa la cadena.
-    .catch(() => {})
-    .then(async () => {
-      const blob = await cifrar(json, secreto);
-      localStorage.setItem(CLAVE_DATOS, blob);
-    });
-  return cola;
+  // EN: Run this save after the previous one finishes (success OR failure) to keep
+  //     writes serialized. `resultado` reflects THIS write's outcome and is what we
+  //     return — so a caller awaiting guardar() DOES see its error (e.g. storage
+  //     full). `cola` swallows errors only to keep the chain alive for next saves,
+  //     never to mask the failure from the awaiter.
+  // ES: Ejecuta este guardado tras el anterior (haya ido bien o mal) para serializar
+  //     las escrituras. `resultado` refleja el resultado de ESTA escritura y es lo
+  //     que devolvemos — así quien hace await de guardar() SÍ ve su error (p.ej.
+  //     almacenamiento lleno). `cola` solo traga errores para mantener viva la
+  //     cadena de los siguientes guardados, nunca para ocultar el fallo a quien espera.
+  const ejecutar = async () => {
+    const blob = await cifrar(json, secreto);
+    localStorage.setItem(CLAVE_DATOS, blob);
+  };
+  const resultado = cola.then(ejecutar, ejecutar);
+  cola = resultado.catch(() => {});
+  return resultado;
 }
 
 // ── 6. Secret validation / Validación del secreto ─────────────────────────────

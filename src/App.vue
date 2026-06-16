@@ -23,7 +23,7 @@
  * ===========================================================================*/
 
 // ── 1. Imports & stores / Imports y stores ────────────────────────────────────
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useSesion } from "./stores/sesion";
 import { useAjustes } from "./stores/ajustes";
 import { useFinanzas } from "./stores/finanzas";
@@ -66,6 +66,22 @@ const t = crearT({
   ajustes: { es: "Ajustes", en: "Settings" },
   hola: { es: "Hola", en: "Hi" },
   cargando: { es: "Cargando…", en: "Loading…" },
+  // EN: Native notification texts. "@x/@c/@i/@d" are placeholders replaced at
+  //     call time with the dynamic value (concept, amount, day) — crearT has no
+  //     interpolation, so we substitute manually after translating.
+  // ES: Textos de las notificaciones nativas. "@x/@c/@i/@d" son marcadores que se
+  //     sustituyen al llamar por el valor dinámico (concepto, importe, día) —
+  //     crearT no interpola, así que sustituimos a mano tras traducir.
+  notifDeudaTitulo: { es: "¡Deuda saldada! 🎉", en: "Debt paid off! 🎉" },
+  notifDeudaCuerpo: { es: 'Has terminado de pagar "@x".', en: 'You finished paying off "@x".' },
+  notifRecordTitulo: { es: "Recordatorio del mes", en: "Monthly reminder" },
+  notifRecordCuerpo: {
+    es: "Este mes tienes @x en gastos fijos y cuotas.",
+    en: "This month you have @x in fixed expenses and instalments.",
+  },
+  notifPagoTitulo: { es: "Pago próximo", en: "Upcoming payment" },
+  notifCuotaTitulo: { es: "Cuota próxima", en: "Upcoming instalment" },
+  notifPagoCuerpo: { es: "@c (@i) el día @d.", en: "@c (@i) on day @d." },
 });
 
 // ── 3. Navigation sections / Secciones de navegación ──────────────────────────
@@ -144,7 +160,7 @@ function revisarDeudasSaldadas() {
       // EN: Newly settled: notify (skip on first run to avoid initial spam).
       // ES: Recién saldada: avisar (se omite en la primera vez para no spamear).
       if (!primeraVez) {
-        void notificar("¡Deuda saldada! 🎉", `Has terminado de pagar "${d.concepto}".`);
+        void notificar(t("notifDeudaTitulo"), t("notifDeudaCuerpo").replace("@x", d.concepto));
       }
       set.add(d.id);
       cambia = true;
@@ -168,10 +184,7 @@ function recordatorioMensual() {
   if (localStorage.getItem("bolsillo.recordatorio-mes") === mes) return;
   const r = f.resumenDe(mes);
   if (r.gastosFijos > 0) {
-    void notificar(
-      "Recordatorio del mes",
-      `Este mes tienes ${euro(r.gastosFijos)} en gastos fijos y cuotas.`
-    );
+    void notificar(t("notifRecordTitulo"), t("notifRecordCuerpo").replace("@x", euro(r.gastosFijos)));
     // EN: Mark the month ONLY if we notified (if there are no fixed expenses yet,
     //     retry later instead of burning the month with an empty reminder).
     // ES: Marcar el mes SOLO si avisamos (si aún no hay fijos, reintentar luego).
@@ -207,8 +220,15 @@ function revisarPagosProximos() {
   const enRango = (dia?: number) => {
     if (typeof dia !== "number" || dia < 1 || dia > 31) return false;
     const hoy0 = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
-    let objetivo = new Date(ahora.getFullYear(), ahora.getMonth(), dia);
-    if (objetivo < hoy0) objetivo = new Date(ahora.getFullYear(), ahora.getMonth() + 1, dia);
+    // EN: Clamp the payment day to the real last day of the target month so a
+    //     day like 31 in a 30-day month doesn't overflow to the 1st of the next.
+    // ES: Acota el día de pago al último día real del mes objetivo, para que un
+    //     día como 31 en un mes de 30 no se desborde al día 1 del siguiente.
+    const ultimoDia = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+    const y = ahora.getFullYear();
+    const m = ahora.getMonth();
+    let objetivo = new Date(y, m, Math.min(dia, ultimoDia(y, m)));
+    if (objetivo < hoy0) objetivo = new Date(y, m + 1, Math.min(dia, ultimoDia(y, m + 1)));
     const dias = Math.round((objetivo.getTime() - hoy0.getTime()) / 86_400_000);
     return dias >= 0 && dias <= 3;
   };
@@ -222,7 +242,13 @@ function revisarPagosProximos() {
     if (!(r.desde <= mes && (r.hasta === null || mes <= r.hasta))) continue;
     if (enRango(r.diaPago) && !set.has("r" + r.id)) {
       set.add("r" + r.id);
-      void notificar("Pago próximo", `${r.concepto} (${euro(r.importe)}) el día ${r.diaPago}.`);
+      void notificar(
+        t("notifPagoTitulo"),
+        t("notifPagoCuerpo")
+          .replace("@c", r.concepto)
+          .replace("@i", euro(r.importe))
+          .replace("@d", String(r.diaPago))
+      );
     }
   }
   // EN: Installments of active debts (skip debts with no installment this month).
@@ -233,7 +259,13 @@ function revisarPagosProximos() {
     if (estadoDeuda(d, mes).cuotaDelMes <= 0) continue;
     if (enRango(d.diaPago) && !set.has("d" + d.id)) {
       set.add("d" + d.id);
-      void notificar("Cuota próxima", `${d.concepto} (${euro(d.cuotaMensual)}) el día ${d.diaPago}.`);
+      void notificar(
+        t("notifCuotaTitulo"),
+        t("notifPagoCuerpo")
+          .replace("@c", d.concepto)
+          .replace("@i", euro(d.cuotaMensual))
+          .replace("@d", String(d.diaPago))
+      );
     }
   }
   // EN: Persist the notified ids for this month so we never repeat a warning.
@@ -271,6 +303,14 @@ watch(
 // EN: Re-check settled debts on any debt edit (deep watch over the array).
 // ES: Re-chequea deudas saldadas ante cualquier edición de deudas (watch profundo).
 watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
+
+// EN: Clear the hourly re-check timer when the shell unmounts (avoids orphan
+//     intervals on HMR during development and is correct teardown either way).
+// ES: Limpia el temporizador del re-chequeo horario al desmontar el shell (evita
+//     intervalos huérfanos con HMR en desarrollo y es el cierre correcto igual).
+onUnmounted(() => {
+  if (timerNotif !== undefined) clearInterval(timerNotif);
+});
 </script>
 
 <!-- ── 9. Template / Plantilla ─────────────────────────────────────────────── -->

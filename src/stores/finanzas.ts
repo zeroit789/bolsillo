@@ -76,7 +76,14 @@ export const useFinanzas = defineStore("finanzas", () => {
   // ES: El mes visto se recuerda entre sesiones; no es dato sensible, así que
   //     va en claro. Si el usuario eligió un mes concreto, al reabrir sigue ahí.
   const MES_KEY = "bolsillo.mes-visto";
-  const mesSeleccionado = ref<string>(localStorage.getItem(MES_KEY) || mesActual());
+  // EN: Read the remembered month but validate the YYYY-MM format; fall back to the
+  //     current month if missing/malformed (avoids NaN in date math downstream).
+  // ES: Lee el mes recordado pero valida el formato YYYY-MM; cae al mes actual si
+  //     falta o está malformado (evita NaN en los cálculos de fecha aguas abajo).
+  const mesGuardado = localStorage.getItem(MES_KEY);
+  const mesSeleccionado = ref<string>(
+    mesGuardado && /^\d{4}-\d{2}$/.test(mesGuardado) ? mesGuardado : mesActual()
+  );
 
   // ── 3. Hydration & snapshot / Hidratación y snapshot ─────────────────────────
 
