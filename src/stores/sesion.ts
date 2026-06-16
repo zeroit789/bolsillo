@@ -11,6 +11,7 @@ import { useFinanzas } from "./finanzas";
 import { useAjustes, type TipoBloqueo } from "./ajustes";
 import * as almacen from "../utils/almacen";
 import { datosDemo } from "../data/demo";
+import type { DatosBolsillo } from "../types";
 
 export const useSesion = defineStore("sesion", () => {
   const desbloqueado = ref(false);
@@ -145,6 +146,14 @@ export const useSesion = defineStore("sesion", () => {
     desbloqueado.value = true;
   }
 
+  // Importa datos de una copia: hidrata y PERSISTE de forma garantizada
+  // (con await), sin depender de que el watch automático ya esté activo.
+  async function importarDatos(datos: DatosBolsillo) {
+    const f = useFinanzas();
+    f.hidratar(datos);
+    await almacen.guardar(f.snapshot());
+  }
+
   return {
     desbloqueado,
     necesitaOnboarding,
@@ -155,5 +164,6 @@ export const useSesion = defineStore("sesion", () => {
     quitarBloqueo,
     cambiarCredencial,
     completarOnboarding,
+    importarDatos,
   };
 });

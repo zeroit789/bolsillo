@@ -114,14 +114,17 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
   const str = (x: unknown) => typeof x === "string";
   const signo = (x: unknown) => x === "ingreso" || x === "gasto";
+  // Formato de mes/fecha real (blinda los cálculos de fechas aguas abajo).
+  const mesOk = (x: unknown) => typeof x === "string" && /^\d{4}-\d{2}$/.test(x);
+  const fechaOk = (x: unknown) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}/.test(x);
   const rec = o.recurrentes.every(
-    (r: any) => r && str(r.id) && num(r.importe) && signo(r.signo) && str(r.categoria) && str(r.desde) && (r.hasta === null || str(r.hasta))
+    (r: any) => r && str(r.id) && num(r.importe) && signo(r.signo) && str(r.categoria) && mesOk(r.desde) && (r.hasta === null || mesOk(r.hasta))
   );
   const pun = o.puntuales.every(
-    (p: any) => p && str(p.id) && num(p.importe) && signo(p.signo) && str(p.categoria) && str(p.fecha) && p.fecha.length >= 7
+    (p: any) => p && str(p.id) && num(p.importe) && signo(p.signo) && str(p.categoria) && fechaOk(p.fecha)
   );
   const deu = o.deudas.every(
-    (x: any) => x && str(x.id) && num(x.total) && num(x.cuotaMensual) && num(x.pagadoInicial) && str(x.inicioMes) && x.inicioMes.length >= 7
+    (x: any) => x && str(x.id) && num(x.total) && num(x.cuotaMensual) && num(x.pagadoInicial) && mesOk(x.inicioMes)
   );
   // planes es opcional (las copias antiguas no lo traen).
   const pla =

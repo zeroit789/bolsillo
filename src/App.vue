@@ -86,8 +86,9 @@ function recordatorioMensual() {
       "Recordatorio del mes",
       `Este mes tienes ${euro(r.gastosFijos)} en gastos fijos y cuotas.`
     );
+    // Marcar el mes SOLO si avisamos (si aún no hay fijos, reintentar luego).
+    localStorage.setItem("bolsillo.recordatorio-mes", mes);
   }
-  localStorage.setItem("bolsillo.recordatorio-mes", mes);
 }
 
 // Al desbloquear (datos ya cargados): revisar deudas saldadas + recordatorio.

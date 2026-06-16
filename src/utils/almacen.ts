@@ -46,10 +46,13 @@ export async function cargar(): Promise<DatosBolsillo | null> {
 let cola: Promise<void> = Promise.resolve();
 
 export function guardar(datos: DatosBolsillo): Promise<void> {
+  // Captura el secreto vigente AL ENCOLAR (no al ejecutar): así el cifrado no
+  // depende del orden de resolución de la cola frente a cambios de secreto.
+  const secreto = secretoActual;
   cola = cola
     .catch(() => {})
     .then(async () => {
-      const blob = await cifrar(JSON.stringify(datos), secretoActual);
+      const blob = await cifrar(JSON.stringify(datos), secreto);
       localStorage.setItem(CLAVE_DATOS, blob);
     });
   return cola;

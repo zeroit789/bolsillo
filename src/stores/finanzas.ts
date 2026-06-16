@@ -244,8 +244,14 @@ export const useFinanzas = defineStore("finanzas", () => {
   }
   // Suma una cantidad a lo aportado de un plan (sin pasar de... se permite superar).
   function aportarAPlan(id: string, cantidad: number) {
+    // Invariante en el store: solo cantidades válidas y positivas (evita NaN
+    // que, al persistirse cifrado, invalidaría todo el blob al recargar).
+    if (!Number.isFinite(cantidad) || cantidad <= 0) return;
     const i = planes.value.findIndex((p) => p.id === id);
-    if (i !== -1) planes.value[i] = { ...planes.value[i], aportado: planes.value[i].aportado + cantidad };
+    if (i !== -1) {
+      const aportado = Math.round((planes.value[i].aportado + cantidad) * 100) / 100;
+      planes.value[i] = { ...planes.value[i], aportado };
+    }
   }
   // Da de baja un recurrente a partir de un mes (en vez de borrarlo del histórico).
   function darDeBajaRecurrente(id: string, mes: string) {

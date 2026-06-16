@@ -141,6 +141,12 @@ export function eliminarCategoriaCustom(nombre: string): void {
   guardarCustom(actuales.filter((c) => c !== nombre));
 }
 
+// Reemplaza toda la lista de personalizadas (al restaurar una copia de seguridad).
+export function setCategoriasCustom(lista: string[]): void {
+  if (!Array.isArray(lista)) return;
+  guardarCustom(lista.filter((x): x is string => typeof x === "string"));
+}
+
 // Categorías agrupadas (para selects con <optgroup>).
 // Lee las personalizadas en cada llamada (localStorage no es reactivo) y, si
 // hay alguna, añade un grupo "Personalizadas" al final.

@@ -16,6 +16,7 @@ import {
   categoriasCustom,
   agregarCategoriaCustom,
   eliminarCategoriaCustom,
+  setCategoriasCustom,
 } from "../data/categorias";
 
 // --- Stores ---
@@ -165,7 +166,12 @@ function exportarCopia() {
   errorCopia.value = "";
   try {
     // Serializa el snapshot completo legible (indentado a 2 espacios).
-    const json = JSON.stringify(finanzas.snapshot(), null, 2);
+    // Incluye también las categorías personalizadas (viven fuera del cifrado).
+    const json = JSON.stringify(
+      { ...finanzas.snapshot(), categoriasCustom: categoriasCustom() },
+      null,
+      2
+    );
     // Crea un blob de texto y una URL temporal para descargarlo.
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -199,10 +205,9 @@ function importarCopia(evento: Event) {
 
   // Lee el contenido del fichero como texto.
   const lector = new FileReader();
-  lector.onload = () => {
+  lector.onload = async () => {
     try {
-      // Parsea el JSON y valida a fondo la forma (cada item), no solo los arrays:
-      // así una copia corrupta no deja la app con KPIs en NaN o la rompe.
+      // Parsea el JSON y valida a fondo la forma (cada item), no solo los arrays.
       const datos = JSON.parse(String(lector.result));
       if (!esDatosValidos(datos)) {
         errorCopia.value = "El fichero no es una copia válida de Bolsillo.";
@@ -214,8 +219,15 @@ function importarCopia(evento: Event) {
         return;
       }
 
-      // Reemplaza los datos en el store (el guardado automático persiste solo).
-      finanzas.hidratar(datos);
+      // Restaura las categorías personalizadas de la copia (si las trae).
+      const custom = (datos as { categoriasCustom?: unknown }).categoriasCustom;
+      if (Array.isArray(custom)) {
+        setCategoriasCustom(custom as string[]);
+        refrescarCategorias();
+      }
+
+      // Importa y PERSISTE de forma garantizada (con await, no depende del watch).
+      await sesion.importarDatos(datos);
       mensajeCopia.value = "Copia importada correctamente.";
     } catch {
       errorCopia.value = "No se pudo leer el fichero (JSON inválido).";

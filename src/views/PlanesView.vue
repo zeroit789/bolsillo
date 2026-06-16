@@ -68,7 +68,8 @@ function restante(plan: Plan): number {
 
 // true si el plan ya está conseguido (aportado >= objetivo).
 function conseguido(plan: Plan): boolean {
-  return plan.aportado >= plan.objetivo;
+  // Requiere objetivo válido (>0) para no marcar "conseguido" un plan a 0.
+  return plan.objetivo > 0 && plan.aportado >= plan.objetivo;
 }
 
 // --- Acciones del modal ---
