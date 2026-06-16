@@ -1,0 +1,67 @@
+/* ===========================================================================
+   Estilos globales de Bolsillo — Tailwind CSS v4 + tema dark propio.
+   Con Tailwind v4 el tema se define con @theme: cada variable genera
+   utilidades (p.ej. --color-brand -> bg-brand, text-brand, border-brand...).
+   Paleta y fuentes tomadas de la spec original de la app.
+   =========================================================================== */
+@import "tailwindcss";
+
+@theme {
+  /* Superficies (de más oscuro a más claro) */
+  --color-base: #0a0b0e; /* fondo de la ventana */
+  --color-surface: #111318; /* tarjetas */
+  --color-surface-2: #181b22; /* tarjetas elevadas / inputs */
+  --color-border: #23262f; /* bordes sutiles */
+
+  /* Acentos */
+  --color-brand: #7c6af7; /* púrpura — acento principal */
+  --color-brand-soft: #9a8cf9;
+  --color-cyan: #4fc4cf; /* cian — datos/info */
+  --color-ok: #52d67a; /* verde — ingresos / pagado */
+  --color-warn: #f7c948; /* amarillo — pendiente */
+  --color-danger: #f76a6a; /* rojo — gastos */
+
+  /* Texto */
+  --color-ink: #e8e9ee; /* texto principal */
+  --color-muted: #9aa0ac; /* texto secundario */
+  --color-faint: #5b606b; /* texto tenue */
+
+  /* Tipografía */
+  --font-display: "Syne", system-ui, sans-serif; /* titulares */
+  --font-sans: "DM Sans", system-ui, sans-serif; /* cuerpo */
+}
+
+/* Reset/base mínimos */
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-base);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Scrollbar fina y oscura, acorde al tema */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 6px;
+}
+
+/* Evita seleccionar texto de la UI sin querer (sensación de app nativa) */
+.no-select {
+  user-select: none;
+}

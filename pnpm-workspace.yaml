@@ -1,0 +1,4 @@
+# Config de pnpm. allowBuilds: permite a esbuild ejecutar su script de
+# instalación (pnpm lo bloquea por defecto). Vite lo necesita para transpilar.
+allowBuilds:
+  esbuild: true
