@@ -218,6 +218,10 @@ export const useFinanzas = defineStore("finanzas", () => {
     const i = recurrentes.value.findIndex((r) => r.id === id);
     if (i !== -1) recurrentes.value[i] = { ...recurrentes.value[i], ...cambios };
   }
+  function actualizarPuntual(id: string, cambios: Partial<Puntual>) {
+    const i = puntuales.value.findIndex((p) => p.id === id);
+    if (i !== -1) puntuales.value[i] = { ...puntuales.value[i], ...cambios };
+  }
   function actualizarDeuda(id: string, cambios: Partial<Deuda>) {
     const i = deudas.value.findIndex((d) => d.id === id);
     if (i !== -1) deudas.value[i] = { ...deudas.value[i], ...cambios };
@@ -297,6 +301,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     addPuntual,
     addDeuda,
     actualizarRecurrente,
+    actualizarPuntual,
     actualizarDeuda,
     eliminarRecurrente,
     eliminarPuntual,

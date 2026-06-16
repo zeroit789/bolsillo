@@ -11,7 +11,7 @@ import autoTable from "jspdf-autotable"; // plugin de tablas para jsPDF (v5: aut
 import { save } from "@tauri-apps/plugin-dialog"; // diálogo nativo "Guardar como"
 import { invoke } from "@tauri-apps/api/core"; // puente para llamar comandos Rust
 
-import type { LineaMes } from "../types"; // línea unificada de un mes (recurrente/puntual/deuda)
+import type { LineaMes, EstadoDeuda, Plan } from "../types"; // línea unificada + estado de deuda + plan de ahorro
 import type { ResumenMes } from "../stores/finanzas"; // totales calculados de un mes
 
 /* ---------------------------------------------------------------------------
@@ -74,7 +74,10 @@ async function guardar(
 export async function exportarMesXLSX(
   mesLabel: string,
   lineas: LineaMes[],
-  resumen: ResumenMes
+  resumen: ResumenMes,
+  // Params opcionales: no rompen las llamadas existentes (por defecto vacíos).
+  deudas: EstadoDeuda[] = [],
+  planes: Plan[] = []
 ): Promise<void> {
   // Libro y hoja de trabajo.
   const wb = new ExcelJS.Workbook();
@@ -143,6 +146,96 @@ export async function exportarMesXLSX(
     celdaValor.numFmt = '#,##0.00 "€"'; // formato euros
   }
 
+  // --- Sección Deudas (solo si hay datos) ---
+  // Se coloca en la misma hoja, separada por una fila en blanco.
+  if (deudas.length) {
+    hoja.addRow([]); // separador visual
+
+    // Título de la sección en negrita.
+    const filaTituloDeudas = hoja.addRow(["Deudas", "", "", "", "", ""]);
+    filaTituloDeudas.getCell(1).font = { bold: true };
+
+    // Cabecera de columnas de la tabla de deudas (negrita + fondo gris claro).
+    const cabDeudas = hoja.addRow([
+      "Concepto",
+      "Total",
+      "Pagado",
+      "Pendiente",
+      "Cuota",
+      "Progreso %",
+    ]);
+    cabDeudas.font = { bold: true };
+    cabDeudas.eachCell((celda) => {
+      celda.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE0E0E0" },
+      };
+    });
+
+    // Una fila por deuda: importes con formato euro, progreso como texto "%".
+    for (const e of deudas) {
+      const fila = hoja.addRow([
+        e.deuda.concepto,
+        e.deuda.total,
+        e.pagado,
+        e.pendiente,
+        e.cuotaDelMes,
+        `${e.progreso}%`,
+      ]);
+      // Columnas numéricas de importe (2..5) con el mismo formato euro.
+      for (let col = 2; col <= 5; col++) {
+        fila.getCell(col).numFmt = '#,##0.00 "€"';
+      }
+    }
+  }
+
+  // --- Sección Planes (solo si hay datos) ---
+  if (planes.length) {
+    hoja.addRow([]); // separador visual
+
+    // Título de la sección en negrita.
+    const filaTituloPlanes = hoja.addRow(["Planes", "", "", "", ""]);
+    filaTituloPlanes.getCell(1).font = { bold: true };
+
+    // Cabecera de columnas de la tabla de planes (negrita + fondo gris claro).
+    const cabPlanes = hoja.addRow([
+      "Nombre",
+      "Objetivo",
+      "Aportado",
+      "Restante",
+      "Progreso %",
+    ]);
+    cabPlanes.font = { bold: true };
+    cabPlanes.eachCell((celda) => {
+      celda.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE0E0E0" },
+      };
+    });
+
+    // Una fila por plan: calculamos restante y progreso a partir de objetivo/aportado.
+    for (const p of planes) {
+      const restante = Math.max(0, p.objetivo - p.aportado); // nunca negativo
+      const progreso =
+        p.objetivo > 0
+          ? Math.min(100, Math.round((p.aportado / p.objetivo) * 100))
+          : 0; // 0..100, evita dividir por cero
+      const fila = hoja.addRow([
+        p.nombre,
+        p.objetivo,
+        p.aportado,
+        restante,
+        `${progreso}%`,
+      ]);
+      // Columnas numéricas de importe (2..4) con el mismo formato euro.
+      for (let col = 2; col <= 4; col++) {
+        fila.getCell(col).numFmt = '#,##0.00 "€"';
+      }
+    }
+  }
+
   // Serializamos el libro a un buffer y delegamos el guardado.
   const buf = await wb.xlsx.writeBuffer();
   await guardar(`Bolsillo - ${mesLabel}.xlsx`, "xlsx", new Uint8Array(buf as ArrayBuffer));
@@ -155,7 +248,10 @@ export async function exportarMesXLSX(
 export async function exportarMesPDF(
   mesLabel: string,
   lineas: LineaMes[],
-  resumen: ResumenMes
+  resumen: ResumenMes,
+  // Params opcionales: no rompen las llamadas existentes (por defecto vacíos).
+  deudas: EstadoDeuda[] = [],
+  planes: Plan[] = []
 ): Promise<void> {
   // Documento A4 vertical por defecto.
   const doc = new jsPDF();
@@ -202,6 +298,83 @@ export async function exportarMesPDF(
   doc.text(`Gastos: ${euro(resumen.totalGastos)}`, 14, y);
   y += 6;
   doc.text(`Disponible: ${euro(resumen.disponible)}`, 14, y);
+
+  // Helper local: lee la Y final de la última autoTable para encadenar tablas.
+  const ultimaY = (defecto: number): number =>
+    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
+      ?.finalY ?? defecto;
+
+  // --- Tabla de Deudas (solo si hay datos) ---
+  if (deudas.length) {
+    // Título de la sección encima de la tabla.
+    let yDeudas = y + 12;
+    doc.setFontSize(11);
+    doc.text("Deudas", 14, yDeudas);
+
+    // Tabla con autoTable: importes formateados en euros, progreso como "%".
+    autoTable(doc, {
+      head: [["Concepto", "Total", "Pagado", "Pendiente", "Cuota", "Progreso %"]],
+      body: deudas.map((e) => [
+        e.deuda.concepto,
+        euro(e.deuda.total),
+        euro(e.pagado),
+        euro(e.pendiente),
+        euro(e.cuotaDelMes),
+        `${e.progreso}%`,
+      ]),
+      startY: yDeudas + 4, // empieza bajo el título
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [60, 60, 60] }, // cabecera gris oscuro
+      // Importes y progreso alineados a la derecha (columnas 1..5).
+      columnStyles: {
+        1: { halign: "right" },
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "right" },
+        5: { halign: "right" },
+      },
+    });
+
+    // Avanzamos la Y de referencia para encadenar la tabla siguiente.
+    y = ultimaY(yDeudas + 4);
+  }
+
+  // --- Tabla de Planes (solo si hay datos) ---
+  if (planes.length) {
+    // Título de la sección encima de la tabla.
+    let yPlanes = y + 12;
+    doc.setFontSize(11);
+    doc.text("Planes", 14, yPlanes);
+
+    // Tabla con autoTable: restante y progreso calculados a partir de objetivo/aportado.
+    autoTable(doc, {
+      head: [["Nombre", "Objetivo", "Aportado", "Restante", "Progreso %"]],
+      body: planes.map((p) => {
+        const restante = Math.max(0, p.objetivo - p.aportado); // nunca negativo
+        const progreso =
+          p.objetivo > 0
+            ? Math.min(100, Math.round((p.aportado / p.objetivo) * 100))
+            : 0; // 0..100, evita dividir por cero
+        return [
+          p.nombre,
+          euro(p.objetivo),
+          euro(p.aportado),
+          euro(restante),
+          `${progreso}%`,
+        ];
+      }),
+      startY: yPlanes + 4, // empieza bajo el título
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [60, 60, 60] }, // cabecera gris oscuro
+      // Importes y progreso alineados a la derecha (columnas 1..4).
+      columnStyles: {
+        1: { halign: "right" },
+        2: { halign: "right" },
+        3: { halign: "right" },
+        4: { halign: "right" },
+      },
+    });
+  }
 
   // Exportamos a ArrayBuffer y guardamos.
   const bytes = doc.output("arraybuffer");

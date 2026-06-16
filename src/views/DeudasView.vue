@@ -30,6 +30,7 @@ const form = reactive<FormDeuda>({
   cuotaMensual: 0,
   pagadoInicial: 0,
   inicioMes: mesActual(),
+  diaPago: undefined, // día de cobro opcional (1-31)
 });
 
 // Mensaje de error de validación (vacío = sin error).
@@ -56,6 +57,7 @@ function abrirNueva() {
   form.cuotaMensual = 0;
   form.pagadoInicial = 0;
   form.inicioMes = mesActual(); // mes actual por defecto
+  form.diaPago = undefined; // sin día de cobro por defecto
   modalAbierto.value = true;
 }
 
@@ -69,6 +71,7 @@ function abrirEditar(deuda: Deuda) {
   form.cuotaMensual = deuda.cuotaMensual;
   form.pagadoInicial = deuda.pagadoInicial;
   form.inicioMes = deuda.inicioMes;
+  form.diaPago = deuda.diaPago; // precarga el día de cobro (puede ser undefined)
   modalAbierto.value = true;
 }
 
@@ -92,6 +95,10 @@ function guardar() {
   if (pagado > total) { error.value = "Lo ya pagado no puede superar el total."; return; }
   if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) { error.value = "Indica un mes de inicio válido."; return; }
 
+  // Día de cobro: se acepta entero 1-31; si está vacío/0/fuera de rango => undefined.
+  const diaNum = Math.trunc(Number(form.diaPago) || 0);
+  const diaPago = diaNum >= 1 && diaNum <= 31 ? diaNum : undefined;
+
   // Objeto saneado a partir del formulario.
   const datos: FormDeuda = {
     concepto: form.concepto.trim(),
@@ -100,6 +107,7 @@ function guardar() {
     cuotaMensual: cuota,
     pagadoInicial: pagado,
     inicioMes: form.inicioMes,
+    diaPago, // día de cobro opcional (undefined si no se indicó)
   };
 
   // Editar existente o crear nueva.
@@ -323,6 +331,20 @@ function borrar(deuda: Deuda) {
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
               />
             </div>
+          </div>
+
+          <!-- Día de cobro (opcional): día del mes en que se cobra la cuota (1-31) -->
+          <div>
+            <label class="mb-1 block text-sm text-muted">Día de cobro (1-31)</label>
+            <input
+              v-model.number="form.diaPago"
+              type="number"
+              min="1"
+              max="31"
+              step="1"
+              placeholder="Opcional"
+              class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+            />
           </div>
 
           <!-- Mensaje de error de validación -->

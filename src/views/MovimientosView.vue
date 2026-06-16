@@ -8,6 +8,18 @@ import ModalMovimiento from "../components/ModalMovimiento.vue";
 
 const f = useFinanzas();
 const modal = ref(false);
+// Línea que se está editando (null = el modal está en modo alta).
+const editando = ref<LineaMes | null>(null);
+// Datos iniciales que se pasan al modal cuando editamos (null = alta limpia).
+const inicial = ref<{
+  recurrente: boolean;
+  signo: Signo;
+  concepto: string;
+  importe: number;
+  categoria: string;
+  fecha: string;
+  diaPago?: number;
+} | null>(null);
 
 // --- Buscador / filtro ---
 const busqueda = ref("");
@@ -32,7 +44,44 @@ function colorPunto(signo: Signo): string {
   return signo === "ingreso" ? "bg-ok" : "bg-danger";
 }
 
-// Alta desde el modal: recurrente -> addRecurrente, puntual -> addPuntual.
+// Abre el modal en modo edición: busca el objeto completo en el store, monta
+// los datos iniciales y abre el modal precargado.
+function editar(linea: LineaMes) {
+  if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
+
+  if (linea.origen === "recurrente") {
+    // Recurrente: lo buscamos por id en el store.
+    const r = f.recurrentes.find((x) => x.id === linea.id);
+    if (!r) return;
+    inicial.value = {
+      recurrente: true,
+      signo: r.signo,
+      concepto: r.concepto,
+      importe: r.importe,
+      categoria: r.categoria,
+      // El modal solo usa la fecha en puntuales; para recurrentes basta una
+      // fecha válida del mes seleccionado.
+      fecha: `${f.mesSeleccionado}-01`,
+      diaPago: r.diaPago,
+    };
+  } else {
+    // Puntual: lo buscamos por id en el store.
+    const p = f.puntuales.find((x) => x.id === linea.id);
+    if (!p) return;
+    inicial.value = {
+      recurrente: false,
+      signo: p.signo,
+      concepto: p.concepto,
+      importe: p.importe,
+      categoria: p.categoria,
+      fecha: p.fecha,
+    };
+  }
+  editando.value = linea;
+  modal.value = true;
+}
+
+// Guardar desde el modal. Si hay `editando` -> actualiza; si no -> alta nueva.
 function onGuardar(mov: {
   recurrente: boolean;
   signo: Signo;
@@ -40,31 +89,80 @@ function onGuardar(mov: {
   importe: number;
   categoria: string;
   fecha: string;
+  diaPago?: number;
 }) {
-  if (mov.recurrente) {
-    f.addRecurrente({
-      concepto: mov.concepto,
-      importe: mov.importe,
-      signo: mov.signo,
-      categoria: mov.categoria,
-      desde: mesActual(),
-      hasta: null,
-    });
+  if (editando.value) {
+    // --- Modo edición ---
+    if (editando.value.origen === "recurrente") {
+      f.actualizarRecurrente(editando.value.id, {
+        concepto: mov.concepto,
+        importe: mov.importe,
+        signo: mov.signo,
+        categoria: mov.categoria,
+        diaPago: mov.diaPago,
+      });
+    } else if (editando.value.origen === "puntual") {
+      f.actualizarPuntual(editando.value.id, {
+        concepto: mov.concepto,
+        importe: mov.importe,
+        signo: mov.signo,
+        categoria: mov.categoria,
+        fecha: mov.fecha,
+      });
+    }
   } else {
-    f.addPuntual({
-      concepto: mov.concepto,
-      importe: mov.importe,
-      signo: mov.signo,
-      categoria: mov.categoria,
-      fecha: mov.fecha,
-    });
+    // --- Modo alta ---
+    if (mov.recurrente) {
+      f.addRecurrente({
+        concepto: mov.concepto,
+        importe: mov.importe,
+        signo: mov.signo,
+        categoria: mov.categoria,
+        desde: mesActual(),
+        hasta: null,
+        diaPago: mov.diaPago,
+      });
+    } else {
+      f.addPuntual({
+        concepto: mov.concepto,
+        importe: mov.importe,
+        signo: mov.signo,
+        categoria: mov.categoria,
+        fecha: mov.fecha,
+      });
+    }
   }
+  // Cerramos y reseteamos el estado de edición.
+  editando.value = null;
+  inicial.value = null;
   modal.value = false;
 }
 
 function eliminar(linea: LineaMes) {
   if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
   if (confirm(`¿Eliminar "${linea.concepto}"?`)) f.eliminarLinea(linea);
+}
+
+// Da de baja un fijo (recurrente) a partir del mes seleccionado.
+function darDeBaja(linea: LineaMes) {
+  if (linea.origen !== "recurrente") return;
+  if (confirm("¿Dar de baja este fijo a partir de este mes?")) {
+    f.darDeBajaRecurrente(linea.id, f.mesSeleccionado);
+  }
+}
+
+// Abre el modal en modo alta limpio (sin datos precargados).
+function abrirAlta() {
+  editando.value = null;
+  inicial.value = null;
+  modal.value = true;
+}
+
+// Cierra el modal y resetea el estado de edición.
+function cerrarModal() {
+  editando.value = null;
+  inicial.value = null;
+  modal.value = false;
 }
 </script>
 
@@ -74,7 +172,7 @@ function eliminar(linea: LineaMes) {
       <h2 class="font-display text-2xl font-bold">Movimientos</h2>
       <button
         class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
-        @click="modal = true"
+        @click="abrirAlta"
       >
         + Añadir
       </button>
@@ -128,19 +226,42 @@ function eliminar(linea: LineaMes) {
             {{ l.signo === "ingreso" ? "+" : "−" }}{{ euro(l.importe) }}
           </span>
 
-          <button
-            v-if="l.origen !== 'deuda'"
-            class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
-            title="Eliminar"
-            @click="eliminar(l)"
-          >
-            ✕
-          </button>
+          <!-- Acciones de la línea (no aplican a las cuotas de deuda) -->
+          <template v-if="l.origen !== 'deuda'">
+            <button
+              class="opacity-0 group-hover:opacity-100 text-faint hover:text-ink transition-all shrink-0"
+              title="Editar"
+              @click="editar(l)"
+            >
+              ✏️
+            </button>
+            <!-- Dar de baja: solo para fijos (recurrentes) -->
+            <button
+              v-if="l.origen === 'recurrente'"
+              class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
+              title="Dar de baja a partir de este mes"
+              @click="darDeBaja(l)"
+            >
+              🚫
+            </button>
+            <button
+              class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
+              title="Eliminar"
+              @click="eliminar(l)"
+            >
+              ✕
+            </button>
+          </template>
           <span v-else class="text-faint text-xs shrink-0" title="Se gestiona en Deudas">🔒</span>
         </li>
       </ul>
     </div>
 
-    <ModalMovimiento v-if="modal" @guardar="onGuardar" @cerrar="modal = false" />
+    <ModalMovimiento
+      v-if="modal"
+      :inicial="inicial ?? undefined"
+      @guardar="onGuardar"
+      @cerrar="cerrarModal"
+    />
   </div>
 </template>

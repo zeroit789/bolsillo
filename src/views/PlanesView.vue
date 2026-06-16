@@ -38,6 +38,16 @@ const form = reactive<FormPlan>({
 // Mensaje de error de validación (vacío = sin error).
 const error = ref("");
 
+// --- Estado del modal de aportar (inline, sin prompt() nativo) ---
+// Si está abierto el mini-modal de aportar.
+const modalAportar = ref(false);
+// Plan al que se va a aportar (null = ninguno).
+const planAportar = ref<Plan | null>(null);
+// Cantidad introducida (texto crudo del input; admite coma decimal).
+const cantidadAportar = ref("");
+// Mensaje de error del modal de aportar (vacío = sin error).
+const errorAportar = ref("");
+
 // Título del modal según estemos creando o editando.
 const tituloModal = computed(() =>
   editandoId.value ? "Editar plan" : "Nuevo plan"
@@ -136,22 +146,38 @@ function guardar() {
   cerrarModal();
 }
 
-// Pide una cantidad por prompt y la aporta al plan indicado.
+// Abre el mini-modal de aportar para el plan indicado.
+// (Los diálogos JS nativos prompt()/alert() no son fiables en Tauri.)
 function aportar(plan: Plan) {
-  // prompt() devuelve string|null; si cancela, no se hace nada.
-  const entrada = prompt(`¿Cuánto quieres aportar a "${plan.nombre}"? (€)`, "");
-  if (entrada === null) return; // cancelado
+  planAportar.value = plan;
+  cantidadAportar.value = "";
+  errorAportar.value = "";
+  modalAportar.value = true;
+}
 
-  // Se normaliza la coma decimal y se redondea a céntimos.
-  const cantidad = r2(entrada);
+// Cierra el mini-modal de aportar sin guardar.
+function cerrarModalAportar() {
+  modalAportar.value = false;
+}
+
+// Valida la cantidad introducida y la aporta al plan seleccionado.
+function confirmarAporte() {
+  // Si por algún motivo no hay plan seleccionado, no hacemos nada.
+  if (!planAportar.value) return;
+
+  // Normaliza la coma decimal a punto y redondea a céntimos.
+  const normalizado = String(cantidadAportar.value).replace(",", ".");
+  const c = Math.round(Number(normalizado) * 100) / 100;
 
   // Solo se aportan cantidades positivas válidas.
-  if (!cantidad || cantidad <= 0) {
-    alert("Introduce una cantidad válida mayor que 0.");
+  if (!c || c <= 0) {
+    errorAportar.value = "Introduce una cantidad válida mayor que 0.";
     return;
   }
 
-  finanzas.aportarAPlan(plan.id, cantidad);
+  // Aporta al plan y cierra el modal.
+  finanzas.aportarAPlan(planAportar.value.id, c);
+  cerrarModalAportar();
 }
 
 // Elimina un plan tras confirmación del navegador.
@@ -338,6 +364,55 @@ function borrar(plan: Plan) {
               class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
             >
               Guardar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 5. Mini-modal de aportar (inline con v-if) -->
+    <div
+      v-if="modalAportar"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      @click.self="cerrarModalAportar"
+    >
+      <!-- Tarjeta del mini-modal -->
+      <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-5">
+        <h3 class="font-display font-bold text-lg">
+          Aportar a {{ planAportar?.nombre }}
+        </h3>
+
+        <!-- Formulario de aporte -->
+        <form class="mt-4 space-y-4" @submit.prevent="confirmarAporte">
+          <!-- Cantidad a aportar -->
+          <div>
+            <label class="mb-1 block text-sm text-muted">Cantidad (€)</label>
+            <input
+              v-model="cantidadAportar"
+              type="text"
+              inputmode="decimal"
+              placeholder="Ej: 25,50"
+              class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+            />
+          </div>
+
+          <!-- Mensaje de error de validación -->
+          <p v-if="errorAportar" class="text-sm text-danger">{{ errorAportar }}</p>
+
+          <!-- Botones del mini-modal -->
+          <div class="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-muted font-medium hover:text-ink"
+              @click="cerrarModalAportar"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft"
+            >
+              Aportar
             </button>
           </div>
         </form>

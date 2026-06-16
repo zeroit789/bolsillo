@@ -25,8 +25,8 @@ function iconoDeuda(tipo: TipoDeuda): string {
 async function exportar(tipo: "xlsx" | "pdf") {
   const label = mesLegible(f.mesSeleccionado);
   try {
-    if (tipo === "xlsx") await exportarMesXLSX(label, f.lineasDelMes, f.resumen);
-    else await exportarMesPDF(label, f.lineasDelMes, f.resumen);
+    if (tipo === "xlsx") await exportarMesXLSX(label, f.lineasDelMes, f.resumen, f.estadosDeuda, f.planes);
+    else await exportarMesPDF(label, f.lineasDelMes, f.resumen, f.estadosDeuda, f.planes);
   } catch (e) {
     console.error("Error exportando:", e);
   }

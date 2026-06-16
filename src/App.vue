@@ -91,13 +91,51 @@ function recordatorioMensual() {
   }
 }
 
-// Al desbloquear (datos ya cargados): revisar deudas saldadas + recordatorio.
+// Avisa de pagos próximos: fijos y cuotas con día de pago en los próximos 3
+// días. Una vez por (id+mes) para no repetir.
+function revisarPagosProximos() {
+  const mes = mesActual();
+  const hoy = new Date().getDate();
+  const KEY = "bolsillo.pagos-avisados";
+  let avisados: { mes: string; ids: string[] };
+  try {
+    avisados = JSON.parse(localStorage.getItem(KEY) ?? "null") ?? { mes, ids: [] };
+  } catch {
+    avisados = { mes, ids: [] };
+  }
+  if (avisados.mes !== mes) avisados = { mes, ids: [] }; // mes nuevo: reinicia
+  const set = new Set<string>(avisados.ids);
+  const enRango = (dia?: number) =>
+    typeof dia === "number" && dia - hoy >= 0 && dia - hoy <= 3;
+
+  // Gastos fijos (recurrentes de gasto activos este mes)
+  for (const r of f.recurrentes) {
+    if (r.signo !== "gasto") continue;
+    if (!(r.desde <= mes && (r.hasta === null || mes <= r.hasta))) continue;
+    if (enRango(r.diaPago) && !set.has("r" + r.id)) {
+      set.add("r" + r.id);
+      void notificar("Pago próximo", `${r.concepto} (${euro(r.importe)}) el día ${r.diaPago}.`);
+    }
+  }
+  // Cuotas de deudas activas
+  for (const d of f.deudas) {
+    if (estadoDeuda(d, mes).cuotaDelMes <= 0) continue;
+    if (enRango(d.diaPago) && !set.has("d" + d.id)) {
+      set.add("d" + d.id);
+      void notificar("Cuota próxima", `${d.concepto} (${euro(d.cuotaMensual)}) el día ${d.diaPago}.`);
+    }
+  }
+  localStorage.setItem(KEY, JSON.stringify({ mes, ids: [...set] }));
+}
+
+// Al desbloquear (datos ya cargados): deudas saldadas + recordatorios.
 watch(
   () => sesion.desbloqueado,
   (v) => {
     if (v) {
       revisarDeudasSaldadas();
       recordatorioMensual();
+      revisarPagosProximos();
     }
   },
   { immediate: true }

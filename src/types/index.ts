@@ -20,6 +20,7 @@ export interface Recurrente {
   categoria: string;
   desde: string; // "YYYY-MM" mes de alta
   hasta: string | null; // "YYYY-MM" mes de baja (incl.) o null = sin fin
+  diaPago?: number; // día del mes (1-31) para recordatorios; opcional
 }
 
 // Apunte puntual de un mes concreto.
@@ -62,6 +63,7 @@ export interface Deuda {
   cuotaMensual: number; // pago de cada mes
   pagadoInicial: number; // lo que ya llevabas pagado al registrarla
   inicioMes: string; // "YYYY-MM" desde cuando cuenta en la app
+  diaPago?: number; // día del mes (1-31) para recordatorios; opcional
 }
 
 // Estado de una deuda calculado para un mes concreto.

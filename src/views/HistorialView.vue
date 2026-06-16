@@ -10,6 +10,8 @@ import { useFinanzas } from '../stores/finanzas'
 import { euro, mesLegible } from '../utils/format'
 // Funciones de exportación (el archivo export.ts lo crea otro proceso en paralelo)
 import { exportarHistorialXLSX, exportarHistorialPDF } from '../utils/export'
+// Componente de resumen anual (KPIs del año más reciente del historial)
+import ResumenAnual from '../components/ResumenAnual.vue'
 
 // Tipo del resumen de cada mes (espejo del que devuelve la store)
 interface ResumenMes {
@@ -85,6 +87,9 @@ async function alExportarPDF(): Promise<void> {
 <template>
   <!-- Contenedor general de la vista -->
   <div class="space-y-5">
+    <!-- Resumen anual: KPIs del año más reciente, arriba del todo -->
+    <ResumenAnual :meses="finanzas.historial" class="mb-6 block" />
+
     <!-- Cabecera: título + botones de exportación -->
     <div class="flex items-center justify-between">
       <h1 class="font-display font-bold text-2xl text-ink">Historial</h1>
