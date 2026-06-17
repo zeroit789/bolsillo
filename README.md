@@ -51,7 +51,7 @@ It is built as a showcase / portfolio project, with production-grade attention t
 - **Quick-add templates** — save common entries as templates for one-tap logging.
 - **Reminders & native notifications** — upcoming payments, debt paid off, monthly reminder.
 - **Backups** — export / import all your data as a JSON file.
-- **Export to Excel (XLSX) and PDF** through the native save dialog.
+- **Export to Excel (XLSX), PDF and CSV** through the native save dialog.
 - **Light & dark theme.**
 - **Multilingual (English / Spanish)** — switch on the fly; the system language is detected on first launch.
 
@@ -72,7 +72,7 @@ Bolsillo is **100% offline**. There are no servers, no accounts, no telemetry �
 | **Styling** | Tailwind CSS 4 |
 | **State** | Pinia |
 | **Build** | Vite |
-| **Export** | ExcelJS (XLSX) · jsPDF (PDF) |
+| **Export** | ExcelJS (XLSX) · jsPDF (PDF) · CSV |
 | **Crypto** | Web Crypto (AES-GCM 256 + PBKDF2) |
 | **Package manager** | pnpm |
 
@@ -139,7 +139,7 @@ Está hecho como proyecto showcase / portfolio, con cuidado de nivel producción
 - **Plantillas de alta rápida** — guarda movimientos habituales como plantillas para registrarlos de un toque.
 - **Recordatorios y notificaciones nativas** — pagos próximos, deuda saldada, recordatorio mensual.
 - **Copias de seguridad** — exporta e importa todos tus datos en un archivo JSON.
-- **Exportación a Excel (XLSX) y PDF** con el diálogo de guardar nativo.
+- **Exportación a Excel (XLSX), PDF y CSV** con el diálogo de guardar nativo.
 - **Tema claro y oscuro.**
 - **Multilenguaje (español / inglés)** — conmutable en caliente; detecta el idioma del sistema en el primer arranque.
 
@@ -160,7 +160,7 @@ Bolsillo funciona **100% offline**. No hay servidores, ni cuentas, ni telemetrí
 | **Estilos** | Tailwind CSS 4 |
 | **Estado** | Pinia |
 | **Build** | Vite |
-| **Exportación** | ExcelJS (XLSX) · jsPDF (PDF) |
+| **Exportación** | ExcelJS (XLSX) · jsPDF (PDF) · CSV |
 | **Cifrado** | Web Crypto (AES-GCM 256 + PBKDF2) |
 | **Gestor de paquetes** | pnpm |
 
