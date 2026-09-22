@@ -1,0 +1,64 @@
+# Integración continua de Bolsillo (app de escritorio Tauri + Vue + TypeScript).
+# Se ejecuta en cada push y pull request a main:
+#   1. secretos  -> gitleaks sobre todo el historial
+#   2. frontend  -> comprobación de tipos (vue-tsc) y build de Vite
+# El proyecto aún no tiene linter ni tests; cuando existan, se añaden aquí.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Permisos mínimos: solo lectura del código
+permissions:
+  contents: read
+
+# Si llega un push nuevo a la misma rama, se cancela el run anterior
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --- 1. Secretos: binario oficial de gitleaks verificado por SHA256 ---------
+  secretos:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # historial completo para escanear todos los commits
+      - name: Instalar gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+      - name: Escanear historial
+        run: gitleaks git . --redact --no-banner
+
+  # --- 2. Frontend: tipos y build ---------------------------------------------
+  frontend:
+    name: Frontend (vue-tsc + Vite build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Tipos (vue-tsc)
+        run: pnpm exec vue-tsc --noEmit
+      - name: Build (Vite)
+        run: pnpm exec vite build
