@@ -1,22 +1,22 @@
 <script setup lang="ts">
 /* =============================================================================
- * PantallaBloqueo.vue — Lock screen / Pantalla de bloqueo
+ * PantallaBloqueo.vue — Pantalla de bloqueo / Lock screen
  * -----------------------------------------------------------------------------
- * EN: Lock screen shown on startup when the user enabled a PIN or password.
- *     It verifies the credential by trying to decrypt the stored data.
  * ES: Pantalla de bloqueo que aparece al arrancar si el usuario activó un PIN o
  *     contraseña. Verifica la credencial intentando descifrar los datos.
+ * EN: Lock screen shown on startup when the user enabled a PIN or password.
+ *     It verifies the credential by trying to decrypt the stored data.
  * -----------------------------------------------------------------------------
- * INDEX / ÍNDICE:
- *   1. Imports & stores / Importaciones y stores
- *   2. UI texts (i18n) / Textos de UI (i18n)
- *   3. Local state / Estado local
- *   4. Unlock action / Acción de desbloqueo
+ * ÍNDICE / INDEX:
+ *   1. Importaciones y stores / Imports & stores
+ *   2. Textos de UI (i18n) / UI texts (i18n)
+ *   3. Estado local / Local state
+ *   4. Acción de desbloqueo / Unlock action
  * ===========================================================================*/
 
-// ── 1. Imports & stores / Importaciones y stores ──────────────────────────────
-// EN: Vue reactivity + the session/settings stores + the i18n text helper.
+// ── 1. Importaciones y stores / Imports & stores ──────────────────────────────
 // ES: Reactividad de Vue + los stores de sesión/ajustes + el helper de i18n.
+// EN: Vue reactivity + the session/settings stores + the i18n text helper.
 import { ref, computed } from "vue";
 import { useSesion } from "../stores/sesion";
 import { useAjustes } from "../stores/ajustes";
@@ -25,9 +25,9 @@ import { crearT } from "../i18n";
 const sesion = useSesion();
 const ajustes = useAjustes();
 
-// ── 2. UI texts (i18n) / Textos de UI (i18n) ──────────────────────────────────
-// EN: Dictionary of the visible texts of the lock screen (ES/EN).
+// ── 2. Textos de UI (i18n) / UI texts (i18n) ──────────────────────────────────
 // ES: Diccionario de textos visibles de la pantalla de bloqueo (ES/EN).
+// EN: Dictionary of the visible texts of the lock screen (ES/EN).
 const t = crearT({
   introducePin: { es: "Introduce tu PIN", en: "Enter your PIN" },
   introducePassword: { es: "Introduce tu contraseña", en: "Enter your password" },
@@ -41,58 +41,58 @@ const t = crearT({
   },
 });
 
-// ── 3. Local state / Estado local ─────────────────────────────────────────────
-// EN: credencial = the typed PIN/password; cargando = true while verifying.
+// ── 3. Estado local / Local state ─────────────────────────────────────────────
 // ES: credencial = el PIN/contraseña tecleado; cargando = true mientras verifica.
+// EN: credencial = the typed PIN/password; cargando = true while verifying.
 const credencial = ref("");
 const cargando = ref(false);
 
-// EN: True when the configured lock type is a PIN (vs. password); drives the
-//     input mode, max length and placeholder in the template.
 // ES: True cuando el tipo de bloqueo configurado es PIN (vs. contraseña); decide
 //     el modo de entrada, longitud máxima y placeholder en la plantilla.
+// EN: True when the configured lock type is a PIN (vs. password); drives the
+//     input mode, max length and placeholder in the template.
 const esPin = computed(() => ajustes.bloqueoTipo === "pin");
 
-// ── 4. Unlock action / Acción de desbloqueo ───────────────────────────────────
-// EN: Verifies the credential by asking the session store to decrypt the data.
-//     Guard against re-entrancy: if a verification is already running, ignore
-//     repeated triggers (e.g. hammering Enter) so we never queue several
-//     unlock attempts at once. On failure it clears the input.
+// ── 4. Acción de desbloqueo / Unlock action ───────────────────────────────────
 // ES: Verifica la credencial pidiendo al store de sesión que descifre los datos.
 //     Guarda contra reentradas: si ya hay una verificación en curso, ignora
 //     disparos repetidos (p. ej. pulsar Enter varias veces) para no encolar
 //     varios intentos de desbloqueo a la vez. Si falla, limpia el input.
+// EN: Verifies the credential by asking the session store to decrypt the data.
+//     Guard against re-entrancy: if a verification is already running, ignore
+//     repeated triggers (e.g. hammering Enter) so we never queue several
+//     unlock attempts at once. On failure it clears the input.
 async function entrar() {
-  // EN: Re-entrancy guard: bail out while a previous attempt is still running.
   // ES: Guarda de reentrada: salir si un intento anterior sigue en curso.
+  // EN: Re-entrancy guard: bail out while a previous attempt is still running.
   if (cargando.value) return;
-  // EN: Nothing typed yet → do nothing. / ES: Nada tecleado aún → no hacer nada.
+  // ES: Nada tecleado aún → no hacer nada. / EN: Nothing typed yet → do nothing.
   if (!credencial.value) return;
   cargando.value = true;
   await sesion.desbloquear(credencial.value);
   cargando.value = false;
-  // EN: Clear the field if the credential was wrong.
   // ES: Limpia el campo si la credencial era incorrecta.
+  // EN: Clear the field if the credential was wrong.
   if (!sesion.desbloqueado) credencial.value = "";
 }
 </script>
 
 <template>
-  <!-- EN: Full-screen centered lock card / ES: Tarjeta de bloqueo centrada a pantalla completa -->
+  <!-- ES: Tarjeta de bloqueo centrada a pantalla completa / EN: Full-screen centered lock card -->
   <div class="min-h-screen flex items-center justify-center bg-base p-6">
     <div class="w-full max-w-xs text-center">
-      <!-- EN: Logo / ES: Logo -->
+      <!-- ES: Logo / EN: Logo -->
       <h1 class="font-display text-3xl font-extrabold mb-1">
         Bolsillo<span class="text-brand">.</span>
       </h1>
-      <!-- EN: Prompt: PIN or password depending on the lock type -->
       <!-- ES: Indicación: PIN o contraseña según el tipo de bloqueo -->
+      <!-- EN: Prompt: PIN or password depending on the lock type -->
       <p class="text-muted text-sm mb-6">
         {{ esPin ? t("introducePin") : t("introducePassword") }}
       </p>
 
-      <!-- EN: Credential input; Enter triggers the unlock action -->
       <!-- ES: Input de credencial; Enter dispara la acción de desbloqueo -->
+      <!-- EN: Credential input; Enter triggers the unlock action -->
       <input
         v-model="credencial"
         type="password"
@@ -104,11 +104,11 @@ async function entrar() {
         @keyup.enter="entrar"
       />
 
-      <!-- EN: Error message (e.g. wrong credential) / ES: Mensaje de error (p. ej. credencial incorrecta) -->
+      <!-- ES: Mensaje de error (p. ej. credencial incorrecta) / EN: Error message (e.g. wrong credential) -->
       <p v-if="sesion.error" class="text-danger text-sm mt-3">{{ t(sesion.error) }}</p>
 
-      <!-- EN: Unlock button; disabled while loading or with empty field -->
       <!-- ES: Botón de desbloqueo; deshabilitado mientras carga o con campo vacío -->
+      <!-- EN: Unlock button; disabled while loading or with empty field -->
       <button
         class="mt-5 w-full rounded-lg bg-brand px-4 py-2.5 text-white font-medium hover:bg-brand-soft transition-colors disabled:opacity-50"
         :disabled="cargando || !credencial"
@@ -117,7 +117,7 @@ async function entrar() {
         {{ cargando ? t("comprobando") : t("desbloquear") }}
       </button>
 
-      <!-- EN: Reassurance: data is encrypted locally / ES: Tranquilidad: los datos están cifrados localmente -->
+      <!-- ES: Tranquilidad: los datos están cifrados localmente / EN: Reassurance: data is encrypted locally -->
       <p class="text-faint text-xs mt-6">{{ t("datosCifrados") }}</p>
     </div>
   </div>
