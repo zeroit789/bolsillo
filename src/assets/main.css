@@ -1,37 +1,43 @@
 /* ===========================================================================
-   Estilos globales de Bolsillo — Tailwind CSS v4 + tema dark propio.
-   Con Tailwind v4 el tema se define con @theme: cada variable genera
-   utilidades (p.ej. --color-brand -> bg-brand, text-brand, border-brand...).
-   Paleta y fuentes tomadas de la spec original de la app.
+   main.css — Estilos globales / Global styles
+   ---------------------------------------------------------------------------
+   ES: Estilos globales de Bolsillo — Tailwind CSS v4 + tema dark propio.
+       Con Tailwind v4 el tema se define con @theme: cada variable genera
+       utilidades (p.ej. --color-brand -> bg-brand, text-brand, border-brand...).
+       Paleta y fuentes tomadas de la spec original de la app.
+   EN: Bolsillo global styles — Tailwind CSS v4 + a custom dark theme.
+       With Tailwind v4 the theme is defined with @theme: each variable creates
+       utilities (e.g. --color-brand -> bg-brand, text-brand, border-brand...).
+       Palette and fonts taken from the app's original spec.
    =========================================================================== */
 @import "tailwindcss";
 
 @theme {
-  /* Superficies (de más oscuro a más claro) */
-  --color-base: #0a0b0e; /* fondo de la ventana */
-  --color-surface: #111318; /* tarjetas */
-  --color-surface-2: #181b22; /* tarjetas elevadas / inputs */
-  --color-border: #23262f; /* bordes sutiles */
+  /* ES: Superficies (de más oscuro a más claro) / EN: Surfaces (darkest to lightest) */
+  --color-base: #0a0b0e; /* ES: fondo de la ventana / EN: window background */
+  --color-surface: #111318; /* ES: tarjetas / EN: cards */
+  --color-surface-2: #181b22; /* ES: tarjetas elevadas / inputs / EN: raised cards / inputs */
+  --color-border: #23262f; /* ES: bordes sutiles / EN: subtle borders */
 
-  /* Acentos */
-  --color-brand: #7c6af7; /* púrpura — acento principal */
+  /* ES: Acentos / EN: Accents */
+  --color-brand: #7c6af7; /* ES: púrpura — acento principal / EN: purple — main accent */
   --color-brand-soft: #9a8cf9;
-  --color-cyan: #4fc4cf; /* cian — datos/info */
-  --color-ok: #52d67a; /* verde — ingresos / pagado */
-  --color-warn: #f7c948; /* amarillo — pendiente */
-  --color-danger: #f76a6a; /* rojo — gastos */
+  --color-cyan: #4fc4cf; /* ES: cian — datos/info / EN: cyan — data/info */
+  --color-ok: #52d67a; /* ES: verde — ingresos / pagado / EN: green — income / paid */
+  --color-warn: #f7c948; /* ES: amarillo — pendiente / EN: yellow — pending */
+  --color-danger: #f76a6a; /* ES: rojo — gastos / EN: red — expenses */
 
-  /* Texto */
-  --color-ink: #e8e9ee; /* texto principal */
-  --color-muted: #9aa0ac; /* texto secundario */
-  --color-faint: #5b606b; /* texto tenue */
+  /* ES: Texto / EN: Text */
+  --color-ink: #e8e9ee; /* ES: texto principal / EN: main text */
+  --color-muted: #9aa0ac; /* ES: texto secundario / EN: secondary text */
+  --color-faint: #5b606b; /* ES: texto tenue / EN: faint text */
 
-  /* Tipografía */
-  --font-display: "Syne", system-ui, sans-serif; /* titulares */
-  --font-sans: "DM Sans", system-ui, sans-serif; /* cuerpo */
+  /* ES: Tipografía / EN: Typography */
+  --font-display: "Syne", system-ui, sans-serif; /* ES: titulares / EN: headings */
+  --font-sans: "DM Sans", system-ui, sans-serif; /* ES: cuerpo / EN: body */
 }
 
-/* Reset/base mínimos */
+/* ES: Reset/base mínimos / EN: Minimal reset/base */
 html,
 body,
 #app {
@@ -47,7 +53,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Scrollbar fina y oscura, acorde al tema */
+/* ES: Scrollbar fina y oscura, acorde al tema / EN: Thin, dark scrollbar matching the theme */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
@@ -61,29 +67,35 @@ body {
   border-radius: 6px;
 }
 
-/* Evita seleccionar texto de la UI sin querer (sensación de app nativa) */
+/* ES: Evita seleccionar texto de la UI sin querer (sensación de app nativa) / EN: Prevents accidental UI text selection (native-app feel) */
 .no-select {
   user-select: none;
 }
 
-/* ── TEMA CLARO ──────────────────────────────────────────────────────────
-   Cuando <html> lleva la clase .tema-claro, redefinimos las variables de
-   color. Como las utilidades de Tailwind v4 usan var(--color-*), toda la UI
-   cambia de golpe a la versión clara. Pensado para quien prefiere fondo blanco. */
+/* ── TEMA CLARO / LIGHT THEME ────────────────────────────────────────────
+   ES: Cuando <html> lleva la clase .tema-claro, redefinimos las variables de
+       color. Como las utilidades de Tailwind v4 usan var(--color-*), toda la UI
+       cambia de golpe a la versión clara. Pensado para quien prefiere fondo
+       blanco.
+   EN: When <html> has the .tema-claro class, the color variables are redefined.
+       Since Tailwind v4 utilities use var(--color-*), the whole UI switches to
+       the light version at once. Meant for people who prefer a white background. */
 html.tema-claro {
-  /* Tonos un poco más marcados que un blanco lavado, para que las tarjetas y los
-     bordes se distingan mejor y el texto tenga más contraste. */
-  --color-base: #e6e8ef; /* fondo gris claro (no casi blanco) */
-  --color-surface: #f7f8fb; /* tarjetas */
-  --color-surface-2: #dce0e9; /* inputs / elevado */
-  --color-border: #c2c8d4; /* bordes más visibles */
+  /* ES: Tonos un poco más marcados que un blanco lavado, para que las tarjetas y
+         los bordes se distingan mejor y el texto tenga más contraste.
+     EN: Slightly stronger tones than a washed-out white, so cards and borders
+         stand out better and text has more contrast. */
+  --color-base: #e6e8ef; /* ES: fondo gris claro (no casi blanco) / EN: light grey background (not near-white) */
+  --color-surface: #f7f8fb; /* ES: tarjetas / EN: cards */
+  --color-surface-2: #dce0e9; /* ES: inputs / elevado / EN: inputs / raised */
+  --color-border: #c2c8d4; /* ES: bordes más visibles / EN: more visible borders */
   --color-brand: #6a4ff0;
   --color-brand-soft: #5a3fe0;
   --color-cyan: #1f8c96;
   --color-ok: #2a9c53;
   --color-warn: #b9870f;
   --color-danger: #d83f41;
-  --color-ink: #13151b; /* texto principal más oscuro */
-  --color-muted: #474c57; /* secundario más oscuro */
+  --color-ink: #13151b; /* ES: texto principal más oscuro / EN: darker main text */
+  --color-muted: #474c57; /* ES: secundario más oscuro / EN: darker secondary text */
   --color-faint: #767c88;
 }

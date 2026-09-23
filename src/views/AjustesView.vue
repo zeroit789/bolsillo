@@ -1,25 +1,25 @@
 <script setup lang="ts">
 /* =============================================================================
- * AjustesView.vue — Settings screen / Pantalla de Ajustes
+ * AjustesView.vue — Pantalla de Ajustes / Settings screen
  * -----------------------------------------------------------------------------
- * EN: Settings view of Bolsillo. Four cards: Appearance (theme/currency/language),
- *     Security (open lock with PIN or password + change credential), Backup
- *     (export/import a .json) and Custom categories. It never touches the disk
- *     directly: it delegates persistence to the Pinia stores (ajustes/sesion/
- *     finanzas) and to the categorias data module (localStorage).
  * ES: Vista de Ajustes de Bolsillo. Cuatro tarjetas: Apariencia (tema/moneda/
  *     idioma), Seguridad (bloqueo al abrir con PIN o contraseña + cambiar
  *     credencial), Copia (exportar/importar un .json) y Categorías propias.
  *     No toca disco directamente: delega la persistencia en los stores de Pinia
  *     (ajustes/sesion/finanzas) y en el módulo de datos categorias (localStorage).
+ * EN: Settings view of Bolsillo. Four cards: Appearance (theme/currency/language),
+ *     Security (open lock with PIN or password + change credential), Backup
+ *     (export/import a .json) and Custom categories. It never touches the disk
+ *     directly: it delegates persistence to the Pinia stores (ajustes/sesion/
+ *     finanzas) and to the categorias data module (localStorage).
  * -----------------------------------------------------------------------------
- * INDEX / ÍNDICE:
- *   1. Stores & translations / Stores y traducciones
- *   2. Appearance (theme/currency/language) / Apariencia (tema/moneda/idioma)
- *   3. Security: enable/disable lock / Seguridad: activar/quitar bloqueo
- *   4. Change credential / Cambiar credencial
- *   5. Backup: export/import (.json) / Copia: exportar/importar (.json)
- *   6. Custom categories / Categorías personalizadas
+ * ÍNDICE / INDEX:
+ *   1. Stores y traducciones / Stores & translations
+ *   2. Apariencia (tema/moneda/idioma) / Appearance (theme/currency/language)
+ *   3. Seguridad: activar/quitar bloqueo / Security: enable/disable lock
+ *   4. Cambiar credencial / Change credential
+ *   5. Copia: exportar/importar (.json) / Backup: export/import (.json)
+ *   6. Categorías personalizadas / Custom categories
  * ===========================================================================*/
 import { ref, computed, watch } from "vue";
 import { useAjustes } from "../stores/ajustes";
@@ -34,31 +34,33 @@ import {
 } from "../data/categorias";
 import { crearT } from "../i18n";
 
-// ── 1. Stores & translations / Stores y traducciones ─────────────────────────
-// EN: Pinia stores used by this view. ajustes = preferences (theme/currency/
-//     language), sesion = lock/encryption + import of data, finanzas = the
-//     financial data snapshot used by the backup.
+// ── 1. Stores y traducciones / Stores & translations ─────────────────────────
 // ES: Stores de Pinia que usa esta vista. ajustes = preferencias (tema/moneda/
 //     idioma), sesion = bloqueo/cifrado + importación de datos, finanzas = el
 //     snapshot de datos financieros que usa la copia de seguridad.
+// EN: Pinia stores used by this view. ajustes = preferences (theme/currency/
+//     language), sesion = lock/encryption + import of data, finanzas = the
+//     financial data snapshot used by the backup.
 const ajustes = useAjustes();
 const sesion = useSesion();
 const finanzas = useFinanzas();
 
 /* ---------------------------------------------------------------------------
    TRADUCCIONES (ES/EN) / TRANSLATIONS (ES/EN)
-   EN: Gathers every visible string of the view. Reading `ajustes.idioma`
-       (reactive) makes the UI re-render itself when the language changes.
-       Not translated: category names (data) and currency/ISO codes.
    ES: Reúne todos los textos visibles de la vista. Al leer `ajustes.idioma`
        (reactivo) la UI se re-renderiza sola al cambiar el idioma.
        No se traducen: nombres de categorías (datos), monedas/códigos ISO.
+   EN: Gathers every visible string of the view. Reading `ajustes.idioma`
+       (reactive) makes the UI re-render itself when the language changes.
+       Not translated: category names (data) and currency/ISO codes.
    --------------------------------------------------------------------------- */
 const t = crearT({
-  // Título general de la vista
+  // ES: Título general de la vista
+  // EN: General title of the view
   tituloVista: { es: "Ajustes", en: "Settings" },
 
-  // Sección 1 — Apariencia
+  // ES: Sección 1 — Apariencia
+  // EN: Section 1 — Appearance
   apariencia: { es: "Apariencia", en: "Appearance" },
   aparienciaDesc: {
     es: "Elige el tema de la app. El modo oscuro cansa menos la vista cuando trabajas de noche.",
@@ -71,7 +73,8 @@ const t = crearT({
     es: "Moneda en la que se muestran los importes.",
     en: "Currency in which amounts are shown.",
   },
-  // Bloque de idioma
+  // ES: Bloque de idioma
+  // EN: Language block
   idioma: { es: "Idioma", en: "Language" },
   idiomaEspanol: { es: "Español", en: "Spanish" },
   idiomaIngles: { es: "English", en: "English" },
@@ -80,7 +83,8 @@ const t = crearT({
     en: "Language of the app interface.",
   },
 
-  // Sección 2 — Seguridad
+  // ES: Sección 2 — Seguridad
+  // EN: Section 2 — Security
   seguridad: { es: "Seguridad", en: "Security" },
   seguridadDesc: {
     es: "Protege la app con un bloqueo al abrir. Los datos se guardan cifrados; si olvidas la credencial no se pueden recuperar.",
@@ -107,11 +111,13 @@ const t = crearT({
   phNuevaPassword: { es: "Nueva contraseña", en: "New password" },
   phRepetirNueva: { es: "Repetir nueva credencial", en: "Repeat new credential" },
   cambiar: { es: "Cambiar", en: "Change" },
-  // Etiquetas legibles del tipo de bloqueo activo
+  // ES: Etiquetas legibles del tipo de bloqueo activo
+  // EN: Readable labels for the active lock type
   tipoActivoPin: { es: "PIN", en: "PIN" },
   tipoActivoPassword: { es: "Contraseña", en: "Password" },
 
-  // Sección 3 — Copia de seguridad
+  // ES: Sección 3 — Copia de seguridad
+  // EN: Section 3 — Backup
   copia: { es: "Copia de seguridad", en: "Backup" },
   copiaDesc: {
     es: "Exporta todos tus datos a un fichero .json para guardarlo a salvo, o impórtalo para restaurarlos en este u otro equipo.",
@@ -124,7 +130,8 @@ const t = crearT({
     en: "Importing replaces all current data. We'll ask for confirmation first.",
   },
 
-  // Sección 4 — Categorías personalizadas
+  // ES: Sección 4 — Categorías personalizadas
+  // EN: Section 4 — Custom categories
   categorias: { es: "Categorías", en: "Categories" },
   categoriasDesc: {
     es: 'Crea tus propias categorías. Aparecerán en el desplegable al añadir un movimiento, dentro del grupo "Personalizadas".',
@@ -138,7 +145,8 @@ const t = crearT({
     en: "You haven't created any custom categories yet.",
   },
 
-  // Mensajes mostrados al usuario (validación / éxito / error)
+  // ES: Mensajes mostrados al usuario (validación / éxito / error)
+  // EN: Messages shown to the user (validation / success / error)
   errPinFormato: {
     es: "El PIN debe tener entre 4 y 6 dígitos (solo números).",
     en: "The PIN must be 4 to 6 digits long (numbers only).",
@@ -212,15 +220,15 @@ const t = crearT({
   errCategoriaExiste: { es: "Esa categoría ya existe.", en: "That category already exists." },
 });
 
-// ── 2. Appearance (theme/currency/language) / Apariencia (tema/moneda/idioma) ─
-// EN: Sets the theme straight from the store (it persists and applies itself).
+// ── 2. Apariencia (tema/moneda/idioma) / Appearance (theme/currency/language) ─
 // ES: Cambia el tema directamente desde el store (persiste y aplica solo).
+// EN: Sets the theme straight from the store (it persists and applies itself).
 function elegirTema(t: "claro" | "oscuro") {
   ajustes.setTema(t);
 }
 
-// EN: Currencies offered by the selector (ISO code + readable label).
 // ES: Monedas disponibles para el selector (código ISO + etiqueta legible).
+// EN: Currencies offered by the selector (ISO code + readable label).
 const MONEDAS: { codigo: string; etiqueta: string }[] = [
   { codigo: "EUR", etiqueta: "Euro (€)" },
   { codigo: "USD", etiqueta: "Dólar estadounidense ($)" },
@@ -232,66 +240,66 @@ const MONEDAS: { codigo: string; etiqueta: string }[] = [
   { codigo: "BRL", etiqueta: "Real brasileño" },
 ];
 
-// ── 3. Security: enable/disable lock / Seguridad: activar/quitar bloqueo ──────
-// EN: Credential type chosen in the enable form.
+// ── 3. Seguridad: activar/quitar bloqueo / Security: enable/disable lock ──────
 // ES: Tipo de credencial elegido en el formulario de activación.
+// EN: Credential type chosen in the enable form.
 const tipoBloqueo = ref<"pin" | "password">("pin");
-// EN: Form fields: the credential and its repetition for confirmation.
 // ES: Campos del formulario: credencial y su repetición para confirmar.
+// EN: Form fields: the credential and its repetition for confirmation.
 const credencial = ref("");
 const credencialRepetir = ref("");
-// EN: Feedback messages (success / error) of the security section.
 // ES: Mensajes de feedback (éxito / error) de la sección de seguridad.
+// EN: Feedback messages (success / error) of the security section.
 const mensajeSeguridad = ref("");
-const errorSeguridad = ref(""); // EN: text here -> painted red / ES: con texto -> se pinta en rojo
+const errorSeguridad = ref(""); // ES: con texto -> se pinta en rojo / EN: text here -> painted red
 
-// EN: PIN validation regex: digits only, 4 to 6 long.
 // ES: Regex de validación del PIN: solo dígitos, entre 4 y 6.
+// EN: PIN validation regex: digits only, 4 to 6 long.
 const REGEX_PIN = /^\d{4,6}$/;
 
-// EN: Readable label of the active lock type (shown when a lock already exists).
 // ES: Etiqueta legible del tipo de bloqueo activo (para mostrarlo cuando ya existe).
+// EN: Readable label of the active lock type (shown when a lock already exists).
 const etiquetaTipoActivo = computed(() =>
   ajustes.bloqueoTipo === "pin" ? t("tipoActivoPin") : t("tipoActivoPassword")
 );
 
-// EN: Enables the lock, validating according to the chosen type.
 // ES: Activa el bloqueo validando según el tipo elegido.
+// EN: Enables the lock, validating according to the chosen type.
 async function activarBloqueo() {
-  // EN: Clear previous messages before validating. / ES: Limpia mensajes previos antes de validar.
+  // ES: Limpia mensajes previos antes de validar. / EN: Clear previous messages before validating.
   mensajeSeguridad.value = "";
   errorSeguridad.value = "";
 
   const cred = credencial.value;
   const rep = credencialRepetir.value;
 
-  // EN: Validation by selected type. / ES: Validación según el tipo seleccionado.
+  // ES: Validación según el tipo seleccionado. / EN: Validation by selected type.
   if (tipoBloqueo.value === "pin") {
-    // EN: PIN: digits only, min 4 max 6. / ES: PIN: solo dígitos, mínimo 4 y máximo 6.
+    // ES: PIN: solo dígitos, mínimo 4 y máximo 6. / EN: PIN: digits only, min 4 max 6.
     if (!REGEX_PIN.test(cred)) {
       errorSeguridad.value = t("errPinFormato");
       return;
     }
   } else {
-    // EN: Password: free text, at least 4 chars. / ES: Contraseña: libre, mínimo 4 caracteres.
+    // ES: Contraseña: libre, mínimo 4 caracteres. / EN: Password: free text, at least 4 chars.
     if (cred.length < 4) {
       errorSeguridad.value = t("errPasswordCorta");
       return;
     }
   }
 
-  // EN: Both boxes must match. / ES: Las dos casillas deben coincidir.
+  // ES: Las dos casillas deben coincidir. / EN: Both boxes must match.
   if (cred !== rep) {
     errorSeguridad.value =
       tipoBloqueo.value === "pin" ? t("errPinNoCoincide") : t("errPasswordNoCoincide");
     return;
   }
 
-  // EN: All good: configure the lock (enables it and re-encrypts the data).
   // ES: Todo correcto: configura el bloqueo (activa y re-cifra los datos).
+  // EN: All good: configure the lock (enables it and re-encrypts the data).
   try {
     await sesion.configurarBloqueo(tipoBloqueo.value, cred);
-    // EN: Clear the form and report success. / ES: Limpia el formulario y avisa del éxito.
+    // ES: Limpia el formulario y avisa del éxito. / EN: Clear the form and report success.
     credencial.value = "";
     credencialRepetir.value = "";
     mensajeSeguridad.value = t("okBloqueoActivado");
@@ -300,8 +308,8 @@ async function activarBloqueo() {
   }
 }
 
-// EN: Removes the lock and goes back to obfuscation-based storage.
 // ES: Quita el bloqueo y vuelve al guardado por ofuscación.
+// EN: Removes the lock and goes back to obfuscation-based storage.
 async function desactivarBloqueo() {
   mensajeSeguridad.value = "";
   errorSeguridad.value = "";
@@ -313,17 +321,17 @@ async function desactivarBloqueo() {
   }
 }
 
-// ── 4. Change credential / Cambiar credencial ────────────────────────────────
-// EN: Fields to change the credential (current + new + repeat) and feedback.
+// ── 4. Cambiar credencial / Change credential ────────────────────────────────
 // ES: Campos para cambiar la credencial (actual + nueva + repetir) y feedback.
+// EN: Fields to change the credential (current + new + repeat) and feedback.
 const credActual = ref("");
 const credNueva = ref("");
 const credNuevaRep = ref("");
 const tipoNuevo = ref<"pin" | "password">(ajustes.bloqueoTipo ?? "pin");
-// EN: Keep the "new type" selector in sync with the active lock type, so opening
-//     "change credential" with a password set validates as password, not as PIN.
 // ES: Mantén el selector de "tipo nuevo" sincronizado con el tipo de bloqueo activo,
 //     para que abrir "cambiar credencial" con contraseña valide como contraseña, no PIN.
+// EN: Keep the "new type" selector in sync with the active lock type, so opening
+//     "change credential" with a password set validates as password, not as PIN.
 watch(
   () => ajustes.bloqueoTipo,
   (tipo) => {
@@ -333,8 +341,8 @@ watch(
 const mensajeCambio = ref("");
 const errorCambio = ref("");
 
-// EN: Validates current+new credential and asks the store to change it.
 // ES: Valida la credencial actual+nueva y pide al store que la cambie.
+// EN: Validates current+new credential and asks the store to change it.
 async function cambiarCred() {
   mensajeCambio.value = "";
   errorCambio.value = "";
@@ -371,40 +379,40 @@ async function cambiarCred() {
   mensajeCambio.value = t("okCredActualizada");
 }
 
-// ── 5. Backup: export/import (.json) / Copia: exportar/importar (.json) ───────
-// EN: Feedback messages of the backup section. / ES: Mensajes de feedback de la sección de copia.
+// ── 5. Copia: exportar/importar (.json) / Backup: export/import (.json) ───────
+// ES: Mensajes de feedback de la sección de copia. / EN: Feedback messages of the backup section.
 const mensajeCopia = ref("");
 const errorCopia = ref("");
-// EN: Reference to the hidden file input triggered by the "Import" button.
 // ES: Referencia al input file oculto que dispara el botón "Importar".
+// EN: Reference to the hidden file input triggered by the "Import" button.
 const inputFichero = ref<HTMLInputElement | null>(null);
 
-// EN: Exports all data to a .json and forces its download.
 // ES: Exporta todos los datos a un .json y fuerza su descarga.
+// EN: Exports all data to a .json and forces its download.
 function exportarCopia() {
   mensajeCopia.value = "";
   errorCopia.value = "";
   try {
-    // EN: Serialize the full readable snapshot (2-space indent). Custom
-    //     categories are included too (they live outside the encryption).
     // ES: Serializa el snapshot completo legible (indentado a 2 espacios).
     //     Incluye también las categorías personalizadas (viven fuera del cifrado).
+    // EN: Serialize the full readable snapshot (2-space indent). Custom
+    //     categories are included too (they live outside the encryption).
     const json = JSON.stringify(
       { ...finanzas.snapshot(), categoriasCustom: categoriasCustom() },
       null,
       2
     );
-    // EN: Build a text blob and a temporary URL to download it.
     // ES: Crea un blob de texto y una URL temporal para descargarlo.
+    // EN: Build a text blob and a temporary URL to download it.
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    // EN: Invisible link that is "clicked" to launch the download.
     // ES: Enlace invisible que se "pulsa" para lanzar la descarga.
+    // EN: Invisible link that is "clicked" to launch the download.
     const a = document.createElement("a");
     a.href = url;
     a.download = "bolsillo-backup.json";
     a.click();
-    // EN: Release the temporary URL so memory isn't leaked. / ES: Libera la URL temporal para no acumular memoria.
+    // ES: Libera la URL temporal para no acumular memoria. / EN: Release the temporary URL so memory isn't leaked.
     URL.revokeObjectURL(url);
     mensajeCopia.value = t("okCopiaExportada");
   } catch {
@@ -412,71 +420,71 @@ function exportarCopia() {
   }
 }
 
-// EN: Opens the file picker (the input is hidden). / ES: Abre el selector de fichero (el input está oculto).
+// ES: Abre el selector de fichero (el input está oculto). / EN: Opens the file picker (the input is hidden).
 function pedirImportar() {
   inputFichero.value?.click();
 }
 
-// EN: Reads the chosen file, validates the JSON and hydrates the finances.
 // ES: Lee el fichero elegido, valida el JSON e hidrata las finanzas.
+// EN: Reads the chosen file, validates the JSON and hydrates the finances.
 function importarCopia(evento: Event) {
   mensajeCopia.value = "";
   errorCopia.value = "";
 
-  // EN: Get the selected file from the input. / ES: Recupera el fichero seleccionado del input.
+  // ES: Recupera el fichero seleccionado del input. / EN: Get the selected file from the input.
   const input = evento.target as HTMLInputElement;
   const fichero = input.files?.[0];
   if (!fichero) return;
 
-  // EN: Read the file contents as text. / ES: Lee el contenido del fichero como texto.
+  // ES: Lee el contenido del fichero como texto. / EN: Read the file contents as text.
   const lector = new FileReader();
   lector.onload = async () => {
     try {
-      // EN: Parse the JSON and deeply validate the shape (each item), not just arrays.
       // ES: Parsea el JSON y valida a fondo la forma (cada item), no solo los arrays.
+      // EN: Parse the JSON and deeply validate the shape (each item), not just arrays.
       const datos = JSON.parse(String(lector.result));
       if (!esDatosValidos(datos)) {
         errorCopia.value = t("errCopiaInvalida");
         return;
       }
 
-      // EN: Confirm before overwriting the current data. / ES: Confirma antes de sobrescribir los datos actuales.
+      // ES: Confirma antes de sobrescribir los datos actuales. / EN: Confirm before overwriting the current data.
       if (!confirm(t("confirmImportar"))) {
         return;
       }
 
-      // EN: Restore the backup's custom categories (if it brings any).
       // ES: Restaura las categorías personalizadas de la copia (si las trae).
+      // EN: Restore the backup's custom categories (if it brings any).
       const custom = (datos as { categoriasCustom?: unknown }).categoriasCustom;
       if (Array.isArray(custom)) {
         setCategoriasCustom(custom as string[]);
         refrescarCategorias();
       }
 
-      // EN: Import and PERSIST in a guaranteed way (with await, not relying on the watch).
-      //     The store now throws Error("copia-invalida") if the backup is not valid,
-      //     so it is caught below to show the right "invalid backup" message.
       // ES: Importa y PERSISTE de forma garantizada (con await, no depende del watch).
       //     El store ahora lanza Error("copia-invalida") si la copia no es válida,
       //     así que se captura abajo para mostrar el mensaje correcto de "copia inválida".
+      // EN: Import and PERSIST in a guaranteed way (with await, not relying on the watch).
+      //     The store now throws Error("copia-invalida") if the backup is not valid,
+      //     so it is caught below to show the right "invalid backup" message.
       await sesion.importarDatos(datos);
       mensajeCopia.value = t("okCopiaImportada");
     } catch (e) {
-      // EN: Distinguish the store's "invalid backup" signal from a JSON parse error
-      //     so the user sees the precise reason instead of a generic "invalid JSON".
       // ES: Distingue la señal "copia-invalida" del store de un fallo de parseo JSON
       //     para que el usuario vea el motivo exacto en vez de un genérico "JSON inválido".
+      // EN: Distinguish the store's "invalid backup" signal from a JSON parse error
+      //     so the user sees the precise reason instead of a generic "invalid JSON".
       if (e instanceof Error && e.message === "copia-invalida") {
         errorCopia.value = t("errCopiaInvalida");
       } else {
         errorCopia.value = t("errCopiaLeerJson");
       }
     } finally {
-      // EN: Reset the input so the same file can be chosen again. / ES: Resetea el input para poder volver a elegir el mismo fichero.
+      // ES: Resetea el input para poder volver a elegir el mismo fichero. / EN: Reset the input so the same file can be chosen again.
       input.value = "";
     }
   };
-  // EN: Error reading the file itself. / ES: Error de lectura del propio fichero.
+  // ES: Error de lectura del propio fichero. / EN: Error reading the file itself.
   lector.onerror = () => {
     errorCopia.value = t("errCopiaLeer");
     input.value = "";
@@ -484,51 +492,51 @@ function importarCopia(evento: Event) {
   lector.readAsText(fichero);
 }
 
-// ── 6. Custom categories / Categorías personalizadas ─────────────────────────
-// EN: The user can create/delete their own categories. They are stored in
-//     localStorage (non-reactive), so we keep a local copy in a ref that we
-//     refresh manually after each change.
+// ── 6. Categorías personalizadas / Custom categories ─────────────────────────
 // ES: El usuario puede crear/eliminar sus propias categorías. Se guardan en
 //     localStorage (no reactivo), así que mantenemos una copia local en un ref
 //     que refrescamos manualmente tras cada cambio.
-// EN: Reactive local copy of the custom categories (initial state read from localStorage).
+// EN: The user can create/delete their own categories. They are stored in
+//     localStorage (non-reactive), so we keep a local copy in a ref that we
+//     refresh manually after each change.
 // ES: Copia local reactiva de las categorías personalizadas (estado inicial leído de localStorage).
+// EN: Reactive local copy of the custom categories (initial state read from localStorage).
 const categoriasPropias = ref<string[]>(categoriasCustom());
-// EN: Input text to create a new category. / ES: Texto del input para crear una categoría nueva.
+// ES: Texto del input para crear una categoría nueva. / EN: Input text to create a new category.
 const nuevaCategoria = ref("");
-// EN: Feedback message of the section. / ES: Mensajes de feedback de la sección.
+// ES: Mensajes de feedback de la sección. / EN: Feedback message of the section.
 const errorCategoria = ref("");
 
-// EN: Refreshes the local copy from localStorage after add/delete.
 // ES: Refresca la copia local desde localStorage tras añadir/eliminar.
+// EN: Refreshes the local copy from localStorage after add/delete.
 function refrescarCategorias(): void {
   categoriasPropias.value = categoriasCustom();
 }
 
-// EN: Adds the category typed in the input. / ES: Añade la categoría escrita en el input.
+// ES: Añade la categoría escrita en el input. / EN: Adds the category typed in the input.
 function anadirCategoria(): void {
   errorCategoria.value = "";
   const limpio = nuevaCategoria.value.trim();
-  // EN: Minimal validation: not empty. / ES: Validación mínima: no vacío.
+  // ES: Validación mínima: no vacío. / EN: Minimal validation: not empty.
   if (!limpio) {
     errorCategoria.value = t("errCategoriaVacia");
     return;
   }
-  // EN: Warn if it already exists (base or custom) before trying to save.
   // ES: Avisa si ya existe (base o personalizada) antes de intentar guardar.
+  // EN: Warn if it already exists (base or custom) before trying to save.
   if (categoriasPropias.value.includes(limpio)) {
     errorCategoria.value = t("errCategoriaExiste");
     return;
   }
-  // EN: Delegate normalization and saving to the data-module function.
   // ES: Delega la normalización y guardado en la función del módulo de datos.
+  // EN: Delegate normalization and saving to the data-module function.
   agregarCategoriaCustom(limpio);
   refrescarCategorias();
-  // EN: Clear the input for the next one. / ES: Limpia el input para la siguiente.
+  // ES: Limpia el input para la siguiente. / EN: Clear the input for the next one.
   nuevaCategoria.value = "";
 }
 
-// EN: Deletes a custom category by name. / ES: Elimina una categoría personalizada por nombre.
+// ES: Elimina una categoría personalizada por nombre. / EN: Deletes a custom category by name.
 function quitarCategoria(nombre: string): void {
   errorCategoria.value = "";
   eliminarCategoriaCustom(nombre);
@@ -537,14 +545,14 @@ function quitarCategoria(nombre: string): void {
 </script>
 
 <template>
-  <!-- EN: Settings view container. / ES: Contenedor de la vista de ajustes. -->
+  <!-- ES: Contenedor de la vista de ajustes. / EN: Settings view container. -->
   <div class="space-y-5">
-    <!-- EN: View title. / ES: Título de la vista. -->
+    <!-- ES: Título de la vista. / EN: View title. -->
     <h1 class="font-display text-2xl font-bold text-ink">{{ t("tituloVista") }}</h1>
 
     <!-- =====================================================================
-         EN: SECTION — Appearance (theme / currency / language)
          ES: SECCIÓN — Apariencia (tema / moneda / idioma)
+         EN: SECTION — Appearance (theme / currency / language)
          ===================================================================== -->
     <section class="rounded-2xl bg-surface border border-border p-5">
       <h2 class="font-display font-bold text-lg text-ink">{{ t("apariencia") }}</h2>
@@ -552,8 +560,8 @@ function quitarCategoria(nombre: string): void {
         {{ t("aparienciaDesc") }}
       </p>
 
-      <!-- EN: Theme switch: the active button is highlighted with bg-brand.
-           ES: Conmutador de tema: el botón activo se resalta con bg-brand. -->
+      <!-- ES: Conmutador de tema: el botón activo se resalta con bg-brand.
+           EN: Theme switch: the active button is highlighted with bg-brand. -->
       <div class="flex gap-3 mt-4">
         <button
           class="flex-1 rounded-lg px-4 py-2 font-medium border transition-colors"
@@ -579,12 +587,12 @@ function quitarCategoria(nombre: string): void {
         </button>
       </div>
 
-      <!-- EN: Currency selector: bound directly to the store ref. The store's
-           watch syncs the formatter, so the whole UI (amounts via euro())
-           updates itself when it changes.
-           ES: Selector de moneda: enlazado directo al ref del store. El watch
+      <!-- ES: Selector de moneda: enlazado directo al ref del store. El watch
            del store sincroniza el formateador, así que toda la UI (importes con
-           euro()) se actualiza sola al cambiarla. -->
+           euro()) se actualiza sola al cambiarla.
+           EN: Currency selector: bound directly to the store ref. The store's
+           watch syncs the formatter, so the whole UI (amounts via euro())
+           updates itself when it changes. -->
       <div class="mt-5">
         <label class="text-muted text-sm">{{ t("moneda") }}</label>
         <select
@@ -598,14 +606,14 @@ function quitarCategoria(nombre: string): void {
         <p class="text-faint text-xs mt-1">{{ t("monedaDesc") }}</p>
       </div>
 
-      <!-- EN: Language selector: two buttons (Spanish / English) calling
-           ajustes.setIdioma. The active button is highlighted with bg-brand
-           like the theme switch. Header styled with the same label style as
-           the currency selector.
-           ES: Selector de idioma: dos botones (Español / English) que llaman a
+      <!-- ES: Selector de idioma: dos botones (Español / English) que llaman a
            ajustes.setIdioma. El botón activo se resalta con bg-brand igual que
            el conmutador de tema. Encabezado con el mismo estilo de label que
-           el selector de moneda. -->
+           el selector de moneda.
+           EN: Language selector: two buttons (Spanish / English) calling
+           ajustes.setIdioma. The active button is highlighted with bg-brand
+           like the theme switch. Header styled with the same label style as
+           the currency selector. -->
       <div class="mt-5">
         <label class="text-muted text-sm">{{ t("idioma") }}</label>
         <div class="flex gap-3 mt-1">
@@ -637,8 +645,8 @@ function quitarCategoria(nombre: string): void {
     </section>
 
     <!-- =====================================================================
-         EN: SECTION — Security (lock on open)
          ES: SECCIÓN — Seguridad (bloqueo al abrir)
+         EN: SECTION — Security (lock on open)
          ===================================================================== -->
     <section class="rounded-2xl bg-surface border border-border p-5">
       <h2 class="font-display font-bold text-lg text-ink">{{ t("seguridad") }}</h2>
@@ -646,10 +654,10 @@ function quitarCategoria(nombre: string): void {
         {{ t("seguridadDesc") }}
       </p>
 
-      <!-- EN: CASE A: lock is NOT active -> form to enable it.
-           ES: CASO A: el bloqueo NO está activo -> formulario para activarlo. -->
+      <!-- ES: CASO A: el bloqueo NO está activo -> formulario para activarlo.
+           EN: CASE A: lock is NOT active -> form to enable it. -->
       <div v-if="!ajustes.bloqueoActivo" class="mt-4 space-y-3">
-        <!-- EN: Credential type selector. / ES: Selector del tipo de credencial. -->
+        <!-- ES: Selector del tipo de credencial. / EN: Credential type selector. -->
         <div>
           <label class="text-muted text-sm">{{ t("tipoBloqueo") }}</label>
           <select
@@ -661,8 +669,8 @@ function quitarCategoria(nombre: string): void {
           </select>
         </div>
 
-        <!-- EN: Credential field (PIN or password depending on the type).
-             ES: Campo de credencial (PIN o contraseña según el tipo). -->
+        <!-- ES: Campo de credencial (PIN o contraseña según el tipo).
+             EN: Credential field (PIN or password depending on the type). -->
         <div>
           <label class="text-muted text-sm">
             {{ tipoBloqueo === "pin" ? t("labelPin") : t("labelPassword") }}
@@ -677,7 +685,7 @@ function quitarCategoria(nombre: string): void {
           />
         </div>
 
-        <!-- EN: Repeat credential to confirm. / ES: Repetir credencial para confirmar. -->
+        <!-- ES: Repetir credencial para confirmar. / EN: Repeat credential to confirm. -->
         <div>
           <label class="text-muted text-sm">
             {{ tipoBloqueo === "pin" ? t("repetirPin") : t("repetirPassword") }}
@@ -692,7 +700,7 @@ function quitarCategoria(nombre: string): void {
           />
         </div>
 
-        <!-- EN: Enable button. / ES: Botón de activación. -->
+        <!-- ES: Botón de activación. / EN: Enable button. -->
         <button
           class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
           @click="activarBloqueo"
@@ -701,15 +709,15 @@ function quitarCategoria(nombre: string): void {
         </button>
       </div>
 
-      <!-- EN: CASE B: lock is ALREADY active -> show state and option to remove it.
-           ES: CASO B: el bloqueo YA está activo -> mostrar estado y opción de quitarlo. -->
+      <!-- ES: CASO B: el bloqueo YA está activo -> mostrar estado y opción de quitarlo.
+           EN: CASE B: lock is ALREADY active -> show state and option to remove it. -->
       <div v-else class="mt-4 space-y-3">
-        <!-- EN: Active-lock indicator. / ES: Indicador de bloqueo activo. -->
+        <!-- ES: Indicador de bloqueo activo. / EN: Active-lock indicator. -->
         <p class="text-ink">
           {{ t("bloqueoEtiqueta") }} <span class="text-ok font-medium">{{ t("estadoActivo") }}</span>
           ({{ etiquetaTipoActivo }}).
         </p>
-        <!-- EN: Dangerous button to remove the lock. / ES: Botón peligroso para quitar el bloqueo. -->
+        <!-- ES: Botón peligroso para quitar el bloqueo. / EN: Dangerous button to remove the lock. -->
         <button
           class="rounded-lg border border-danger px-4 py-2 text-danger font-medium hover:bg-surface-2 transition-colors"
           @click="desactivarBloqueo"
@@ -717,8 +725,8 @@ function quitarCategoria(nombre: string): void {
           {{ t("quitarBloqueo") }}
         </button>
 
-        <!-- EN: Change the credential: current + new + repeat.
-             ES: Cambiar la credencial: actual + nueva + repetir. -->
+        <!-- ES: Cambiar la credencial: actual + nueva + repetir.
+             EN: Change the credential: current + new + repeat. -->
         <div class="mt-2 border-t border-border pt-4 space-y-3">
           <p class="text-sm font-medium text-ink">{{ t("cambiarCredencial") }}</p>
           <div>
@@ -764,14 +772,14 @@ function quitarCategoria(nombre: string): void {
         </div>
       </div>
 
-      <!-- EN: Feedback messages of the security section. / ES: Mensajes de feedback de la sección de seguridad. -->
+      <!-- ES: Mensajes de feedback de la sección de seguridad. / EN: Feedback messages of the security section. -->
       <p v-if="errorSeguridad" class="text-danger text-sm mt-3">{{ errorSeguridad }}</p>
       <p v-else-if="mensajeSeguridad" class="text-ok text-sm mt-3">{{ mensajeSeguridad }}</p>
     </section>
 
     <!-- =====================================================================
-         EN: SECTION — Backup (export / import .json)
          ES: SECCIÓN — Copia de seguridad (exportar / importar .json)
+         EN: SECTION — Backup (export / import .json)
          ===================================================================== -->
     <section class="rounded-2xl bg-surface border border-border p-5">
       <h2 class="font-display font-bold text-lg text-ink">{{ t("copia") }}</h2>
@@ -779,9 +787,9 @@ function quitarCategoria(nombre: string): void {
         {{ t("copiaDesc") }}
       </p>
 
-      <!-- EN: Export / import buttons. / ES: Botones de exportar / importar. -->
+      <!-- ES: Botones de exportar / importar. / EN: Export / import buttons. -->
       <div class="flex flex-wrap gap-3 mt-4">
-        <!-- EN: Export backup. / ES: Exportar copia. -->
+        <!-- ES: Exportar copia. / EN: Export backup. -->
         <button
           class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
           @click="exportarCopia"
@@ -789,8 +797,8 @@ function quitarCategoria(nombre: string): void {
           {{ t("exportarCopia") }}
         </button>
 
-        <!-- EN: Import backup: the button triggers the hidden file input.
-             ES: Importar copia: el botón dispara el input file oculto. -->
+        <!-- ES: Importar copia: el botón dispara el input file oculto.
+             EN: Import backup: the button triggers the hidden file input. -->
         <button
           class="rounded-lg border border-border px-4 py-2 text-ink font-medium hover:border-faint transition-colors"
           @click="pedirImportar"
@@ -798,8 +806,8 @@ function quitarCategoria(nombre: string): void {
           {{ t("importarCopia") }}
         </button>
 
-        <!-- EN: Hidden file input: only accepts JSON; on pick, runs importarCopia.
-             ES: Input file oculto: solo acepta JSON; al elegir, lanza importarCopia. -->
+        <!-- ES: Input file oculto: solo acepta JSON; al elegir, lanza importarCopia.
+             EN: Hidden file input: only accepts JSON; on pick, runs importarCopia. -->
         <input
           ref="inputFichero"
           type="file"
@@ -809,19 +817,19 @@ function quitarCategoria(nombre: string): void {
         />
       </div>
 
-      <!-- EN: Notice about data replacement on import. / ES: Aviso sobre el reemplazo de datos al importar. -->
+      <!-- ES: Aviso sobre el reemplazo de datos al importar. / EN: Notice about data replacement on import. -->
       <p class="text-faint text-xs mt-3">
         {{ t("copiaAviso") }}
       </p>
 
-      <!-- EN: Feedback messages of the backup section. / ES: Mensajes de feedback de la sección de copia. -->
+      <!-- ES: Mensajes de feedback de la sección de copia. / EN: Feedback messages of the backup section. -->
       <p v-if="errorCopia" class="text-danger text-sm mt-3">{{ errorCopia }}</p>
       <p v-else-if="mensajeCopia" class="text-ok text-sm mt-3">{{ mensajeCopia }}</p>
     </section>
 
     <!-- =====================================================================
-         EN: SECTION — Custom categories
          ES: SECCIÓN — Categorías personalizadas
+         EN: SECTION — Custom categories
          ===================================================================== -->
     <section class="rounded-2xl bg-surface border border-border p-5">
       <h2 class="font-display font-bold text-lg text-ink">{{ t("categorias") }}</h2>
@@ -829,7 +837,7 @@ function quitarCategoria(nombre: string): void {
         {{ t("categoriasDesc") }}
       </p>
 
-      <!-- EN: Input + button to create a new category. / ES: Input + botón para crear una categoría nueva. -->
+      <!-- ES: Input + botón para crear una categoría nueva. / EN: Input + button to create a new category. -->
       <div class="flex gap-3 mt-4">
         <input
           v-model="nuevaCategoria"
@@ -846,11 +854,11 @@ function quitarCategoria(nombre: string): void {
         </button>
       </div>
 
-      <!-- EN: Section error message. / ES: Mensaje de error de la sección. -->
+      <!-- ES: Mensaje de error de la sección. / EN: Section error message. -->
       <p v-if="errorCategoria" class="text-danger text-sm mt-3">{{ errorCategoria }}</p>
 
-      <!-- EN: List of custom categories with a delete button.
-           ES: Lista de categorías personalizadas con botón de eliminar. -->
+      <!-- ES: Lista de categorías personalizadas con botón de eliminar.
+           EN: List of custom categories with a delete button. -->
       <ul v-if="categoriasPropias.length" class="mt-4 space-y-2">
         <li
           v-for="cat in categoriasPropias"
@@ -867,7 +875,7 @@ function quitarCategoria(nombre: string): void {
         </li>
       </ul>
 
-      <!-- EN: Notice when there are no custom categories yet. / ES: Aviso cuando todavía no hay categorías propias. -->
+      <!-- ES: Aviso cuando todavía no hay categorías propias. / EN: Notice when there are no custom categories yet. -->
       <p v-else class="text-faint text-xs mt-3">{{ t("sinCategorias") }}</p>
     </section>
   </div>

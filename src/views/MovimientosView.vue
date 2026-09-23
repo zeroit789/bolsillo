@@ -1,26 +1,26 @@
 <script setup lang="ts">
 /* =============================================================================
- * MovimientosView.vue — Monthly transactions / Movimientos del mes
+ * MovimientosView.vue — Movimientos del mes / Monthly transactions
  * -----------------------------------------------------------------------------
- * EN: Lists the selected month's entries (fixed + variable + debt instalments),
- *     lets the user add/edit/delete them, manages quick-entry templates (one-tap
- *     shortcuts) and shows receipts in a lightbox. All UI text is bilingual via
- *     crearT(); only fixed strings are translated, never user data.
  * ES: Lista los apuntes del mes seleccionado (fijos + variables + cuotas de deuda),
  *     permite añadir/editar/eliminar, gestiona plantillas de entrada rápida (atajos
  *     de un clic) y muestra recibos en un lightbox. Todo el texto de UI es bilingüe
  *     vía crearT(); solo se traducen textos fijos, nunca datos del usuario.
+ * EN: Lists the selected month's entries (fixed + variable + debt instalments),
+ *     lets the user add/edit/delete them, manages quick-entry templates (one-tap
+ *     shortcuts) and shows receipts in a lightbox. All UI text is bilingual via
+ *     crearT(); only fixed strings are translated, never user data.
  * -----------------------------------------------------------------------------
- * INDEX / ÍNDICE:
- *   1. Imports & translations / Imports y traducciones
- *   2. State (store, modal, editing, filters) / Estado (store, modal, edición, filtros)
- *   3. Filtered list / Lista filtrada
+ * ÍNDICE / INDEX:
+ *   1. Imports y traducciones / Imports & translations
+ *   2. Estado (store, modal, edición, filtros) / State (store, modal, editing, filters)
+ *   3. Lista filtrada / Filtered list
  *   4. Add / edit modal logic / Lógica del modal de alta y edición
- *   5. Delete & cancel actions / Acciones de eliminar y dar de baja
- *   6. Quick entry — templates / Entrada rápida — plantillas
+ *   5. Acciones de eliminar y dar de baja / Delete & cancel actions
+ *   6. Entrada rápida — plantillas / Quick entry — templates
  * ===========================================================================*/
 
-// ── 1. Imports & translations / Imports y traducciones ────────────────────────
+// ── 1. Imports y traducciones / Imports & translations ────────────────────────
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
@@ -29,7 +29,8 @@ import type { LineaMes, Signo, Plantilla, Subdivision } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
 import { crearT } from "../i18n";
 
-// Diccionario de traducciones de esta vista (ES/EN). Claves cortas en camelCase.
+// ES: Diccionario de traducciones de esta vista (ES/EN). Claves cortas en camelCase.
+// EN: Translation dictionary of this view (ES/EN). Short camelCase keys.
 const t = crearT({
   titulo: { es: "Movimientos", en: "Transactions" },
   anadir: { es: "+ Añadir", en: "+ Add" },
@@ -76,7 +77,8 @@ const t = crearT({
   eliminar: { es: "Eliminar", en: "Delete" },
   gestionadoDeudas: { es: "Se gestiona en Deudas", en: "Managed in Debts" },
   reciboAlt: { es: "Recibo", en: "Receipt" },
-  // Mensajes de confirmación (texto fijo; el concepto se concatena aparte).
+  // ES: Mensajes de confirmación (texto fijo; el concepto se concatena aparte).
+  // EN: Confirmation messages (fixed text; the concept is appended separately).
   confirmEliminar: { es: "¿Eliminar", en: "Delete" },
   confirmEliminarAtajo: { es: "¿Eliminar el atajo", en: "Delete shortcut" },
   confirmDarDeBaja: {
@@ -85,16 +87,16 @@ const t = crearT({
   },
 });
 
-// ── 2. State (store, modal, editing, filters) / Estado (store, modal, edición, filtros) ──
-// EN: Finance store (single source of truth) and modal open/closed flag.
+// ── 2. Estado (store, modal, edición, filtros) / State (store, modal, editing, filters) ──
 // ES: Store de finanzas (única fuente de verdad) y flag de modal abierto/cerrado.
+// EN: Finance store (single source of truth) and modal open/closed flag.
 const f = useFinanzas();
 const modal = ref(false);
-// EN: Line currently being edited (null = modal is in "add new" mode).
 // ES: Línea que se está editando (null = el modal está en modo alta).
+// EN: Line currently being edited (null = modal is in "add new" mode).
 const editando = ref<LineaMes | null>(null);
-// EN: Initial data passed to the modal when editing (null = clean add).
 // ES: Datos iniciales que se pasan al modal cuando editamos (null = alta limpia).
+// EN: Initial data passed to the modal when editing (null = clean add).
 const inicial = ref<{
   recurrente: boolean;
   signo: Signo;
@@ -103,31 +105,32 @@ const inicial = ref<{
   categoria: string;
   fecha: string;
   diaPago?: number;
-  comercio?: string; // opcional
-  tags?: string[]; // opcional (array; el modal lo convierte a texto)
-  recibo?: string; // imagen base64 (solo puntuales); opcional
-  cuenta?: string; // id de cuenta; opcional
-  subdivisiones?: Subdivision[]; // gasto dividido (solo puntuales); opcional
+  comercio?: string; // ES: opcional / EN: optional
+  tags?: string[]; // ES: opcional (array; el modal lo convierte a texto) / EN: optional (array; the modal turns it into text)
+  recibo?: string; // ES: imagen base64 (solo puntuales); opcional / EN: base64 image (one-off only); optional
+  cuenta?: string; // ES: id de cuenta; opcional / EN: account id; optional
+  subdivisiones?: Subdivision[]; // ES: gasto dividido (solo puntuales); opcional / EN: split expense (one-off only); optional
 } | null>(null);
 
-// EN: Receipt shown in the lightbox (null = lightbox closed).
 // ES: Recibo que se muestra en el lightbox (null = lightbox cerrado).
+// EN: Receipt shown in the lightbox (null = lightbox closed).
 const reciboVisible = ref<string | null>(null);
 
-// EN: Search box text and type filter (all/income/fixed/variable).
 // ES: Texto del buscador y filtro de tipo (todos/ingreso/fijo/variable).
+// EN: Search box text and type filter (all/income/fixed/variable).
 const busqueda = ref("");
 const filtroTipo = ref<"todos" | "ingreso" | "fijo" | "variable">("todos");
 
-// ── 3. Filtered list / Lista filtrada ─────────────────────────────────────────
-// EN: Month lines filtered by the search text (concept, category, merchant, tags)
-//     and the selected type. Recomputes reactively as inputs change.
+// ── 3. Lista filtrada / Filtered list ─────────────────────────────────────────
 // ES: Líneas del mes filtradas por el texto de búsqueda (concepto, categoría,
 //     comercio, etiquetas) y el tipo elegido. Se recalcula sola al cambiar inputs.
+// EN: Month lines filtered by the search text (concept, category, merchant, tags)
+//     and the selected type. Recomputes reactively as inputs change.
 const lineasFiltradas = computed<LineaMes[]>(() => {
   const q = busqueda.value.trim().toLowerCase();
   return f.lineasDelMes.filter((l) => {
-    // Coincidencia de texto: concepto, categoría, comercio y etiquetas.
+    // ES: Coincidencia de texto: concepto, categoría, comercio y etiquetas.
+    // EN: Text match: concept, category, merchant and tags.
     const coincideTexto =
       !q ||
       l.concepto.toLowerCase().includes(q) ||
@@ -144,21 +147,22 @@ const lineasFiltradas = computed<LineaMes[]>(() => {
 });
 
 // ── 4. Add / edit modal logic / Lógica del modal de alta y edición ────────────
-// EN: Dot color by sign (income = green, expense = red).
 // ES: Color del punto según el signo (ingreso verde, gasto rojo).
+// EN: Dot color by sign (income = green, expense = red).
 function colorPunto(signo: Signo): string {
   return signo === "ingreso" ? "bg-ok" : "bg-danger";
 }
 
-// EN: Opens the modal in edit mode: finds the full object in the store, builds
-//     the initial data and opens the modal preloaded.
 // ES: Abre el modal en modo edición: busca el objeto completo en el store, monta
 //     los datos iniciales y abre el modal precargado.
+// EN: Opens the modal in edit mode: finds the full object in the store, builds
+//     the initial data and opens the modal preloaded.
 function editar(linea: LineaMes) {
-  if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
+  if (linea.origen === "deuda") return; // ES: las cuotas se gestionan en Deudas / EN: installments are managed in Debts
 
   if (linea.origen === "recurrente") {
-    // Recurrente: lo buscamos por id en el store.
+    // ES: Recurrente: lo buscamos por id en el store.
+    // EN: Recurring: look it up by id in the store.
     const r = f.recurrentes.find((x) => x.id === linea.id);
     if (!r) return;
     inicial.value = {
@@ -167,17 +171,21 @@ function editar(linea: LineaMes) {
       concepto: r.concepto,
       importe: r.importe,
       categoria: r.categoria,
-      // El modal solo usa la fecha en puntuales; para recurrentes basta una
-      // fecha válida del mes seleccionado.
+      // ES: El modal solo usa la fecha en puntuales; para recurrentes basta una
+      //     fecha válida del mes seleccionado.
+      // EN: The modal only uses the date for one-off entries; for recurring ones any
+      //     valid date of the selected month is enough.
       fecha: `${f.mesSeleccionado}-01`,
       diaPago: r.diaPago,
-      // Campos opcionales nuevos (los recurrentes no llevan recibo).
+      // ES: Campos opcionales nuevos (los recurrentes no llevan recibo).
+      // EN: New optional fields (recurring entries have no receipt).
       comercio: r.comercio,
       tags: r.tags,
-      cuenta: r.cuenta, // cuenta a la que pertenece; opcional
+      cuenta: r.cuenta, // ES: cuenta a la que pertenece; opcional / EN: account it belongs to; optional
     };
   } else {
-    // Puntual: lo buscamos por id en el store.
+    // ES: Puntual: lo buscamos por id en el store.
+    // EN: One-off: look it up by id in the store.
     const p = f.puntuales.find((x) => x.id === linea.id);
     if (!p) return;
     inicial.value = {
@@ -187,20 +195,21 @@ function editar(linea: LineaMes) {
       importe: p.importe,
       categoria: p.categoria,
       fecha: p.fecha,
-      // Campos opcionales nuevos: comercio, tags y recibo (solo puntuales).
+      // ES: Campos opcionales nuevos: comercio, tags y recibo (solo puntuales).
+      // EN: New optional fields: merchant, tags and receipt (one-off only).
       comercio: p.comercio,
       tags: p.tags,
       recibo: p.recibo,
-      cuenta: p.cuenta, // cuenta a la que pertenece; opcional
-      subdivisiones: p.subdivisiones, // gasto dividido en categorías; opcional
+      cuenta: p.cuenta, // ES: cuenta a la que pertenece; opcional / EN: account it belongs to; optional
+      subdivisiones: p.subdivisiones, // ES: gasto dividido en categorías; opcional / EN: expense split into categories; optional
     };
   }
   editando.value = linea;
   modal.value = true;
 }
 
-// EN: Save handler from the modal. If `editando` is set -> update; else -> add.
 // ES: Guardar desde el modal. Si hay `editando` -> actualiza; si no -> alta nueva.
+// EN: Save handler from the modal. If `editando` is set -> update; else -> add.
 function onGuardar(mov: {
   recurrente: boolean;
   signo: Signo;
@@ -212,11 +221,12 @@ function onGuardar(mov: {
   comercio?: string;
   tags?: string[];
   recibo?: string;
-  cuenta?: string; // id de cuenta; opcional
-  subdivisiones?: Subdivision[]; // gasto dividido (solo puntuales); opcional
+  cuenta?: string; // ES: id de cuenta; opcional / EN: account id; optional
+  subdivisiones?: Subdivision[]; // ES: gasto dividido (solo puntuales); opcional / EN: split expense (one-off only); optional
 }) {
   if (editando.value) {
-    // --- Modo edición ---
+    // ES: --- Modo edición ---
+    // EN: --- Edit mode ---
     if (editando.value.origen === "recurrente") {
       f.actualizarRecurrente(editando.value.id, {
         concepto: mov.concepto,
@@ -226,7 +236,7 @@ function onGuardar(mov: {
         diaPago: mov.diaPago,
         comercio: mov.comercio,
         tags: mov.tags,
-        cuenta: mov.cuenta, // cuenta a la que pertenece
+        cuenta: mov.cuenta, // ES: cuenta a la que pertenece / EN: account it belongs to
       });
     } else if (editando.value.origen === "puntual") {
       f.actualizarPuntual(editando.value.id, {
@@ -237,13 +247,14 @@ function onGuardar(mov: {
         fecha: mov.fecha,
         comercio: mov.comercio,
         tags: mov.tags,
-        recibo: mov.recibo, // recibo solo en puntuales
-        cuenta: mov.cuenta, // cuenta a la que pertenece
-        subdivisiones: mov.subdivisiones, // gasto dividido (solo puntuales)
+        recibo: mov.recibo, // ES: recibo solo en puntuales / EN: receipt only on one-off entries
+        cuenta: mov.cuenta, // ES: cuenta a la que pertenece / EN: account it belongs to
+        subdivisiones: mov.subdivisiones, // ES: gasto dividido (solo puntuales) / EN: split expense (one-off only)
       });
     }
   } else {
-    // --- Modo alta ---
+    // ES: --- Modo alta ---
+    // EN: --- Create mode ---
     if (mov.recurrente) {
       f.addRecurrente({
         concepto: mov.concepto,
@@ -255,7 +266,7 @@ function onGuardar(mov: {
         diaPago: mov.diaPago,
         comercio: mov.comercio,
         tags: mov.tags,
-        cuenta: mov.cuenta, // cuenta a la que pertenece
+        cuenta: mov.cuenta, // ES: cuenta a la que pertenece / EN: account it belongs to
       });
     } else {
       f.addPuntual({
@@ -266,30 +277,31 @@ function onGuardar(mov: {
         fecha: mov.fecha,
         comercio: mov.comercio,
         tags: mov.tags,
-        recibo: mov.recibo, // recibo solo en puntuales
-        cuenta: mov.cuenta, // cuenta a la que pertenece
-        subdivisiones: mov.subdivisiones, // gasto dividido (solo puntuales)
+        recibo: mov.recibo, // ES: recibo solo en puntuales / EN: receipt only on one-off entries
+        cuenta: mov.cuenta, // ES: cuenta a la que pertenece / EN: account it belongs to
+        subdivisiones: mov.subdivisiones, // ES: gasto dividido (solo puntuales) / EN: split expense (one-off only)
       });
     }
   }
-  // EN: Close the modal and reset the editing state.
   // ES: Cerramos y reseteamos el estado de edición.
+  // EN: Close the modal and reset the editing state.
   editando.value = null;
   inicial.value = null;
   modal.value = false;
 }
 
-// ── 5. Delete & cancel actions / Acciones de eliminar y dar de baja ───────────
-// EN: Deletes a line after confirmation (debt instalments are managed in Debts).
+// ── 5. Acciones de eliminar y dar de baja / Delete & cancel actions ───────────
 // ES: Elimina una línea previa confirmación (las cuotas se gestionan en Deudas).
+// EN: Deletes a line after confirmation (debt instalments are managed in Debts).
 function eliminar(linea: LineaMes) {
-  if (linea.origen === "deuda") return; // las cuotas se gestionan en Deudas
-  // Texto fijo traducido + el concepto (dato del usuario, sin traducir).
+  if (linea.origen === "deuda") return; // ES: las cuotas se gestionan en Deudas / EN: installments are managed in Debts
+  // ES: Texto fijo traducido + el concepto (dato del usuario, sin traducir).
+  // EN: Translated fixed text + the concept (user data, not translated).
   if (confirm(`${t("confirmEliminar")} "${linea.concepto}"?`)) f.eliminarLinea(linea);
 }
 
-// EN: Cancels a fixed (recurring) item from the selected month onward.
 // ES: Da de baja un fijo (recurrente) a partir del mes seleccionado.
+// EN: Cancels a fixed (recurring) item from the selected month onward.
 function darDeBaja(linea: LineaMes) {
   if (linea.origen !== "recurrente") return;
   if (confirm(t("confirmDarDeBaja"))) {
@@ -297,60 +309,61 @@ function darDeBaja(linea: LineaMes) {
   }
 }
 
-// EN: Opens the modal in clean "add new" mode (no preloaded data).
 // ES: Abre el modal en modo alta limpio (sin datos precargados).
+// EN: Opens the modal in clean "add new" mode (no preloaded data).
 function abrirAlta() {
   editando.value = null;
   inicial.value = null;
   modal.value = true;
 }
 
-// EN: Closes the modal and resets the editing state.
 // ES: Cierra el modal y resetea el estado de edición.
+// EN: Closes the modal and resets the editing state.
 function cerrarModal() {
   editando.value = null;
   inicial.value = null;
   modal.value = false;
 }
 
-// ── 6. Quick entry — templates / Entrada rápida — plantillas ──────────────────
-// EN: Templates are one-tap shortcuts for usual expenses/income. This section
-//     covers using a template, deleting it and the inline mini-form to create one.
+// ── 6. Entrada rápida — plantillas / Quick entry — templates ──────────────────
 // ES: Las plantillas son atajos de un clic para gastos/ingresos habituales. Esta
 //     sección cubre usar una plantilla, eliminarla y el mini-formulario para crear.
+// EN: Templates are one-tap shortcuts for usual expenses/income. This section
+//     covers using a template, deleting it and the inline mini-form to create one.
 
-// EN: Category groups for the <select> with <optgroup> in the mini-form.
 // ES: Grupos de categorías para el <select> con <optgroup> del mini-formulario.
+// EN: Category groups for the <select> with <optgroup> in the mini-form.
 const grupos = categoriasPorGrupo();
 
-// EN: Uses a template: instantly logs a movement dated TODAY (one click).
 // ES: Usa una plantilla: registra al instante un movimiento de HOY (un clic).
+// EN: Uses a template: instantly logs a movement dated TODAY (one click).
 function usarPlantilla(p: Plantilla): void {
   f.usarPlantilla(p.id);
-  // EN: The new entry is logged in the CURRENT month; jump there so it is
-  //     visible even if another month was being viewed.
   // ES: El apunte recién creado se registra en el mes ACTUAL; saltamos a él
   //     para que sea visible aunque se estuviera viendo otro mes.
+  // EN: The new entry is logged in the CURRENT month; jump there so it is
+  //     visible even if another month was being viewed.
   f.seleccionarMes(mesActual());
 }
 
-// EN: Deletes a template after confirmation.
 // ES: Elimina una plantilla previa confirmación.
+// EN: Deletes a template after confirmation.
 function quitarPlantilla(p: Plantilla): void {
-  // Texto fijo traducido + el concepto (dato del usuario, sin traducir).
+  // ES: Texto fijo traducido + el concepto (dato del usuario, sin traducir).
+  // EN: Translated fixed text + the concept (user data, not translated).
   if (confirm(`${t("confirmEliminarAtajo")} "${p.concepto}"?`)) f.eliminarPlantilla(p.id);
 }
 
-// EN: Inline mini-form state to create a new template.
 // ES: Estado del mini-formulario inline para crear una plantilla nueva.
+// EN: Inline mini-form state to create a new template.
 const formAbierto = ref(false);
 const formConcepto = ref("");
-const formImporte = ref(""); // EN: text, accepts decimal comma / ES: texto, acepta coma decimal
-const formSigno = ref<Signo>("gasto"); // EN: expense by default / ES: gasto por defecto
-const formCategoria = ref(""); // EN: selected category name / ES: nombre de categoría seleccionada
+const formImporte = ref(""); // ES: texto, acepta coma decimal / EN: text, accepts decimal comma
+const formSigno = ref<Signo>("gasto"); // ES: gasto por defecto / EN: expense by default
+const formCategoria = ref(""); // ES: nombre de categoría seleccionada / EN: selected category name
 
-// EN: Opens the mini-form with clean values.
 // ES: Abre el mini-formulario con valores limpios.
+// EN: Opens the mini-form with clean values.
 function abrirFormPlantilla(): void {
   formConcepto.value = "";
   formImporte.value = "";
@@ -359,20 +372,21 @@ function abrirFormPlantilla(): void {
   formAbierto.value = true;
 }
 
-// EN: Closes the mini-form without saving.
 // ES: Cierra el mini-formulario sin guardar.
+// EN: Closes the mini-form without saving.
 function cerrarFormPlantilla(): void {
   formAbierto.value = false;
 }
 
-// EN: Saves the new template into the store. Normalizes the decimal comma to a
-//     dot and rounds the amount to cents.
 // ES: Guarda la nueva plantilla en el store. Normaliza la coma decimal a punto y
 //     redondea el importe a céntimos.
+// EN: Saves the new template into the store. Normalizes the decimal comma to a
+//     dot and rounds the amount to cents.
 function guardarPlantilla(): void {
   const concepto = formConcepto.value.trim();
   const importe = Math.round(Number(formImporte.value.replace(",", ".")) * 100) / 100;
-  // Validación mínima: concepto, importe válido (>0) y categoría elegida.
+  // ES: Validación mínima: concepto, importe válido (>0) y categoría elegida.
+  // EN: Minimal validation: concept, valid amount (>0) and a chosen category.
   if (!concepto || !Number.isFinite(importe) || importe <= 0 || !formCategoria.value) return;
   f.addPlantilla({
     concepto,
@@ -383,17 +397,17 @@ function guardarPlantilla(): void {
   formAbierto.value = false;
 }
 
-// ── 7. Keyboard shortcuts / Atajos de teclado ─────────────────────────────────
-// EN: Global key handler: "n" opens the new-movement modal (only when not typing
-//     in a form field), and "Escape" closes the modal if it is open. Registered
-//     in onMounted and removed in onUnmounted to avoid leaks.
+// ── 7. Atajos de teclado / Keyboard shortcuts ─────────────────────────────────
 // ES: Manejador global de teclas: "n" abre el modal de nuevo movimiento (solo si
 //     NO se está escribiendo en un campo de formulario), y "Escape" cierra el
 //     modal si está abierto. Se registra en onMounted y se quita en onUnmounted
 //     para no dejar listeners colgando.
+// EN: Global key handler: "n" opens the new-movement modal (only when not typing
+//     in a form field), and "Escape" closes the modal if it is open. Registered
+//     in onMounted and removed in onUnmounted to avoid leaks.
 function onTecla(e: KeyboardEvent): void {
-  // EN: Element with focus; we skip the "n" shortcut while typing in a field.
   // ES: Elemento con foco; nos saltamos el atajo "n" si se escribe en un campo.
+  // EN: Element with focus; we skip the "n" shortcut while typing in a field.
   const destino = e.target as HTMLElement | null;
   const enCampo =
     !!destino &&
@@ -402,31 +416,31 @@ function onTecla(e: KeyboardEvent): void {
       destino.tagName === "SELECT" ||
       destino.isContentEditable);
 
-  // EN: "n" (no modifiers, not in a field) -> open the add-movement modal.
   // ES: "n" (sin modificadores, fuera de un campo) -> abre el modal de alta.
+  // EN: "n" (no modifiers, not in a field) -> open the add-movement modal.
   if ((e.key === "n" || e.key === "N") && !enCampo && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     abrirAlta();
     return;
   }
 
-  // EN: "Escape" closes the modal if it is open (the mini-form has its own handler).
   // ES: "Escape" cierra el modal si está abierto (el mini-form tiene el suyo propio).
+  // EN: "Escape" closes the modal if it is open (the mini-form has its own handler).
   if (e.key === "Escape" && modal.value) {
     cerrarModal();
   }
 }
 
-// EN: Register the listener on mount, remove it on unmount.
 // ES: Registra el listener al montar, lo quita al desmontar.
+// EN: Register the listener on mount, remove it on unmount.
 onMounted(() => window.addEventListener("keydown", onTecla));
 onUnmounted(() => window.removeEventListener("keydown", onTecla));
 </script>
 
 <template>
   <div>
-    <!-- EN: Header: title + "Add" button (opens the modal in add mode). -->
     <!-- ES: Cabecera: título + botón "Añadir" (abre el modal en modo alta). -->
+    <!-- EN: Header: title + "Add" button (opens the modal in add mode). -->
     <div class="flex items-center justify-between mb-6">
       <h2 class="font-display text-2xl font-bold">{{ t("titulo") }}</h2>
       <button
@@ -437,20 +451,20 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       </button>
     </div>
 
-    <!-- EN: Quick entry: template chips + create-new-template chip. -->
     <!-- ES: ENTRADA RÁPIDA: chips de plantillas + alta de plantilla nueva. -->
+    <!-- EN: Quick entry: template chips + create-new-template chip. -->
     <div class="mb-6 flex flex-wrap items-center gap-2">
-      <!-- Un chip por plantilla: clic = registrar movimiento de hoy al instante -->
+      <!-- ES: Un chip por plantilla: clic = registrar movimiento de hoy al instante / EN: One chip per template: click = log today's transaction instantly -->
       <span
         v-for="p in f.plantillas"
         :key="p.id"
         class="inline-flex items-center gap-1.5 rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
       >
-        <!-- Texto del chip: registra el movimiento al hacer clic -->
+        <!-- ES: Texto del chip: registra el movimiento al hacer clic / EN: Chip text: logs the transaction on click -->
         <button class="text-ink" :title="`${t('registrarHoy')}: ${p.concepto}`" @click="usarPlantilla(p)">
           {{ p.concepto }} · {{ euro(p.importe) }}
         </button>
-        <!-- Aspa para eliminar el atajo -->
+        <!-- ES: Aspa para eliminar el atajo / EN: Cross to delete the shortcut -->
         <button
           class="text-faint hover:text-danger transition-colors"
           :title="t('eliminarAtajo')"
@@ -460,7 +474,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
         </button>
       </span>
 
-      <!-- Chip "+ Plantilla": abre el mini-formulario para crear un atajo -->
+      <!-- ES: Chip "+ Plantilla": abre el mini-formulario para crear un atajo / EN: "+ Template" chip: opens the mini-form to create a shortcut -->
       <button
         class="rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
         @click="abrirFormPlantilla"
@@ -468,14 +482,14 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
         {{ t("masPlantilla") }}
       </button>
 
-      <!-- Texto tenue de ayuda cuando todavía no hay plantillas -->
+      <!-- ES: Texto tenue de ayuda cuando todavía no hay plantillas / EN: Faint help text when there are no templates yet -->
       <span v-if="!f.plantillas.length" class="text-faint text-sm">
         {{ t("ayudaPlantillas") }}
       </span>
     </div>
 
-    <!-- EN: Mini-modal to create a new template. -->
     <!-- ES: Mini-modal para crear una plantilla nueva. -->
+    <!-- EN: Mini-modal to create a new template. -->
     <div
       v-if="formAbierto"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
@@ -484,7 +498,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       <div class="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 space-y-4">
         <h3 class="font-display text-lg font-bold">{{ t("nuevoAtajo") }}</h3>
 
-        <!-- Concepto -->
+        <!-- ES: Concepto / EN: Concept -->
         <div>
           <label class="text-faint text-xs">{{ t("concepto") }}</label>
           <input
@@ -495,7 +509,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           />
         </div>
 
-        <!-- Importe (acepta coma decimal, se redondea al guardar) -->
+        <!-- ES: Importe (acepta coma decimal, se redondea al guardar) / EN: Amount (accepts a decimal comma, rounded on save) -->
         <div>
           <label class="text-faint text-xs">{{ t("importe") }}</label>
           <input
@@ -507,7 +521,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           />
         </div>
 
-        <!-- Signo: gasto por defecto -->
+        <!-- ES: Signo: gasto por defecto / EN: Sign: expense by default -->
         <div>
           <label class="text-faint text-xs">{{ t("tipo") }}</label>
           <select
@@ -519,7 +533,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           </select>
         </div>
 
-        <!-- Categoría: select con optgroups por grupo -->
+        <!-- ES: Categoría: select con optgroups por grupo / EN: Category: select with one optgroup per group -->
         <div>
           <label class="text-faint text-xs">{{ t("categoria") }}</label>
           <select
@@ -533,7 +547,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           </select>
         </div>
 
-        <!-- Acciones del mini-formulario -->
+        <!-- ES: Acciones del mini-formulario / EN: Mini-form actions -->
         <div class="flex justify-end gap-2 pt-1">
           <button
             class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-sm hover:border-brand transition-colors"
@@ -551,11 +565,11 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       </div>
     </div>
 
-    <!-- EN: Transactions card: search/filter toolbar + the list of lines. -->
     <!-- ES: Tarjeta de movimientos: barra de buscar/filtrar + la lista de líneas. -->
+    <!-- EN: Transactions card: search/filter toolbar + the list of lines. -->
     <div class="rounded-2xl bg-surface border border-border">
-      <!-- EN: Toolbar: free-text search, type filter and entry count. -->
       <!-- ES: Barra: búsqueda libre, filtro de tipo y contador de apuntes. -->
+      <!-- EN: Toolbar: free-text search, type filter and entry count. -->
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-border">
         <input
           v-model="busqueda"
@@ -575,14 +589,14 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
         <span class="text-faint text-sm shrink-0">{{ lineasFiltradas.length }} {{ t("apuntes") }}</span>
       </div>
 
-      <!-- EN: Empty state: distinguishes "no results for filter" vs "no entries". -->
       <!-- ES: Estado vacío: distingue "sin resultados del filtro" vs "sin apuntes". -->
+      <!-- EN: Empty state: distinguishes "no results for filter" vs "no entries". -->
       <div v-if="!lineasFiltradas.length" class="px-5 py-12 text-center text-muted">
         {{ f.lineasDelMes.length ? t("sinResultados") : t("sinMovimientos") }}
       </div>
 
-      <!-- EN: List of lines: dot + concept/meta + amount + per-row actions. -->
       <!-- ES: Lista de líneas: punto + concepto/meta + importe + acciones por fila. -->
+      <!-- EN: List of lines: dot + concept/meta + amount + per-row actions. -->
       <ul v-else class="divide-y divide-border">
         <li
           v-for="l in lineasFiltradas"
@@ -596,7 +610,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
             <p class="text-faint text-xs mt-0.5 flex flex-wrap items-center gap-1.5">
               <span class="rounded-full bg-surface-2 px-2 py-0.5">{{ l.categoria }}</span>
               <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">{{ t("fijo") }}</span>
-              <!-- Chip "Dividido": el gasto se reparte en varias categorías -->
+              <!-- ES: Chip "Dividido": el gasto se reparte en varias categorías / EN: "Split" chip: the expense is spread across several categories -->
               <span
                 v-if="l.subdivisiones?.length"
                 class="rounded-full bg-brand/15 text-brand px-2 py-0.5"
@@ -604,10 +618,10 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
               >
                 {{ t("dividido") }}
               </span>
-              <!-- Comercio: dónde se hizo (ej. "· Mercadona") -->
+              <!-- ES: Comercio: dónde se hizo (ej. "· Mercadona") / EN: Merchant: where it happened (e.g. "· Mercadona") -->
               <span v-if="l.comercio">· {{ l.comercio }}</span>
               <span v-if="l.fecha">· {{ fechaLegible(l.fecha) }}</span>
-              <!-- Etiquetas como chips pequeños -->
+              <!-- ES: Etiquetas como chips pequeños / EN: Tags as small chips -->
               <span
                 v-for="t in l.tags"
                 :key="t"
@@ -615,7 +629,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
               >
                 {{ t }}
               </span>
-              <!-- Icono de recibo: abre el lightbox con la imagen -->
+              <!-- ES: Icono de recibo: abre el lightbox con la imagen / EN: Receipt icon: opens the lightbox with the image -->
               <button
                 v-if="l.recibo"
                 class="hover:text-ink transition-colors"
@@ -634,7 +648,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
             {{ l.signo === "ingreso" ? "+" : "−" }}{{ euro(l.importe) }}
           </span>
 
-          <!-- Acciones de la línea (no aplican a las cuotas de deuda) -->
+          <!-- ES: Acciones de la línea (no aplican a las cuotas de deuda) / EN: Line actions (not applicable to debt installments) -->
           <template v-if="l.origen !== 'deuda'">
             <button
               class="opacity-0 group-hover:opacity-100 text-faint hover:text-ink transition-all shrink-0"
@@ -643,7 +657,7 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
             >
               ✏️
             </button>
-            <!-- Dar de baja: solo para fijos (recurrentes) -->
+            <!-- ES: Dar de baja: solo para fijos (recurrentes) / EN: Cancel: only for fixed (recurring) entries -->
             <button
               v-if="l.origen === 'recurrente'"
               class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
@@ -665,10 +679,10 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       </ul>
     </div>
 
-    <!-- EN: Add/edit modal. :key forces a remount per edited line (or "alta" for
-         add) so the form is never reused with stale data. -->
     <!-- ES: Modal de alta/edición. El :key fuerza remontar por línea editada (o
          "alta" para alta) para que el formulario nunca reuse datos viejos. -->
+    <!-- EN: Add/edit modal. :key forces a remount per edited line (or "alta" for
+         add) so the form is never reused with stale data. -->
     <ModalMovimiento
       v-if="modal"
       :key="editando ? editando.origen + ':' + editando.id : 'alta'"
@@ -677,8 +691,8 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       @cerrar="cerrarModal"
     />
 
-    <!-- EN: Receipt lightbox: click outside or on the image closes it. -->
     <!-- ES: Lightbox del recibo: clic fuera o en la imagen lo cierra. -->
+    <!-- EN: Receipt lightbox: click outside or on the image closes it. -->
     <div
       v-if="reciboVisible"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
