@@ -1,3 +1,5 @@
+# ES: Manifiesto de Cargo del backend Rust (Tauri 2) de Bolsillo.
+# EN: Cargo manifest of Bolsillo's Rust backend (Tauri 2).
 [package]
 name = "bolsillo"
 version = "1.1.0"
@@ -5,18 +7,26 @@ description = "Bolsillo - personal finance manager / gestor de gastos personales
 authors = ["Daniel Castanos"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# ES: Más claves y su definición / EN: More keys and their definitions:
+#     https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+# ES: El sufijo `_lib` parece redundante pero hace falta para que el nombre de
+#     la librería no choque con el del binario (pasa sobre todo en Windows,
+#     ver https://github.com/rust-lang/cargo/issues/8519).
+# EN: The `_lib` suffix may seem redundant but it is needed so the lib name
+#     doesn't clash with the bin name (mostly a Windows issue,
+#     see https://github.com/rust-lang/cargo/issues/8519).
 name = "bolsillo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# ES: Dependencias del script de build (genera el contexto de Tauri).
+# EN: Build-script dependencies (generate the Tauri context).
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+# ES: Tauri, sus plugins (abrir enlaces, diálogo de guardar, notificaciones) y serde.
+# EN: Tauri, its plugins (open links, save dialog, notifications) and serde.
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"

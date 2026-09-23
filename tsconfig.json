@@ -1,3 +1,5 @@
+// ES: Config de TypeScript del frontend (src/). La usa vue-tsc para comprobar tipos.
+// EN: TypeScript config for the frontend (src/). vue-tsc uses it to type-check.
 {
   "compilerOptions": {
     "target": "ES2020",
@@ -6,7 +8,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
 
-    /* Bundler mode */
+    /* ES: Modo bundler (Vite resuelve los imports) / EN: Bundler mode (Vite resolves imports) */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
@@ -14,7 +16,7 @@
     "noEmit": true,
     "jsx": "preserve",
 
-    /* Linting */
+    /* ES: Comprobaciones estrictas / EN: Strict checks */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

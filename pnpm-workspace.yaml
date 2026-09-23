@@ -1,7 +1,11 @@
-# Config de pnpm. allowBuilds: qué paquetes pueden ejecutar scripts de
-# instalación (pnpm los bloquea por defecto por seguridad).
-#  - esbuild: lo necesita Vite para transpilar.
-#  - core-js: false -> no ejecuta su postinstall (solo muestra un aviso), no hace falta.
+# ES: Config de pnpm. allowBuilds: qué paquetes pueden ejecutar scripts de
+#     instalación (pnpm los bloquea por defecto por seguridad).
+#      - esbuild: lo necesita Vite para transpilar.
+#      - core-js: false -> no ejecuta su postinstall (solo muestra un aviso), no hace falta.
+# EN: pnpm config. allowBuilds: which packages may run install scripts (pnpm
+#     blocks them by default for security).
+#      - esbuild: Vite needs it to transpile.
+#      - core-js: false -> its postinstall (just a notice) is skipped; not needed.
 allowBuilds:
   esbuild: true
   core-js: false

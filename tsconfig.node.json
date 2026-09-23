@@ -1,3 +1,5 @@
+// ES: Config de TypeScript para los ficheros que corren en Node (vite.config.ts).
+// EN: TypeScript config for the files that run on Node (vite.config.ts).
 {
   "compilerOptions": {
     "composite": true,

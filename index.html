@@ -1,10 +1,13 @@
 <!doctype html>
+<!-- ES: Página única que carga la app Vue (Tauri la muestra en su ventana).
+     EN: Single page that loads the Vue app (Tauri shows it in its window). -->
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Fuentes de la app: Syne (titulares) + DM Sans (cuerpo) -->
+    <!-- ES: Fuentes de la app: Syne (titulares) + DM Sans (cuerpo)
+         EN: App fonts: Syne (headings) + DM Sans (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,6 +18,8 @@
   </head>
 
   <body>
+    <!-- ES: Punto de montaje de Vue; main.ts arranca la app aquí.
+         EN: Vue mount point; main.ts boots the app here. -->
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

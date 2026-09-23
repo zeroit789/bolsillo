@@ -1,8 +1,13 @@
-# Integración continua de Bolsillo (app de escritorio Tauri + Vue + TypeScript).
-# Se ejecuta en cada push y pull request a main:
-#   1. secretos  -> gitleaks sobre todo el historial
-#   2. frontend  -> comprobación de tipos (vue-tsc) y build de Vite
-# El proyecto aún no tiene linter ni tests; cuando existan, se añaden aquí.
+# ES: Integración continua de Bolsillo (app de escritorio Tauri + Vue + TypeScript).
+#     Se ejecuta en cada push y pull request a main:
+#       1. secretos  -> gitleaks sobre todo el historial
+#       2. frontend  -> comprobación de tipos (vue-tsc) y build de Vite
+#     El proyecto aún no tiene linter ni tests; cuando existan, se añaden aquí.
+# EN: Bolsillo continuous integration (Tauri + Vue + TypeScript desktop app).
+#     Runs on every push and pull request to main:
+#       1. secrets   -> gitleaks over the whole history
+#       2. frontend  -> type check (vue-tsc) and Vite build
+#     The project has no linter or tests yet; they will be added here when they exist.
 name: CI
 
 on:
@@ -12,17 +17,20 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Permisos mínimos: solo lectura del código
+# ES: Permisos mínimos: solo lectura del código
+# EN: Least privilege: read-only access to the code
 permissions:
   contents: read
 
-# Si llega un push nuevo a la misma rama, se cancela el run anterior
+# ES: Si llega un push nuevo a la misma rama, se cancela el run anterior
+# EN: A new push to the same branch cancels the previous run
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # --- 1. Secretos: binario oficial de gitleaks verificado por SHA256 ---------
+  # --- 1. Secretos / Secrets: binario oficial de gitleaks verificado por SHA256
+  #        (official gitleaks binary checked against its SHA256) ---------------
   secretos:
     name: Secrets (gitleaks)
     runs-on: ubuntu-latest
@@ -32,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # historial completo para escanear todos los commits
+          fetch-depth: 0 # ES: historial completo para escanear todos los commits / EN: full history to scan every commit
       - name: Instalar gitleaks
         run: |
           curl -sSfL -o gitleaks.tar.gz \
@@ -43,7 +51,7 @@ jobs:
       - name: Escanear historial
         run: gitleaks git . --redact --no-banner
 
-  # --- 2. Frontend: tipos y build ---------------------------------------------
+  # --- 2. Frontend: tipos y build / types and build ---------------------------
   frontend:
     name: Frontend (vue-tsc + Vite build)
     runs-on: ubuntu-latest
