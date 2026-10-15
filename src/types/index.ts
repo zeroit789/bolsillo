@@ -241,6 +241,9 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
     return false;
   // ES: Pequeños guards de tipo reutilizables en las comprobaciones por elemento de abajo.
   // EN: Tiny reusable type guards used across the per-item checks below.
+  // ES: Objeto no nulo cuyas claves se pueden leer (sustituye a los antiguos `any`).
+  // EN: Non-null object whose keys can be read (replaces the former `any`).
+  const esObjeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object";
   const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
   const str = (x: unknown) => typeof x === "string";
   const signo = (x: unknown) => x === "ingreso" || x === "gasto";
@@ -253,8 +256,8 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   // EN: Every recurring entry must have id, finite amount, valid sign/category
   //     and a valid `desde`; `hasta` is either null or a valid month.
   const rec = o.recurrentes.every(
-    (r: any) =>
-      r &&
+    (r: unknown) =>
+      esObjeto(r) &&
       str(r.id) &&
       num(r.importe) &&
       signo(r.signo) &&
@@ -268,17 +271,17 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   // EN: Subdivisions (split expense) are optional, but if present they must be
   //     an array of { categoria:string, importe:number finite } or the
   //     per-category split would produce NaN.
-  const subOk = (p: any) =>
+  const subOk = (p: Record<string, unknown>) =>
     p.subdivisiones === undefined ||
     (Array.isArray(p.subdivisiones) &&
-      p.subdivisiones.every((s: any) => s && str(s.categoria) && num(s.importe)));
+      p.subdivisiones.every((s: unknown) => esObjeto(s) && str(s.categoria) && num(s.importe)));
   // ES: Cada puntual debe tener id, importe finito, signo/categoría válidos,
   //     una fecha válida y (si vienen) subdivisiones válidas.
   // EN: Every one-off entry must have id, finite amount, valid sign/category,
   //     a valid date, and (if present) valid subdivisions.
   const pun = o.puntuales.every(
-    (p: any) =>
-      p &&
+    (p: unknown) =>
+      esObjeto(p) &&
       str(p.id) &&
       num(p.importe) &&
       signo(p.signo) &&
@@ -291,8 +294,8 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   // EN: Every debt must have id, finite total/installment/paid amounts and a
   //     valid start month.
   const deu = o.deudas.every(
-    (x: any) =>
-      x &&
+    (x: unknown) =>
+      esObjeto(x) &&
       str(x.id) &&
       num(x.total) &&
       num(x.cuotaMensual) &&
@@ -307,23 +310,31 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
     o.planes === undefined ||
     (Array.isArray(o.planes) &&
       o.planes.every(
-        (x: any) => x && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)
+        (x: unknown) =>
+          esObjeto(x) && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)
       ));
   const pre =
     o.presupuestos === undefined ||
     (Array.isArray(o.presupuestos) &&
-      o.presupuestos.every((x: any) => x && str(x.categoria) && num(x.limite)));
+      o.presupuestos.every((x: unknown) => esObjeto(x) && str(x.categoria) && num(x.limite)));
   const pll =
     o.plantillas === undefined ||
     (Array.isArray(o.plantillas) &&
       o.plantillas.every(
-        (x: any) =>
-          x && str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)
+        (x: unknown) =>
+          esObjeto(x) &&
+          str(x.id) &&
+          str(x.concepto) &&
+          num(x.importe) &&
+          signo(x.signo) &&
+          str(x.categoria)
       ));
   const cue =
     o.cuentas === undefined ||
     (Array.isArray(o.cuentas) &&
-      o.cuentas.every((x: any) => x && str(x.id) && str(x.nombre) && num(x.saldoInicial)));
+      o.cuentas.every(
+        (x: unknown) => esObjeto(x) && str(x.id) && str(x.nombre) && num(x.saldoInicial)
+      ));
   // ES: Válido solo si todas las colecciones pasan su comprobación.
   // EN: Valid only if every collection passes its check.
   return rec && pun && deu && pla && pre && pll && cue;

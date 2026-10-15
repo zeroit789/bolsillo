@@ -33,6 +33,20 @@ export default withVueTs(
   pluginVue.configs["flat/essential"],
   vueTsConfigs.recommended,
 
+  // ES: "Onboarding" es una sola palabra pero no choca con ninguna etiqueta HTML
+  //     (que es lo que esta regla evita); se exime solo ese nombre en vez de
+  //     renombrar el componente o apagar la regla entera.
+  // EN: "Onboarding" is a single word but it does not clash with any HTML tag
+  //     (which is what this rule prevents); only that name is exempted instead of
+  //     renaming the component or turning the whole rule off.
+  {
+    name: "bolsillo/nombres-componentes",
+    files: ["**/*.vue"],
+    rules: {
+      "vue/multi-word-component-names": ["error", { ignores: ["Onboarding"] }],
+    },
+  },
+
   // ES: Siempre el último, para que gane frente a las reglas de estilo anteriores.
   // EN: Always last, so it wins over the previous style rules.
   skipFormatting

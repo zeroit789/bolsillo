@@ -364,7 +364,7 @@ export async function exportarMesPDF(
   if (deudas.length) {
     // ES: Título de la sección encima de la tabla.
     // EN: Section title above the table.
-    let yDeudas = y + 12;
+    const yDeudas = y + 12;
     doc.setFontSize(11);
     doc.text("Deudas", 14, yDeudas);
 
@@ -404,7 +404,7 @@ export async function exportarMesPDF(
   if (planes.length) {
     // ES: Título de la sección encima de la tabla.
     // EN: Section title above the table.
-    let yPlanes = y + 12;
+    const yPlanes = y + 12;
     doc.setFontSize(11);
     doc.text("Planes", 14, yPlanes);
 
