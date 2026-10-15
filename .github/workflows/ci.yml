@@ -1,13 +1,15 @@
 # ES: Integración continua de Bolsillo (app de escritorio Tauri + Vue + TypeScript).
 #     Se ejecuta en cada push y pull request a main:
 #       1. secretos  -> gitleaks sobre todo el historial
-#       2. frontend  -> comprobación de tipos (vue-tsc) y build de Vite
-#     El proyecto aún no tiene linter ni tests; cuando existan, se añaden aquí.
+#       2. frontend  -> ESLint, formato (Prettier), tests (Vitest), tipos (vue-tsc)
+#                       y build de Vite
+#     El backend Rust no se compila aquí.
 # EN: Bolsillo continuous integration (Tauri + Vue + TypeScript desktop app).
 #     Runs on every push and pull request to main:
 #       1. secrets   -> gitleaks over the whole history
-#       2. frontend  -> type check (vue-tsc) and Vite build
-#     The project has no linter or tests yet; they will be added here when they exist.
+#       2. frontend  -> ESLint, formatting (Prettier), tests (Vitest), type check
+#                       (vue-tsc) and Vite build
+#     The Rust backend is not compiled here.
 name: CI
 
 on:
@@ -51,9 +53,10 @@ jobs:
       - name: Escanear historial
         run: gitleaks git . --redact --no-banner
 
-  # --- 2. Frontend: tipos y build / types and build ---------------------------
+  # --- 2. Frontend: lint, formato, tests, tipos y build
+  #        (lint, formatting, tests, types and build) ---------------------------
   frontend:
-    name: Frontend (vue-tsc + Vite build)
+    name: Frontend (lint + format + tests + vue-tsc + Vite build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -66,6 +69,12 @@ jobs:
           cache: pnpm
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
+      - name: Lint (ESLint)
+        run: pnpm lint
+      - name: Formato (Prettier)
+        run: pnpm format:check
+      - name: Tests (Vitest)
+        run: pnpm test
       - name: Tipos (vue-tsc)
         run: pnpm exec vue-tsc --noEmit
       - name: Build (Vite)
