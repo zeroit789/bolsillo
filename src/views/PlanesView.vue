@@ -41,6 +41,7 @@ import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import type { Plan } from "../types";
 import { euro } from "../utils/format";
+import { r2, progreso, restante, conseguido } from "../utils/plan";
 import { crearT } from "../i18n";
 
 // ES: Store central de finanzas (ya inicializado en la app).
@@ -151,40 +152,8 @@ const errorAportar = ref("");
 const tituloModal = computed(() => (editandoId.value ? t("editarPlan") : t("nuevoPlanTitulo")));
 
 // ── 5. Helpers de cálculo por plan / Per-plan calculation helpers ─────────────
-// ES: Redondea un número a 2 decimales (céntimos). Acepta coma o punto decimal.
-// EN: Rounds a number to 2 decimals (cents). Accepts decimal comma or dot.
-function r2(valor: number | string): number {
-  // ES: Si viene como texto con coma decimal ("12,50") se normaliza a punto.
-  // EN: If it comes as text with decimal comma ("12,50") it's normalized to dot.
-  const n = typeof valor === "string" ? Number(valor.replace(",", ".")) : valor;
-  return Math.round((Number(n) || 0) * 100) / 100;
-}
-
-// ES: Porcentaje de progreso de un plan, recortado (clamp) al rango 0..100.
-// EN: Progress percentage of a plan, clamped to the 0..100 range.
-function progreso(plan: Plan): number {
-  // ES: Si el objetivo es 0 o negativo no se puede calcular: se considera 0%.
-  // EN: If the goal is 0 or negative it can't be computed: treated as 0%.
-  if (plan.objetivo <= 0) return 0;
-  const pct = (plan.aportado / plan.objetivo) * 100;
-  // ES: clamp 0..100 para que la barra nunca se desborde ni quede negativa.
-  // EN: clamp 0..100 so the bar never overflows nor goes negative.
-  return Math.min(100, Math.max(0, pct));
-}
-
-// ES: Lo que falta para llegar al objetivo (nunca negativo).
-// EN: What's left to reach the goal (never negative).
-function restante(plan: Plan): number {
-  return Math.max(0, r2(plan.objetivo - plan.aportado));
-}
-
-// ES: true si el plan ya está conseguido (aportado >= objetivo).
-// EN: true if the plan is already achieved (saved >= goal).
-function conseguido(plan: Plan): boolean {
-  // ES: Requiere objetivo válido (>0) para no marcar "conseguido" un plan a 0.
-  // EN: Requires a valid goal (>0) so a plan at 0 isn't flagged "achieved".
-  return plan.objetivo > 0 && plan.aportado >= plan.objetivo;
-}
+// ES: r2, progreso, restante y conseguido viven en utils/plan.ts (con tests).
+// EN: r2, progreso, restante and conseguido live in utils/plan.ts (with tests).
 
 // ── 6. Acciones del modal / Modal actions ─────────────────────────────────────
 // ES: Abre el modal en modo "nuevo plan" con valores por defecto.
