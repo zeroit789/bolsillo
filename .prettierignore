@@ -1,0 +1,9 @@
+# ES: Ficheros que Prettier no toca: generados, binarios, lockfile y el backend Rust.
+# EN: Files Prettier leaves alone: generated output, binaries, lockfile and the Rust backend.
+dist/
+node_modules/
+src-tauri/
+pnpm-lock.yaml
+art/
+docs/
+public/

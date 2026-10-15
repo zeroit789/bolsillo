@@ -1,0 +1,10 @@
+# ES: Normaliza los finales de línea a LF en el repo y en la copia de trabajo,
+#     también en Windows, para que Prettier (endOfLine: lf) no dé falsos fallos.
+# EN: Normalizes line endings to LF in the repo and in the working copy, also on
+#     Windows, so Prettier (endOfLine: lf) does not report false failures.
+* text=auto eol=lf
+
+# ES: Binarios que nunca se tocan. / EN: Binaries that are never touched.
+*.png binary
+*.ico binary
+*.icns binary
