@@ -63,23 +63,26 @@ Es un proyecto de portfolio de código abierto, versión **1.1.0**.
 - Los ajustes (tema, idioma, nombre, moneda) se guardan sin cifrar porque no son sensibles.
 - **La copia de seguridad JSON se exporta sin cifrar.** Guárdala en un sitio seguro.
 - No hay telemetría ni llamadas a servidores propios. La única petición externa es la carga de las fuentes tipográficas desde Google Fonts.
+- **CSP** definida en `src-tauri/tauri.conf.json` (`csp` y `devCsp`): solo código propio (`script-src 'self'`, sin `eval`), estilos propios y de Google Fonts, imágenes propias y en `data:`/`blob:` (recibos), y conexiones solo al IPC de Tauri (`ipc: http://ipc.localhost`; en desarrollo también al servidor de Vite).
 
 ### Stack
 
 Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 
-| Pieza                         | Paquete                                                   | Versión               |
-| ----------------------------- | --------------------------------------------------------- | --------------------- |
-| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2       |
-| API de Tauri para el frontend | `@tauri-apps/api`                                         | 2.11.0                |
-| Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
-| Interfaz                      | `vue`                                                     | 3.5.38                |
-| Estado                        | `pinia`                                                   | 3.0.4                 |
-| Estilos                       | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1         |
-| Build                         | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4         |
-| Tipos                         | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12        |
-| Exportación                   | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8 |
-| Serialización (Rust)          | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150     |
+| Pieza                         | Paquete                                                   | Versión                    |
+| ----------------------------- | --------------------------------------------------------- | -------------------------- |
+| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2            |
+| API de Tauri para el frontend | `@tauri-apps/api`                                         | 2.11.0                     |
+| Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4      |
+| Interfaz                      | `vue`                                                     | 3.5.38                     |
+| Estado                        | `pinia`                                                   | 3.0.4                      |
+| Estilos                       | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1              |
+| Build                         | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4              |
+| Tipos                         | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12             |
+| Lint y formato                | `eslint` · `eslint-plugin-vue` · `prettier`               | 10.12.0 · 10.11.1 · 3.9.10 |
+| Tests                         | `vitest` · `happy-dom`                                    | 5.0.4 · 21.0.1             |
+| Exportación                   | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8      |
+| Serialización (Rust)          | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150          |
 
 ### Requisitos
 
@@ -94,6 +97,10 @@ pnpm tauri dev      # app de escritorio en modo desarrollo
 pnpm dev            # solo el frontend, en el navegador (http://localhost:1420)
 pnpm build          # comprueba tipos (vue-tsc) y genera el frontend en dist/
 pnpm preview        # sirve el build de dist/ para revisarlo
+pnpm lint           # ESLint (Vue + TypeScript)
+pnpm format         # formatea el código con Prettier
+pnpm format:check   # comprueba el formato sin tocar nada
+pnpm test           # tests con Vitest
 pnpm tauri build    # ejecutable e instaladores en src-tauri/target/release/bundle/
 ```
 
@@ -101,21 +108,22 @@ En el navegador (`pnpm dev`) la interfaz funciona, pero lo que depende de Tauri 
 
 ### Tests y CI
 
-- **Tests**: todavía no hay tests automatizados.
-- **Lint**: no hay ESLint ni Prettier configurados. La comprobación de calidad actual es el tipado estricto de TypeScript con `vue-tsc`.
+- **Tests** (`pnpm test`): Vitest con happy-dom, junto al código (`src/**/*.test.ts`). Cubren las deudas (cuotas, última cuota parcial, aviso de saldada), los planes, la comparativa entre meses y el resumen mensual, la exportación a CSV/XLSX/PDF (con el diálogo y el comando de Tauri simulados), la importación y validación de copias, y el cifrado con PIN (ida y vuelta, PIN incorrecto, datos manipulados y flujo de bloqueo completo).
+- **Lint** (`pnpm lint`): ESLint con la flat config oficial de Vue + TypeScript (`eslint-plugin-vue` _essential_ + `vueTsConfigs.recommended`).
+- **Formato** (`pnpm format:check`): Prettier, separado del lint (`@vue/eslint-config-prettier/skip-formatting` evita que choquen).
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), en cada push y pull request a `main`:
   1. **Secretos**: `gitleaks` 8.30.1 (binario verificado por SHA256) sobre todo el historial.
-  2. **Frontend**: `pnpm install --frozen-lockfile`, `vue-tsc --noEmit` y `vite build` con Node 24 y pnpm 12.
+  2. **Frontend**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `vue-tsc --noEmit` y `vite build` con Node 24 y pnpm 12.
 
   La app de escritorio (Rust) no se compila en la CI.
 
-Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm build`.
+Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`.
 
 ### Estructura
 
 ```
 bolsillo/
-├─ .github/workflows/ci.yml   # CI: gitleaks + vue-tsc + build de Vite
+├─ .github/workflows/ci.yml   # CI: gitleaks + lint + formato + tests + vue-tsc + build
 ├─ docs/screenshot.png        # captura del README (datos de ejemplo)
 ├─ art/                       # material gráfico
 ├─ public/                    # recursos estáticos
@@ -129,7 +137,8 @@ bolsillo/
 │  │                          #   planes, presupuestos, sobres, cuentas, historial, ajustes
 │  ├─ components/             # gráficas, modal de movimiento, onboarding, bloqueo…
 │  ├─ stores/                 # Pinia: finanzas, ajustes y sesión (bloqueo y guardado)
-│  ├─ utils/                  # cifrado, almacenamiento, exportación, formato, deudas, avisos
+│  ├─ utils/                  # cifrado, almacenamiento, exportación, formato, deudas,
+│  │                          #   planes, comparativa, avisos (+ sus *.test.ts)
 │  ├─ data/                   # categorías por defecto y datos de ejemplo
 │  └─ types/                  # tipos del dominio y validación de copias
 └─ src-tauri/                 # capa nativa (Rust)
@@ -186,23 +195,26 @@ It's an open-source portfolio project, version **1.1.0**.
 - Settings (theme, language, name, currency) are stored unencrypted because they aren't sensitive.
 - **The JSON backup is exported unencrypted.** Keep it somewhere safe.
 - There's no telemetry and no calls to any backend. The only outside request is loading the fonts from Google Fonts.
+- **CSP** set in `src-tauri/tauri.conf.json` (`csp` and `devCsp`): only the app's own code (`script-src 'self'`, no `eval`), its own styles plus Google Fonts, its own images plus `data:`/`blob:` (receipts), and connections only to Tauri's IPC (`ipc: http://ipc.localhost`; in development also to the Vite server).
 
 ### Stack
 
 Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 
-| Part                       | Package                                                   | Version               |
-| -------------------------- | --------------------------------------------------------- | --------------------- |
-| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2       |
-| Tauri API for the frontend | `@tauri-apps/api`                                         | 2.11.0                |
-| Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
-| UI                         | `vue`                                                     | 3.5.38                |
-| State                      | `pinia`                                                   | 3.0.4                 |
-| Styling                    | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1         |
-| Build                      | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4         |
-| Types                      | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12        |
-| Export                     | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8 |
-| Serialization (Rust)       | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150     |
+| Part                       | Package                                                   | Version                    |
+| -------------------------- | --------------------------------------------------------- | -------------------------- |
+| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2            |
+| Tauri API for the frontend | `@tauri-apps/api`                                         | 2.11.0                     |
+| Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4      |
+| UI                         | `vue`                                                     | 3.5.38                     |
+| State                      | `pinia`                                                   | 3.0.4                      |
+| Styling                    | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1              |
+| Build                      | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4              |
+| Types                      | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12             |
+| Linting and formatting     | `eslint` · `eslint-plugin-vue` · `prettier`               | 10.12.0 · 10.11.1 · 3.9.10 |
+| Tests                      | `vitest` · `happy-dom`                                    | 5.0.4 · 21.0.1             |
+| Export                     | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8      |
+| Serialization (Rust)       | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150          |
 
 ### Requirements
 
@@ -217,6 +229,10 @@ pnpm tauri dev      # desktop app in development mode
 pnpm dev            # frontend only, in the browser (http://localhost:1420)
 pnpm build          # type-check (vue-tsc) and build the frontend into dist/
 pnpm preview        # serve the dist/ build to check it
+pnpm lint           # ESLint (Vue + TypeScript)
+pnpm format         # format the code with Prettier
+pnpm format:check   # check formatting without changing anything
+pnpm test           # Vitest tests
 pnpm tauri build    # executable and installers in src-tauri/target/release/bundle/
 ```
 
@@ -224,21 +240,22 @@ In the browser (`pnpm dev`) the UI works, but anything that relies on Tauri (the
 
 ### Tests and CI
 
-- **Tests**: there are no automated tests yet.
-- **Linting**: ESLint and Prettier aren't set up. The current quality gate is strict TypeScript checking with `vue-tsc`.
+- **Tests** (`pnpm test`): Vitest with happy-dom, next to the code (`src/**/*.test.ts`). They cover debts (installments, final partial installment, settled notice), plans, the month-to-month comparison and the monthly summary, CSV/XLSX/PDF export (with Tauri's dialog and command mocked), backup import and validation, and PIN encryption (round trip, wrong PIN, tampered data and the full lock flow).
+- **Linting** (`pnpm lint`): ESLint with the official Vue + TypeScript flat config (`eslint-plugin-vue` _essential_ + `vueTsConfigs.recommended`).
+- **Formatting** (`pnpm format:check`): Prettier, kept apart from linting (`@vue/eslint-config-prettier/skip-formatting` stops them from clashing).
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request to `main`:
   1. **Secrets**: `gitleaks` 8.30.1 (binary verified by SHA256) over the full history.
-  2. **Frontend**: `pnpm install --frozen-lockfile`, `vue-tsc --noEmit` and `vite build` on Node 24 and pnpm 12.
+  2. **Frontend**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `vue-tsc --noEmit` and `vite build` on Node 24 and pnpm 12.
 
   The desktop app (Rust) isn't compiled in CI.
 
-To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm build`.
+To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`.
 
 ### Project structure
 
 ```
 bolsillo/
-├─ .github/workflows/ci.yml   # CI: gitleaks + vue-tsc + Vite build
+├─ .github/workflows/ci.yml   # CI: gitleaks + lint + format + tests + vue-tsc + build
 ├─ docs/screenshot.png        # README screenshot (sample data)
 ├─ art/                       # artwork
 ├─ public/                    # static assets
@@ -252,7 +269,8 @@ bolsillo/
 │  │                          #   plans, budgets, envelopes, accounts, history, settings
 │  ├─ components/             # charts, transaction modal, onboarding, lock screen…
 │  ├─ stores/                 # Pinia: finances, settings and session (lock and saving)
-│  ├─ utils/                  # encryption, storage, export, formatting, debts, notifications
+│  ├─ utils/                  # encryption, storage, export, formatting, debts,
+│  │                          #   plans, comparison, notifications (+ their *.test.ts)
 │  ├─ data/                   # default categories and sample data
 │  └─ types/                  # domain types and backup validation
 └─ src-tauri/                 # native layer (Rust)
