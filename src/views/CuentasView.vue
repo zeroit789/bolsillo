@@ -93,9 +93,7 @@ const form = reactive<FormCuenta>({
 
 // ES: Título del modal según estemos creando o editando.
 // EN: Modal title depending on whether we are creating or editing.
-const tituloModal = computed(() =>
-  editandoId.value ? t("modalEditar") : t("modalNueva")
-);
+const tituloModal = computed(() => (editandoId.value ? t("modalEditar") : t("modalNueva")));
 
 // ── 5. Abrir/cerrar modal / Open/close modal ─────────────────────────────────
 // ES: Abre el modal en modo "nueva cuenta" con valores por defecto.

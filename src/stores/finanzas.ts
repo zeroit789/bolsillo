@@ -162,8 +162,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     // ES: Gastos fijos = gastos recurrentes + cuotas de deuda.
     // EN: Fixed expenses = recurring expenses + debt instalments.
     const gastosFijos =
-      recs.filter((r) => r.signo === "gasto").reduce((a, r) => a + r.importe, 0) +
-      cuotasDeuda;
+      recs.filter((r) => r.signo === "gasto").reduce((a, r) => a + r.importe, 0) + cuotasDeuda;
 
     // ES: Gastos variables = solo gastos puntuales.
     // EN: Variable expenses = one-off expenses only.
@@ -481,7 +480,13 @@ export const useFinanzas = defineStore("finanzas", () => {
     const d = new Date();
     const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const hoy = `${mes}-${String(d.getDate()).padStart(2, "0")}`;
-    addPuntual({ concepto: t.concepto, importe: t.importe, signo: t.signo, categoria: t.categoria, fecha: hoy });
+    addPuntual({
+      concepto: t.concepto,
+      importe: t.importe,
+      signo: t.signo,
+      categoria: t.categoria,
+      fecha: hoy,
+    });
   }
 
   // ── 10. Acciones: cuentas y patrimonio / Actions: accounts & net worth ───────
@@ -518,9 +523,7 @@ export const useFinanzas = defineStore("finanzas", () => {
   );
   // ES: Patrimonio total = suma del saldo de todas las cuentas.
   // EN: Total net worth = sum of every account balance.
-  const patrimonioTotal = computed(() =>
-    patrimonio.value.reduce((a, x) => a + x.saldo, 0)
-  );
+  const patrimonioTotal = computed(() => patrimonio.value.reduce((a, x) => a + x.saldo, 0));
 
   // ── 11. Acciones: varios (baja, borrado de línea, mes) / Actions: misc ───────
 

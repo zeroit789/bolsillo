@@ -163,7 +163,8 @@ function iconoDeuda(tipo: TipoDeuda): string {
 async function exportar(tipo: "xlsx" | "pdf") {
   const label = mesLegible(f.mesSeleccionado);
   try {
-    if (tipo === "xlsx") await exportarMesXLSX(label, f.lineasDelMes, f.resumen, f.estadosDeuda, f.planes);
+    if (tipo === "xlsx")
+      await exportarMesXLSX(label, f.lineasDelMes, f.resumen, f.estadosDeuda, f.planes);
     else await exportarMesPDF(label, f.lineasDelMes, f.resumen, f.estadosDeuda, f.planes);
   } catch (e) {
     console.error("Error exportando:", e);
@@ -225,8 +226,8 @@ async function exportar(tipo: "xlsx" | "pdf") {
       <!-- ES: Días que quedan y gasto acumulado de hoy. -->
       <!-- EN: Days left and today's accumulated spending. -->
       <p class="text-sm text-muted mt-2">
-        {{ t("teQuedan") }} {{ diasRestantes }} {{ diasRestantes === 1 ? t("dia") : t("dias") }}
-        · {{ t("hoyLlevas") }} {{ euro(gastadoHoy) }}
+        {{ t("teQuedan") }} {{ diasRestantes }} {{ diasRestantes === 1 ? t("dia") : t("dias") }} ·
+        {{ t("hoyLlevas") }} {{ euro(gastadoHoy) }}
       </p>
       <!-- ES: Restante de hoy: verde si hay margen, rojo si se ha pasado. -->
       <!-- EN: Today's remainder: green if there's margin, red if overspent. -->
@@ -251,20 +252,28 @@ async function exportar(tipo: "xlsx" | "pdf") {
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xl shrink-0">{{ iconoDeuda(e.deuda.tipo) }}</span>
             <p class="font-medium truncate">{{ e.deuda.concepto }}</p>
-            <span v-if="e.terminada" class="ml-auto text-xs text-ok shrink-0">{{ t("pagada") }}</span>
+            <span v-if="e.terminada" class="ml-auto text-xs text-ok shrink-0">{{
+              t("pagada")
+            }}</span>
           </div>
           <div class="h-2 rounded-full bg-surface-2 overflow-hidden mt-3">
-            <div class="h-full rounded-full bg-brand transition-all" :style="{ width: e.progreso + '%' }" />
+            <div
+              class="h-full rounded-full bg-brand transition-all"
+              :style="{ width: e.progreso + '%' }"
+            />
           </div>
           <p class="text-xs text-muted mt-2">
-            {{ t("pagado") }} {{ euro(e.pagado) }} {{ t("de") }} {{ euro(e.deuda.total) }} ({{ e.progreso }}%)
+            {{ t("pagado") }} {{ euro(e.pagado) }} {{ t("de") }} {{ euro(e.deuda.total) }} ({{
+              e.progreso
+            }}%)
           </p>
           <div class="flex justify-between text-xs mt-1">
             <span class="text-danger">{{ t("pendiente") }} {{ euro(e.pendiente) }}</span>
             <span class="text-muted">{{ t("cuota") }} {{ euro(e.deuda.cuotaMensual) }}</span>
           </div>
           <p v-if="!e.terminada" class="text-xs text-faint mt-1">
-            {{ t("teQuedanMeses") }} {{ e.mesesRestantes }} {{ e.mesesRestantes === 1 ? t("mes") : t("meses") }}
+            {{ t("teQuedanMeses") }} {{ e.mesesRestantes }}
+            {{ e.mesesRestantes === 1 ? t("mes") : t("meses") }}
           </p>
         </div>
       </div>
@@ -286,22 +295,22 @@ async function exportar(tipo: "xlsx" | "pdf") {
         <!-- ES: Barras proporcionales debajo de la dona, como desglose detallado. -->
         <!-- EN: Proportional bars below the donut, kept as a detailed breakdown. -->
         <ul class="space-y-3">
-        <li v-for="c in f.gastoPorCategoria" :key="c.categoria">
-          <!-- ES: Cabecera de fila: nombre de la categoría + su total. -->
-          <!-- EN: Row header: category name + its total amount. -->
-          <div class="flex justify-between text-sm mb-1">
-            <span class="text-muted">{{ c.categoria }}</span>
-            <span class="tabular-nums">{{ euro(c.total) }}</span>
-          </div>
-          <!-- ES: Barra proporcional; ancho desde pct(), color desde la categoría. -->
-          <!-- EN: Proportional bar; width from pct(), color from the category. -->
-          <div class="h-2 rounded-full bg-surface-2 overflow-hidden">
-            <div
-              class="h-full rounded-full"
-              :style="{ width: pct(c.total) + '%', backgroundColor: colorCategoria(c.categoria) }"
-            />
-          </div>
-        </li>
+          <li v-for="c in f.gastoPorCategoria" :key="c.categoria">
+            <!-- ES: Cabecera de fila: nombre de la categoría + su total. -->
+            <!-- EN: Row header: category name + its total amount. -->
+            <div class="flex justify-between text-sm mb-1">
+              <span class="text-muted">{{ c.categoria }}</span>
+              <span class="tabular-nums">{{ euro(c.total) }}</span>
+            </div>
+            <!-- ES: Barra proporcional; ancho desde pct(), color desde la categoría. -->
+            <!-- EN: Proportional bar; width from pct(), color from the category. -->
+            <div class="h-2 rounded-full bg-surface-2 overflow-hidden">
+              <div
+                class="h-full rounded-full"
+                :style="{ width: pct(c.total) + '%', backgroundColor: colorCategoria(c.categoria) }"
+              />
+            </div>
+          </li>
         </ul>
       </template>
     </section>

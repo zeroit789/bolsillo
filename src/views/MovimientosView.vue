@@ -461,7 +461,11 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
         class="inline-flex items-center gap-1.5 rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm hover:border-brand transition-colors"
       >
         <!-- ES: Texto del chip: registra el movimiento al hacer clic / EN: Chip text: logs the transaction on click -->
-        <button class="text-ink" :title="`${t('registrarHoy')}: ${p.concepto}`" @click="usarPlantilla(p)">
+        <button
+          class="text-ink"
+          :title="`${t('registrarHoy')}: ${p.concepto}`"
+          @click="usarPlantilla(p)"
+        >
           {{ p.concepto }} · {{ euro(p.importe) }}
         </button>
         <!-- ES: Aspa para eliminar el atajo / EN: Cross to delete the shortcut -->
@@ -586,7 +590,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           <option value="fijo">{{ t("gastosFijos") }}</option>
           <option value="variable">{{ t("gastosVariables") }}</option>
         </select>
-        <span class="text-faint text-sm shrink-0">{{ lineasFiltradas.length }} {{ t("apuntes") }}</span>
+        <span class="text-faint text-sm shrink-0"
+          >{{ lineasFiltradas.length }} {{ t("apuntes") }}</span
+        >
       </div>
 
       <!-- ES: Estado vacío: distingue "sin resultados del filtro" vs "sin apuntes". -->
@@ -609,7 +615,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
             <p class="truncate">{{ l.concepto }}</p>
             <p class="text-faint text-xs mt-0.5 flex flex-wrap items-center gap-1.5">
               <span class="rounded-full bg-surface-2 px-2 py-0.5">{{ l.categoria }}</span>
-              <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">{{ t("fijo") }}</span>
+              <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">{{
+                t("fijo")
+              }}</span>
               <!-- ES: Chip "Dividido": el gasto se reparte en varias categorías / EN: "Split" chip: the expense is spread across several categories -->
               <span
                 v-if="l.subdivisiones?.length"

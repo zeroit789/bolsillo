@@ -253,10 +253,7 @@ function seleccionarDia(fecha: string): void {
           @click="seleccionarDia(celda.fecha)"
         >
           <!-- ES: Número del día / EN: Day number -->
-          <span
-            class="text-xs font-medium"
-            :class="celda.gasto > 0 ? 'text-ink' : 'text-muted'"
-          >
+          <span class="text-xs font-medium" :class="celda.gasto > 0 ? 'text-ink' : 'text-muted'">
             {{ celda.numero }}
           </span>
           <!-- ES: Importe gastado ese día (solo si hay gasto) -->
@@ -273,10 +270,7 @@ function seleccionarDia(fecha: string): void {
 
     <!-- ES: Panel inferior: movimientos del día seleccionado -->
     <!-- EN: Bottom panel: transactions of the selected day -->
-    <div
-      v-if="diaSeleccionado"
-      class="mt-5 rounded-2xl bg-surface border border-border p-5"
-    >
+    <div v-if="diaSeleccionado" class="mt-5 rounded-2xl bg-surface border border-border p-5">
       <h3 class="font-display font-bold mb-4">{{ tituloSeleccion }}</h3>
 
       <!-- ES: Sin movimientos ese día / EN: No transactions that day -->
@@ -287,11 +281,7 @@ function seleccionarDia(fecha: string): void {
       <!-- ES: Lista de movimientos puntuales del día -->
       <!-- EN: List of one-off transactions for the day -->
       <ul v-else class="divide-y divide-border">
-        <li
-          v-for="m in movimientosSeleccion"
-          :key="m.id"
-          class="flex items-center gap-3 py-3"
-        >
+        <li v-for="m in movimientosSeleccion" :key="m.id" class="flex items-center gap-3 py-3">
           <!-- ES: Punto de color según el signo / EN: Colored dot according to the sign -->
           <span
             class="size-2.5 rounded-full shrink-0"

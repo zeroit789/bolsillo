@@ -159,11 +159,7 @@ function textoPorcentaje(porcentaje: number | null): string {
     <!-- ES: Una fila por métrica: ingresos, gastos totales y disponible -->
     <!-- EN: One row per metric: income, total expenses and available -->
     <div class="mt-4 space-y-4">
-      <div
-        v-for="fila in filas"
-        :key="fila.clave"
-        class="grid grid-cols-3 items-center gap-3"
-      >
+      <div v-for="fila in filas" :key="fila.clave" class="grid grid-cols-3 items-center gap-3">
         <!-- ES: Columna 1: nombre de la métrica + valor del mes anterior -->
         <!-- EN: Column 1: metric name + previous month value -->
         <div>

@@ -89,9 +89,7 @@ const puntos = computed<PuntoPrevision[]>(() => {
 
 // ES: ¿Hay algún dato real con el que proyectar? (recurrentes o deudas)
 // EN: Is there any real data to project with? (recurrents or debts)
-const hayDatos = computed<boolean>(
-  () => f.recurrentes.length > 0 || f.deudas.length > 0
-);
+const hayDatos = computed<boolean>(() => f.recurrentes.length > 0 || f.deudas.length > 0);
 
 // ── 2. Geometría y constantes del lienzo SVG / SVG canvas geometry & constants ─
 // ES: Tamaño lógico del lienzo en unidades SVG. La gráfica es responsive vía el

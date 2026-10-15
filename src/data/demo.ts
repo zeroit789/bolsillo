@@ -49,25 +49,109 @@ export function datosDemo(): DatosBolsillo {
     // ES: Recurrentes (se repiten cada mes desde su alta).
     // EN: Recurring entries (repeat every month from their start date).
     recurrentes: [
-      { id: nuevoId(), concepto: "Nómina", importe: 1800, signo: "ingreso", categoria: "Nómina", desde: haceMeses(5), hasta: null },
-      { id: nuevoId(), concepto: "Alquiler", importe: 650, signo: "gasto", categoria: "Alquiler", desde: haceMeses(5), hasta: null },
-      { id: nuevoId(), concepto: "Fibra + móvil", importe: 45, signo: "gasto", categoria: "Internet", desde: haceMeses(5), hasta: null },
-      { id: nuevoId(), concepto: "Suscripciones", importe: 25, signo: "gasto", categoria: "Suscripciones", desde: haceMeses(5), hasta: null },
-      { id: nuevoId(), concepto: "Gimnasio", importe: 30, signo: "gasto", categoria: "Gimnasio", desde: haceMeses(3), hasta: null },
+      {
+        id: nuevoId(),
+        concepto: "Nómina",
+        importe: 1800,
+        signo: "ingreso",
+        categoria: "Nómina",
+        desde: haceMeses(5),
+        hasta: null,
+      },
+      {
+        id: nuevoId(),
+        concepto: "Alquiler",
+        importe: 650,
+        signo: "gasto",
+        categoria: "Alquiler",
+        desde: haceMeses(5),
+        hasta: null,
+      },
+      {
+        id: nuevoId(),
+        concepto: "Fibra + móvil",
+        importe: 45,
+        signo: "gasto",
+        categoria: "Internet",
+        desde: haceMeses(5),
+        hasta: null,
+      },
+      {
+        id: nuevoId(),
+        concepto: "Suscripciones",
+        importe: 25,
+        signo: "gasto",
+        categoria: "Suscripciones",
+        desde: haceMeses(5),
+        hasta: null,
+      },
+      {
+        id: nuevoId(),
+        concepto: "Gimnasio",
+        importe: 30,
+        signo: "gasto",
+        categoria: "Gimnasio",
+        desde: haceMeses(3),
+        hasta: null,
+      },
     ],
     // ES: Puntuales del mes en curso.
     // EN: One-off entries for the current month.
     puntuales: [
-      { id: nuevoId(), concepto: "Compra semanal", importe: 95, signo: "gasto", categoria: "Supermercado", fecha: dia(8) },
-      { id: nuevoId(), concepto: "Gasolina", importe: 60, signo: "gasto", categoria: "Gasolina", fecha: dia(10) },
-      { id: nuevoId(), concepto: "Cena fuera", importe: 38, signo: "gasto", categoria: "Restaurantes", fecha: dia(14) },
-      { id: nuevoId(), concepto: "Venta de segunda mano", importe: 50, signo: "ingreso", categoria: "Ventas", fecha: dia(15) },
+      {
+        id: nuevoId(),
+        concepto: "Compra semanal",
+        importe: 95,
+        signo: "gasto",
+        categoria: "Supermercado",
+        fecha: dia(8),
+      },
+      {
+        id: nuevoId(),
+        concepto: "Gasolina",
+        importe: 60,
+        signo: "gasto",
+        categoria: "Gasolina",
+        fecha: dia(10),
+      },
+      {
+        id: nuevoId(),
+        concepto: "Cena fuera",
+        importe: 38,
+        signo: "gasto",
+        categoria: "Restaurantes",
+        fecha: dia(14),
+      },
+      {
+        id: nuevoId(),
+        concepto: "Venta de segunda mano",
+        importe: 50,
+        signo: "ingreso",
+        categoria: "Ventas",
+        fecha: dia(15),
+      },
     ],
     // ES: Deudas de ejemplo.
     // EN: Sample debts.
     deudas: [
-      { id: nuevoId(), concepto: "Coche", tipo: "coche", total: 12000, cuotaMensual: 280, pagadoInicial: 3500, inicioMes: haceMeses(5) },
-      { id: nuevoId(), concepto: "Tarjeta de crédito", tipo: "tarjeta", total: 1500, cuotaMensual: 150, pagadoInicial: 300, inicioMes: haceMeses(3) },
+      {
+        id: nuevoId(),
+        concepto: "Coche",
+        tipo: "coche",
+        total: 12000,
+        cuotaMensual: 280,
+        pagadoInicial: 3500,
+        inicioMes: haceMeses(5),
+      },
+      {
+        id: nuevoId(),
+        concepto: "Tarjeta de crédito",
+        tipo: "tarjeta",
+        total: 1500,
+        cuotaMensual: 150,
+        pagadoInicial: 300,
+        inicioMes: haceMeses(3),
+      },
     ],
     // ES: Planes / metas de ejemplo.
     // EN: Sample plans / goals.
@@ -86,7 +170,13 @@ export function datosDemo(): DatosBolsillo {
     plantillas: [
       { id: nuevoId(), concepto: "Café", importe: 1.5, signo: "gasto", categoria: "Cafetería" },
       { id: nuevoId(), concepto: "Gasolina", importe: 50, signo: "gasto", categoria: "Gasolina" },
-      { id: nuevoId(), concepto: "Compra súper", importe: 60, signo: "gasto", categoria: "Supermercado" },
+      {
+        id: nuevoId(),
+        concepto: "Compra súper",
+        importe: 60,
+        signo: "gasto",
+        categoria: "Supermercado",
+      },
     ],
     // ES: Cuentas de ejemplo (para el patrimonio).
     // EN: Sample accounts (for the net-worth view).

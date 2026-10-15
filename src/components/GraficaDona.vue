@@ -50,9 +50,7 @@ const props = defineProps<{ datos: DatoCategoria[] }>();
 // ── 3. Total y constantes de geometría / Total & geometry constants ───────────
 // ES: Suma de los totales de todas las categorías (el 100 % de la dona).
 // EN: Sum of all the categories' totals (the donut's 100 %).
-const totalGasto = computed<number>(() =>
-  props.datos.reduce((acc, d) => acc + d.total, 0)
-);
+const totalGasto = computed<number>(() => props.datos.reduce((acc, d) => acc + d.total, 0));
 
 // ES: ¿Hay algo que dibujar? (controla el estado vacío).
 // EN: Is there anything to draw? (controls the empty state).
@@ -195,17 +193,10 @@ const leyenda = computed<FilaLeyenda[]>(() =>
       <!-- ES: Leyenda: muestra de color + categoría + importe + porcentaje por fila. -->
       <!-- EN: Legend: color swatch + category + amount + percentage per row. -->
       <ul class="mt-3 space-y-2">
-        <li
-          v-for="fila in leyenda"
-          :key="fila.categoria"
-          class="flex items-center gap-2 text-sm"
-        >
+        <li v-for="fila in leyenda" :key="fila.categoria" class="flex items-center gap-2 text-sm">
           <!-- ES: Muestra de color que coincide con la categoría. -->
           <!-- EN: Color swatch matching the category. -->
-          <span
-            class="size-3 shrink-0 rounded-full"
-            :style="{ backgroundColor: fila.color }"
-          />
+          <span class="size-3 shrink-0 rounded-full" :style="{ backgroundColor: fila.color }" />
           <!-- ES: Nombre de la categoría (se corta si es muy largo). -->
           <!-- EN: Category name (truncates if too long). -->
           <span class="min-w-0 flex-1 truncate text-muted">{{ fila.categoria }}</span>

@@ -56,9 +56,17 @@ export const COLOR_GRUPO: Record<string, string> = {
 //     group + its color. Wide list to cover most expense/income cases.
 export const CATEGORIAS: Categoria[] = [
   // ES: Vivienda / EN: Housing
-  ...["Alquiler", "Hipoteca", "Comunidad", "Luz", "Agua", "Gas", "Internet", "Telefonía", "Mantenimiento hogar"].map(
-    (n) => ({ nombre: n, grupo: "Vivienda", color: COLOR_GRUPO.Vivienda })
-  ),
+  ...[
+    "Alquiler",
+    "Hipoteca",
+    "Comunidad",
+    "Luz",
+    "Agua",
+    "Gas",
+    "Internet",
+    "Telefonía",
+    "Mantenimiento hogar",
+  ].map((n) => ({ nombre: n, grupo: "Vivienda", color: COLOR_GRUPO.Vivienda })),
   // ES: Alimentación / EN: Food
   ...["Supermercado", "Restaurantes", "Cafetería", "Comida a domicilio"].map((n) => ({
     nombre: n,
@@ -66,9 +74,16 @@ export const CATEGORIAS: Categoria[] = [
     color: COLOR_GRUPO.Alimentación,
   })),
   // ES: Transporte / EN: Transport
-  ...["Gasolina", "Transporte público", "Coche", "Moto", "Parking", "Peajes", "Taxi/VTC", "Mantenimiento vehículo"].map(
-    (n) => ({ nombre: n, grupo: "Transporte", color: COLOR_GRUPO.Transporte })
-  ),
+  ...[
+    "Gasolina",
+    "Transporte público",
+    "Coche",
+    "Moto",
+    "Parking",
+    "Peajes",
+    "Taxi/VTC",
+    "Mantenimiento vehículo",
+  ].map((n) => ({ nombre: n, grupo: "Transporte", color: COLOR_GRUPO.Transporte })),
   // ES: Salud / EN: Health
   ...["Farmacia", "Médico", "Dentista", "Gimnasio", "Seguro de salud"].map((n) => ({
     nombre: n,
@@ -76,11 +91,13 @@ export const CATEGORIAS: Categoria[] = [
     color: COLOR_GRUPO.Salud,
   })),
   // ES: Ocio / EN: Leisure
-  ...["Suscripciones", "Cine/Teatro", "Viajes", "Hobbies", "Videojuegos", "Eventos", "Deporte"].map((n) => ({
-    nombre: n,
-    grupo: "Ocio",
-    color: COLOR_GRUPO.Ocio,
-  })),
+  ...["Suscripciones", "Cine/Teatro", "Viajes", "Hobbies", "Videojuegos", "Eventos", "Deporte"].map(
+    (n) => ({
+      nombre: n,
+      grupo: "Ocio",
+      color: COLOR_GRUPO.Ocio,
+    })
+  ),
   // ES: Compras / EN: Shopping
   ...["Ropa", "Electrónica", "Hogar", "Regalos", "Belleza", "Mascotas", "Libros"].map((n) => ({
     nombre: n,

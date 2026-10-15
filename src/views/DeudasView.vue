@@ -80,9 +80,18 @@ const t = crearT({
   // EN: Validation messages
   errConcepto: { es: "El concepto no puede estar vacío.", en: "The concept cannot be empty." },
   errTotal: { es: "El total debe ser mayor que 0.", en: "The total must be greater than 0." },
-  errCuota: { es: "La cuota mensual debe ser mayor que 0.", en: "The monthly payment must be greater than 0." },
-  errPagadoNeg: { es: "Lo ya pagado no puede ser negativo.", en: "The amount already paid cannot be negative." },
-  errPagadoTotal: { es: "Lo ya pagado no puede superar el total.", en: "The amount already paid cannot exceed the total." },
+  errCuota: {
+    es: "La cuota mensual debe ser mayor que 0.",
+    en: "The monthly payment must be greater than 0.",
+  },
+  errPagadoNeg: {
+    es: "Lo ya pagado no puede ser negativo.",
+    en: "The amount already paid cannot be negative.",
+  },
+  errPagadoTotal: {
+    es: "Lo ya pagado no puede superar el total.",
+    en: "The amount already paid cannot exceed the total.",
+  },
   errMes: { es: "Indica un mes de inicio válido.", en: "Enter a valid start month." },
   // ES: Confirmación de borrado (con interpolación del concepto)
   // EN: Delete confirmation (with the concept interpolated)
@@ -120,9 +129,7 @@ const error = ref("");
 
 // ES: Título del modal según estemos creando o editando.
 // EN: Modal title depending on whether we are creating or editing.
-const tituloModal = computed(() =>
-  editandoId.value ? t("modalEditar") : t("modalNueva")
-);
+const tituloModal = computed(() => (editandoId.value ? t("modalEditar") : t("modalNueva")));
 
 // ── 5. Ayudante de metadatos del tipo / Type metadata helper ──────────────────
 // ES: Devuelve los metadatos (etiqueta + icono) de un tipo de deuda.
@@ -180,12 +187,30 @@ function guardar() {
   const cuota = r2(form.cuotaMensual);
   const pagado = r2(form.pagadoInicial);
 
-  if (!form.concepto.trim()) { error.value = t("errConcepto"); return; }
-  if (total <= 0) { error.value = t("errTotal"); return; }
-  if (cuota <= 0) { error.value = t("errCuota"); return; }
-  if (pagado < 0) { error.value = t("errPagadoNeg"); return; }
-  if (pagado > total) { error.value = t("errPagadoTotal"); return; }
-  if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) { error.value = t("errMes"); return; }
+  if (!form.concepto.trim()) {
+    error.value = t("errConcepto");
+    return;
+  }
+  if (total <= 0) {
+    error.value = t("errTotal");
+    return;
+  }
+  if (cuota <= 0) {
+    error.value = t("errCuota");
+    return;
+  }
+  if (pagado < 0) {
+    error.value = t("errPagadoNeg");
+    return;
+  }
+  if (pagado > total) {
+    error.value = t("errPagadoTotal");
+    return;
+  }
+  if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) {
+    error.value = t("errMes");
+    return;
+  }
 
   // ES: Día de cobro: se acepta entero 1-31; si está vacío/0/fuera de rango => undefined.
   // EN: Charge day: an integer 1-31 is accepted; if empty/0/out of range => undefined.
@@ -308,8 +333,8 @@ function borrar(deuda: Deuda) {
           </div>
           <!-- ES: Texto: pagado X de Y (progreso%) / EN: Text: paid X of Y (progress%) -->
           <p class="mt-2 text-xs text-muted">
-            {{ t("pagadoDe") }} {{ euro(estado.pagado) }} {{ t("de") }} {{ euro(estado.deuda.total) }}
-            ({{ Math.round(estado.progreso) }}%)
+            {{ t("pagadoDe") }} {{ euro(estado.pagado) }} {{ t("de") }}
+            {{ euro(estado.deuda.total) }} ({{ Math.round(estado.progreso) }}%)
           </p>
         </div>
 
@@ -319,7 +344,9 @@ function borrar(deuda: Deuda) {
             <!-- ES: Pendiente (rojo si queda algo por pagar) / EN: Pending (red if something is left to pay) -->
             <p>
               <span class="text-muted">{{ t("pendiente") }} </span>
-              <span :class="estado.pendiente > 0 ? 'text-danger font-medium' : 'text-ok font-medium'">
+              <span
+                :class="estado.pendiente > 0 ? 'text-danger font-medium' : 'text-ok font-medium'"
+              >
                 {{ euro(estado.pendiente) }}
               </span>
             </p>

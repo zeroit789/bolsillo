@@ -53,7 +53,10 @@ const t = crearT({
   etiquetaNombre: { es: "¿Cómo te llamas?", en: "What's your name?" },
   placeholderNombre: { es: "Tu nombre", en: "Your name" },
   etiquetaFecha: { es: "Fecha", en: "Date" },
-  fechaSistema: { es: "Usar la fecha de mi PC (recomendado)", en: "Use my computer's date (recommended)" },
+  fechaSistema: {
+    es: "Usar la fecha de mi PC (recomendado)",
+    en: "Use my computer's date (recommended)",
+  },
   fechaManual: { es: "Empezar en un mes concreto", en: "Start in a specific month" },
   etiquetaBloqueo: { es: "¿Proteger la app al abrir?", en: "Protect the app on open?" },
   bloqueoNinguno: { es: "No, abrir directamente", en: "No, open directly" },
@@ -69,7 +72,10 @@ const t = crearT({
   botonPreparando: { es: "Preparando…", en: "Setting up…" },
   botonEmpezar: { es: "Empezar", en: "Get started" },
   errorPin: { es: "El PIN debe tener entre 4 y 6 dígitos.", en: "The PIN must be 4 to 6 digits." },
-  errorPassword: { es: "La contraseña debe tener al menos 4 caracteres.", en: "The password must be at least 4 characters." },
+  errorPassword: {
+    es: "La contraseña debe tener al menos 4 caracteres.",
+    en: "The password must be at least 4 characters.",
+  },
   errorNoCoincide: { es: "La credencial no coincide.", en: "The credentials don't match." },
 });
 
@@ -158,14 +164,22 @@ async function empezar() {
       <div class="flex justify-end gap-1 mb-4">
         <button
           class="rounded-md px-3 py-1 text-sm font-medium transition-colors"
-          :class="ajustes.idioma === 'es' ? 'bg-brand text-white' : 'bg-surface-2 text-muted hover:text-ink'"
+          :class="
+            ajustes.idioma === 'es'
+              ? 'bg-brand text-white'
+              : 'bg-surface-2 text-muted hover:text-ink'
+          "
           @click="ajustes.setIdioma('es')"
         >
           Español
         </button>
         <button
           class="rounded-md px-3 py-1 text-sm font-medium transition-colors"
-          :class="ajustes.idioma === 'en' ? 'bg-brand text-white' : 'bg-surface-2 text-muted hover:text-ink'"
+          :class="
+            ajustes.idioma === 'en'
+              ? 'bg-brand text-white'
+              : 'bg-surface-2 text-muted hover:text-ink'
+          "
           @click="ajustes.setIdioma('en')"
         >
           English

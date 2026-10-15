@@ -51,14 +51,11 @@ export function estadoDeuda(deuda: Deuda, mes: string): EstadoDeuda {
   // EN: Installment counted this month: the regular installment, or just the
   //     remaining balance if it is smaller (the final partial payment).
   const cuotaDelMes =
-    dentroDeRango && pendienteInicioMes > 0
-      ? Math.min(deuda.cuotaMensual, pendienteInicioMes)
-      : 0;
+    dentroDeRango && pendienteInicioMes > 0 ? Math.min(deuda.cuotaMensual, pendienteInicioMes) : 0;
 
   // ES: Meses que faltan para saldarla por completo (redondeo arriba; 0 sin cuota).
   // EN: Months left to fully settle the debt (rounded up; 0 if no installment).
-  const mesesRestantes =
-    deuda.cuotaMensual > 0 ? Math.ceil(pendiente / deuda.cuotaMensual) : 0;
+  const mesesRestantes = deuda.cuotaMensual > 0 ? Math.ceil(pendiente / deuda.cuotaMensual) : 0;
 
   // ES: Progreso 0-100 (% pagado), acotado; 100 si el total es 0 (nada que deber).
   // EN: Progress 0-100 (% paid), clamped; 100 if the total is 0 (nothing to owe).

@@ -68,18 +68,18 @@ Es un proyecto de portfolio de código abierto, versión **1.1.0**.
 
 Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 
-| Pieza | Paquete | Versión |
-|---|---|---|
-| Núcleo de escritorio | `tauri` (Rust) · `@tauri-apps/cli` | 2.11.2 · 2.11.2 |
-| API de Tauri para el frontend | `@tauri-apps/api` | 2.11.0 |
-| Plugins de Tauri | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
-| Interfaz | `vue` | 3.5.38 |
-| Estado | `pinia` | 3.0.4 |
-| Estilos | `tailwindcss` · `@tailwindcss/vite` | 4.3.1 · 4.3.1 |
-| Build | `vite` · `@vitejs/plugin-vue` | 6.4.3 · 5.2.4 |
-| Tipos | `typescript` · `vue-tsc` | 5.6.3 · 2.2.12 |
-| Exportación | `exceljs` · `jspdf` · `jspdf-autotable` | 4.4.0 · 4.2.1 · 5.0.8 |
-| Serialización (Rust) | `serde` · `serde_json` | 1.0.228 · 1.0.150 |
+| Pieza                         | Paquete                                                   | Versión               |
+| ----------------------------- | --------------------------------------------------------- | --------------------- |
+| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2       |
+| API de Tauri para el frontend | `@tauri-apps/api`                                         | 2.11.0                |
+| Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
+| Interfaz                      | `vue`                                                     | 3.5.38                |
+| Estado                        | `pinia`                                                   | 3.0.4                 |
+| Estilos                       | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1         |
+| Build                         | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4         |
+| Tipos                         | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12        |
+| Exportación                   | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8 |
+| Serialización (Rust)          | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150     |
 
 ### Requisitos
 
@@ -191,18 +191,18 @@ It's an open-source portfolio project, version **1.1.0**.
 
 Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 
-| Part | Package | Version |
-|---|---|---|
-| Desktop core | `tauri` (Rust) · `@tauri-apps/cli` | 2.11.2 · 2.11.2 |
-| Tauri API for the frontend | `@tauri-apps/api` | 2.11.0 |
-| Tauri plugins | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
-| UI | `vue` | 3.5.38 |
-| State | `pinia` | 3.0.4 |
-| Styling | `tailwindcss` · `@tailwindcss/vite` | 4.3.1 · 4.3.1 |
-| Build | `vite` · `@vitejs/plugin-vue` | 6.4.3 · 5.2.4 |
-| Types | `typescript` · `vue-tsc` | 5.6.3 · 2.2.12 |
-| Export | `exceljs` · `jspdf` · `jspdf-autotable` | 4.4.0 · 4.2.1 · 5.0.8 |
-| Serialization (Rust) | `serde` · `serde_json` | 1.0.228 · 1.0.150 |
+| Part                       | Package                                                   | Version               |
+| -------------------------- | --------------------------------------------------------- | --------------------- |
+| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2       |
+| Tauri API for the frontend | `@tauri-apps/api`                                         | 2.11.0                |
+| Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
+| UI                         | `vue`                                                     | 3.5.38                |
+| State                      | `pinia`                                                   | 3.0.4                 |
+| Styling                    | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1         |
+| Build                      | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4         |
+| Types                      | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12        |
+| Export                     | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8 |
+| Serialization (Rust)       | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150     |
 
 ### Requirements
 

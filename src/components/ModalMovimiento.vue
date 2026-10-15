@@ -138,7 +138,7 @@ const emit = defineEmits<{
       recibo?: string; // ES: imagen del recibo en base64 (solo puntuales); opcional / EN: receipt image in base64 (one-off only); optional
       cuenta?: string; // ES: id de la cuenta a la que pertenece; opcional (undefined si vacío) / EN: id of the account it belongs to; optional (undefined if empty)
       subdivisiones?: Subdivision[]; // ES: partes del gasto dividido (solo gasto puntual); opcional / EN: parts of the split expense (one-off expense only); optional
-    }
+    },
   ];
   cerrar: [];
 }>();
@@ -147,10 +147,30 @@ const emit = defineEmits<{
 // ES: Las 4 "clases" de alta, que se traducen a recurrente + signo.
 // EN: The 4 "classes" the user can pick, each mapping to recurrente + signo.
 const CLASES = [
-  { valor: "gasto-variable", etiqueta: "Gasto variable", recurrente: false, signo: "gasto" as Signo },
-  { valor: "gasto-fijo", etiqueta: "Gasto fijo (cada mes)", recurrente: true, signo: "gasto" as Signo },
-  { valor: "ingreso-puntual", etiqueta: "Ingreso puntual", recurrente: false, signo: "ingreso" as Signo },
-  { valor: "ingreso-fijo", etiqueta: "Ingreso fijo (cada mes)", recurrente: true, signo: "ingreso" as Signo },
+  {
+    valor: "gasto-variable",
+    etiqueta: "Gasto variable",
+    recurrente: false,
+    signo: "gasto" as Signo,
+  },
+  {
+    valor: "gasto-fijo",
+    etiqueta: "Gasto fijo (cada mes)",
+    recurrente: true,
+    signo: "gasto" as Signo,
+  },
+  {
+    valor: "ingreso-puntual",
+    etiqueta: "Ingreso puntual",
+    recurrente: false,
+    signo: "ingreso" as Signo,
+  },
+  {
+    valor: "ingreso-fijo",
+    etiqueta: "Ingreso fijo (cada mes)",
+    recurrente: true,
+    signo: "ingreso" as Signo,
+  },
 ];
 
 // ES: Deriva la "clase" (valor del select) a partir de recurrente + signo.
@@ -241,7 +261,10 @@ const dividido = ref<boolean>(
 //     `inicial` if it carries them.
 const partes = reactive<{ categoria: string; importe: string }[]>(
   props.inicial?.subdivisiones?.length
-    ? props.inicial.subdivisiones.map((s) => ({ categoria: s.categoria, importe: String(s.importe) }))
+    ? props.inicial.subdivisiones.map((s) => ({
+        categoria: s.categoria,
+        importe: String(s.importe),
+      }))
     : [
         // ES: Por defecto arrancamos con 2 filas vacías (mínimo válido).
         // EN: Start with 2 empty rows by default (the valid minimum).
@@ -281,8 +304,8 @@ function quitarParte(i: number) {
 
 // ES: Suma de las partes del gasto dividido (number, céntimos).
 // EN: Sum of the split-expense parts (number, in cents).
-const sumaPartes = computed(() =>
-  Math.round(partes.reduce((acc, p) => acc + aImporte(p.importe), 0) * 100) / 100
+const sumaPartes = computed(
+  () => Math.round(partes.reduce((acc, p) => acc + aImporte(p.importe), 0) * 100) / 100
 );
 
 // ── 8. Gestión de imagen del recibo / Receipt image handling ──────────────────
@@ -366,8 +389,7 @@ function guardar() {
   // EN: Split-expense validation: at least 2 parts with amount > 0.
   if (usandoDividido) {
     const validas = partes.filter((p) => aImporte(p.importe) > 0);
-    if (validas.length < 2)
-      return (error.value = t("errPartes"));
+    if (validas.length < 2) return (error.value = t("errPartes"));
   }
 
   // ES: El importe debe ser positivo. / EN: The amount must be a positive number.
@@ -466,7 +488,9 @@ function guardar() {
             v-model="form.clase"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
-            <option v-for="c in CLASES" :key="c.valor" :value="c.valor">{{ t(CLAVE_CLASE[c.valor]) }}</option>
+            <option v-for="c in CLASES" :key="c.valor" :value="c.valor">
+              {{ t(CLAVE_CLASE[c.valor]) }}
+            </option>
           </select>
         </div>
 
@@ -664,7 +688,11 @@ function guardar() {
           <!-- ES: Si ya hay imagen, miniatura + botón para quitarla. -->
           <!-- EN: If there is already an image, thumbnail + button to remove it. -->
           <div v-else class="mt-1 flex items-center gap-3">
-            <img :src="form.recibo" :alt="t('reciboAlt')" class="h-20 w-20 rounded-lg object-cover border border-border" />
+            <img
+              :src="form.recibo"
+              :alt="t('reciboAlt')"
+              class="h-20 w-20 rounded-lg object-cover border border-border"
+            />
             <button
               type="button"
               class="rounded-lg border border-border px-3 py-1 text-sm text-muted hover:text-danger transition-colors"

@@ -256,13 +256,7 @@ export async function exportarMesXLSX(
 
     // ES: Cabecera de columnas de la tabla de planes (negrita + fondo gris claro).
     // EN: Column header of the plans table (bold + light grey background).
-    const cabPlanes = hoja.addRow([
-      "Nombre",
-      "Objetivo",
-      "Aportado",
-      "Restante",
-      "Progreso %",
-    ]);
+    const cabPlanes = hoja.addRow(["Nombre", "Objetivo", "Aportado", "Restante", "Progreso %"]);
     cabPlanes.font = { bold: true };
     cabPlanes.eachCell((celda) => {
       celda.fill = {
@@ -277,16 +271,8 @@ export async function exportarMesXLSX(
     for (const p of planes) {
       const restante = Math.max(0, p.objetivo - p.aportado); // ES: nunca negativo / EN: never negative
       const progreso =
-        p.objetivo > 0
-          ? Math.min(100, Math.round((p.aportado / p.objetivo) * 100))
-          : 0; // ES: 0..100, evita dividir por cero / EN: 0..100, avoids dividing by zero
-      const fila = hoja.addRow([
-        p.nombre,
-        p.objetivo,
-        p.aportado,
-        restante,
-        `${progreso}%`,
-      ]);
+        p.objetivo > 0 ? Math.min(100, Math.round((p.aportado / p.objetivo) * 100)) : 0; // ES: 0..100, evita dividir por cero / EN: 0..100, avoids dividing by zero
+      const fila = hoja.addRow([p.nombre, p.objetivo, p.aportado, restante, `${progreso}%`]);
       // ES: Columnas numéricas de importe (2..4) con el mismo formato euro.
       // EN: Numeric amount columns (2..4) with the same euro format.
       for (let col = 2; col <= 4; col++) {
@@ -353,8 +339,7 @@ export async function exportarMesPDF(
   // EN: Compute the table's final Y to place the summary footer. `lastAutoTable` is
   //     added by the plugin; the access is typed for strict TS.
   const finalY =
-    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
-      ?.finalY ?? 26;
+    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 26;
 
   // ES: Pie con el resumen del mes.
   // EN: Footer with the month summary.
@@ -372,8 +357,7 @@ export async function exportarMesPDF(
   // ES: Helper local: lee la Y final de la última autoTable para encadenar tablas.
   // EN: Local helper: reads the final Y of the last autoTable to chain tables.
   const ultimaY = (defecto: number): number =>
-    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
-      ?.finalY ?? defecto;
+    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? defecto;
 
   // ES: --- Tabla de Deudas (solo si hay datos) ---
   // EN: --- Debts table (only if there is data) ---
@@ -431,16 +415,8 @@ export async function exportarMesPDF(
       body: planes.map((p) => {
         const restante = Math.max(0, p.objetivo - p.aportado); // ES: nunca negativo / EN: never negative
         const progreso =
-          p.objetivo > 0
-            ? Math.min(100, Math.round((p.aportado / p.objetivo) * 100))
-            : 0; // ES: 0..100, evita dividir por cero / EN: 0..100, avoids dividing by zero
-        return [
-          p.nombre,
-          euro(p.objetivo),
-          euro(p.aportado),
-          euro(restante),
-          `${progreso}%`,
-        ];
+          p.objetivo > 0 ? Math.min(100, Math.round((p.aportado / p.objetivo) * 100)) : 0; // ES: 0..100, evita dividir por cero / EN: 0..100, avoids dividing by zero
+        return [p.nombre, euro(p.objetivo), euro(p.aportado), euro(restante), `${progreso}%`];
       }),
       startY: yPlanes + 4, // ES: empieza bajo el título / EN: starts below the title
       styles: { fontSize: 9 },

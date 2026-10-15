@@ -96,8 +96,14 @@ const t = crearT({
   // EN: Validation / confirmation messages
   errNombre: { es: "El nombre no puede estar vacío.", en: "The name cannot be empty." },
   errObjetivo: { es: "El objetivo debe ser mayor que 0.", en: "The goal must be greater than 0." },
-  errAportado: { es: "Lo aportado no puede ser negativo.", en: "The amount saved cannot be negative." },
-  errCantidad: { es: "Introduce una cantidad válida mayor que 0.", en: "Enter a valid amount greater than 0." },
+  errAportado: {
+    es: "Lo aportado no puede ser negativo.",
+    en: "The amount saved cannot be negative.",
+  },
+  errCantidad: {
+    es: "Introduce una cantidad válida mayor que 0.",
+    en: "Enter a valid amount greater than 0.",
+  },
   confirmarEliminar: { es: "¿Eliminar el plan", en: "Delete the plan" },
 });
 
@@ -142,9 +148,7 @@ const errorAportar = ref("");
 
 // ES: Título del modal según estemos creando o editando.
 // EN: Modal title depending on whether we're creating or editing.
-const tituloModal = computed(() =>
-  editandoId.value ? t("editarPlan") : t("nuevoPlanTitulo")
-);
+const tituloModal = computed(() => (editandoId.value ? t("editarPlan") : t("nuevoPlanTitulo")));
 
 // ── 5. Helpers de cálculo por plan / Per-plan calculation helpers ─────────────
 // ES: Redondea un número a 2 decimales (céntimos). Acepta coma o punto decimal.
@@ -396,8 +400,8 @@ function borrar(plan: Plan) {
           <!-- ES: Texto: aportado X de Y (progreso%) -->
           <!-- EN: Text: saved X of Y (progress%) -->
           <p class="mt-2 text-xs text-muted">
-            {{ t("aportadoDe") }} {{ euro(plan.aportado) }} {{ t("de") }} {{ euro(plan.objetivo) }}
-            ({{ Math.round(progreso(plan)) }}%)
+            {{ t("aportadoDe") }} {{ euro(plan.aportado) }} {{ t("de") }}
+            {{ euro(plan.objetivo) }} ({{ Math.round(progreso(plan)) }}%)
           </p>
         </div>
 

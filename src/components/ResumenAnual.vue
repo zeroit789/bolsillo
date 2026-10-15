@@ -93,9 +93,7 @@ const totalGastos = computed<number>(() =>
 
 // ES: Ahorro del año = suma de los disponibles de cada mes.
 // EN: Year savings = sum of each month's leftover (disponible).
-const ahorro = computed<number>(() =>
-  mesesDelAño.value.reduce((acc, m) => acc + m.disponible, 0)
-);
+const ahorro = computed<number>(() => mesesDelAño.value.reduce((acc, m) => acc + m.disponible, 0));
 
 // ES: Media mensual de gastos del año (0 si no hay meses, para evitar división por 0).
 // EN: Year monthly average expenses (0 if no months, to avoid division by zero).
@@ -108,18 +106,14 @@ const mediaGastos = computed<number>(() =>
 // EN: Best month by leftover (highest disponible) within the year.
 const mejorMes = computed<ResumenMes | null>(() => {
   if (!hayDatos.value) return null;
-  return mesesDelAño.value.reduce((mejor, m) =>
-    m.disponible > mejor.disponible ? m : mejor
-  );
+  return mesesDelAño.value.reduce((mejor, m) => (m.disponible > mejor.disponible ? m : mejor));
 });
 
 // ES: Peor mes por disponible (menor disponible) dentro del año.
 // EN: Worst month by leftover (lowest disponible) within the year.
 const peorMes = computed<ResumenMes | null>(() => {
   if (!hayDatos.value) return null;
-  return mesesDelAño.value.reduce((peor, m) =>
-    m.disponible < peor.disponible ? m : peor
-  );
+  return mesesDelAño.value.reduce((peor, m) => (m.disponible < peor.disponible ? m : peor));
 });
 </script>
 
@@ -155,10 +149,7 @@ const peorMes = computed<ResumenMes | null>(() => {
         <!-- ES: Ahorro del año (verde si >= 0, rojo si < 0) / EN: Year savings (green if >= 0, red if < 0) -->
         <div>
           <p class="text-xs text-muted">{{ t("ahorro") }}</p>
-          <p
-            class="font-display font-bold"
-            :class="ahorro >= 0 ? 'text-ok' : 'text-danger'"
-          >
+          <p class="font-display font-bold" :class="ahorro >= 0 ? 'text-ok' : 'text-danger'">
             {{ euro(ahorro) }}
           </p>
         </div>

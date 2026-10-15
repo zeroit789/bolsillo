@@ -215,7 +215,10 @@ function borrarTope(categoria: string): void {
     <section class="rounded-2xl bg-surface border border-border p-5 mb-6">
       <h2 class="font-display font-bold mb-4">{{ t("nuevoTope") }}</h2>
       <!-- ES: @submit.prevent para no recargar la SPA de escritorio / EN: @submit.prevent so the desktop SPA doesn't reload -->
-      <form class="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end" @submit.prevent="guardarTope">
+      <form
+        class="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+        @submit.prevent="guardarTope"
+      >
         <!-- ES: Selector de categoría / EN: Category selector -->
         <div>
           <label class="mb-1 block text-sm text-muted">{{ t("categoria") }}</label>
@@ -310,8 +313,10 @@ function borrarTope(categoria: string): void {
           <!-- ES: Texto: gastado X de Y (N%) — el % mostrado usa floor para que nunca enseñe 100% antes de alcanzar el tope -->
           <!-- EN: Text: spent X of Y (N%) — shown % uses floor so it never reads 100% before the cap is hit -->
           <p class="mt-2 text-xs text-muted">
-            {{ t("gastado") }} {{ euro(gastoDe(p.categoria)) }} {{ t("de") }} {{ euro(p.limite) }}
-            (<span :class="colorTexto(p.categoria, p.limite)">{{ porcentajeMostrado(p.categoria, p.limite) }}%</span>)
+            {{ t("gastado") }} {{ euro(gastoDe(p.categoria)) }} {{ t("de") }}
+            {{ euro(p.limite) }} (<span :class="colorTexto(p.categoria, p.limite)"
+              >{{ porcentajeMostrado(p.categoria, p.limite) }}%</span
+            >)
           </p>
 
           <!-- ES: Aviso cuando se ha pasado del tope / EN: Notice when the cap has been exceeded -->

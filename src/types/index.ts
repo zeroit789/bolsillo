@@ -85,13 +85,7 @@ export interface Puntual {
 // ES: Tipos de deuda admitidos (controla icono/etiqueta en la UI y agrupaciones).
 // EN: Allowed debt types (drives icon/label in the UI and reporting buckets).
 export type TipoDeuda =
-  | "tarjeta"
-  | "prestamo"
-  | "coche"
-  | "moto"
-  | "hipoteca"
-  | "personal"
-  | "otro";
+  "tarjeta" | "prestamo" | "coche" | "moto" | "hipoteca" | "personal" | "otro";
 
 // ES: Catálogo de tipos de deuda con etiqueta legible e icono. Se usa para
 //     pintar selectores e insignias sin repetir cadenas por toda la UI.
@@ -259,7 +253,14 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   // EN: Every recurring entry must have id, finite amount, valid sign/category
   //     and a valid `desde`; `hasta` is either null or a valid month.
   const rec = o.recurrentes.every(
-    (r: any) => r && str(r.id) && num(r.importe) && signo(r.signo) && str(r.categoria) && mesOk(r.desde) && (r.hasta === null || mesOk(r.hasta))
+    (r: any) =>
+      r &&
+      str(r.id) &&
+      num(r.importe) &&
+      signo(r.signo) &&
+      str(r.categoria) &&
+      mesOk(r.desde) &&
+      (r.hasta === null || mesOk(r.hasta))
   );
   // ES: Las subdivisiones (gasto dividido) son opcionales, pero si vienen deben
   //     ser un array de { categoria:string, importe:number finito } o el reparto
@@ -276,14 +277,27 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   // EN: Every one-off entry must have id, finite amount, valid sign/category,
   //     a valid date, and (if present) valid subdivisions.
   const pun = o.puntuales.every(
-    (p: any) => p && str(p.id) && num(p.importe) && signo(p.signo) && str(p.categoria) && fechaOk(p.fecha) && subOk(p)
+    (p: any) =>
+      p &&
+      str(p.id) &&
+      num(p.importe) &&
+      signo(p.signo) &&
+      str(p.categoria) &&
+      fechaOk(p.fecha) &&
+      subOk(p)
   );
   // ES: Cada deuda debe tener id, total/cuota/pagado finitos y un mes de inicio
   //     válido.
   // EN: Every debt must have id, finite total/installment/paid amounts and a
   //     valid start month.
   const deu = o.deudas.every(
-    (x: any) => x && str(x.id) && num(x.total) && num(x.cuotaMensual) && num(x.pagadoInicial) && mesOk(x.inicioMes)
+    (x: any) =>
+      x &&
+      str(x.id) &&
+      num(x.total) &&
+      num(x.cuotaMensual) &&
+      num(x.pagadoInicial) &&
+      mesOk(x.inicioMes)
   );
   // ES: planes/presupuestos/plantillas/cuentas son opcionales (copias antiguas
   //     no los traen); cuando vienen, cada elemento se valida aquí abajo.
@@ -292,7 +306,9 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const pla =
     o.planes === undefined ||
     (Array.isArray(o.planes) &&
-      o.planes.every((x: any) => x && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)));
+      o.planes.every(
+        (x: any) => x && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)
+      ));
   const pre =
     o.presupuestos === undefined ||
     (Array.isArray(o.presupuestos) &&
@@ -300,7 +316,10 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const pll =
     o.plantillas === undefined ||
     (Array.isArray(o.plantillas) &&
-      o.plantillas.every((x: any) => x && str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)));
+      o.plantillas.every(
+        (x: any) =>
+          x && str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)
+      ));
   const cue =
     o.cuentas === undefined ||
     (Array.isArray(o.cuentas) &&

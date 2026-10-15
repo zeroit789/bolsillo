@@ -65,7 +65,10 @@ const t = crearT({
   },
   dineroLibre: { es: "Dinero libre, fuera de sobres", en: "Free money, outside envelopes" },
   sinSobresTitulo: { es: "Aún no tienes ningún sobre", en: "You don't have any envelopes yet" },
-  sinSobresTexto1: { es: "Crea topes por categoría en la sección", en: "Create category limits in the" },
+  sinSobresTexto1: {
+    es: "Crea topes por categoría en la sección",
+    en: "Create category limits in the",
+  },
   presupuestosSeccion: { es: "Presupuestos", en: "Budgets" },
   sinSobresTexto2: {
     es: "y aquí verás cómo se reparte el dinero del mes en cada sobre.",
@@ -249,7 +252,8 @@ function quedan(gastado: number, limite: number): number {
       <p class="text-4xl">✉️</p>
       <p class="mt-3 font-display font-bold text-ink">{{ t("sinSobresTitulo") }}</p>
       <p class="mt-1 text-sm text-muted">
-        {{ t("sinSobresTexto1") }} <span class="font-medium text-ink">{{ t("presupuestosSeccion") }}</span>
+        {{ t("sinSobresTexto1") }}
+        <span class="font-medium text-ink">{{ t("presupuestosSeccion") }}</span>
         {{ t("sinSobresTexto2") }}
       </p>
     </div>
@@ -292,8 +296,10 @@ function quedan(gastado: number, limite: number): number {
           <!-- EN: Text: spent X of Y (N%) — the % shown is floored so it never reads
                    "100%" while euros still remain (coherent with the "Remaining" line). -->
           <p class="mt-2 text-xs text-muted">
-            {{ t("gastado") }} {{ euro(gastoDe(p.categoria)) }} {{ t("de") }} {{ euro(p.limite) }}
-            (<span :class="colorTexto(gastoDe(p.categoria), p.limite)">{{ porcentajeMostrado(gastoDe(p.categoria), p.limite) }}%</span>)
+            {{ t("gastado") }} {{ euro(gastoDe(p.categoria)) }} {{ t("de") }}
+            {{ euro(p.limite) }} (<span :class="colorTexto(gastoDe(p.categoria), p.limite)"
+              >{{ porcentajeMostrado(gastoDe(p.categoria), p.limite) }}%</span
+            >)
           </p>
 
           <!-- ES: Cuánto queda en el sobre: positivo = "quedan X€",

@@ -184,7 +184,10 @@ function recordatorioMensual() {
   if (localStorage.getItem("bolsillo.recordatorio-mes") === mes) return;
   const r = f.resumenDe(mes);
   if (r.gastosFijos > 0) {
-    void notificar(t("notifRecordTitulo"), t("notifRecordCuerpo").replace("@x", euro(r.gastosFijos)));
+    void notificar(
+      t("notifRecordTitulo"),
+      t("notifRecordCuerpo").replace("@x", euro(r.gastosFijos))
+    );
     // ES: Marcar el mes SOLO si avisamos (si aún no hay fijos, reintentar luego).
     // EN: Mark the month ONLY if we notified (if there are no fixed expenses yet,
     //     retry later instead of burning the month with an empty reminder).
@@ -290,11 +293,14 @@ watch(
       recordatorioMensual();
       revisarPagosProximos();
       if (timerNotif === undefined) {
-        timerNotif = window.setInterval(() => {
-          revisarDeudasSaldadas();
-          recordatorioMensual();
-          revisarPagosProximos();
-        }, 60 * 60 * 1000); // ES: cada hora / EN: every hour
+        timerNotif = window.setInterval(
+          () => {
+            revisarDeudasSaldadas();
+            recordatorioMensual();
+            revisarPagosProximos();
+          },
+          60 * 60 * 1000
+        ); // ES: cada hora / EN: every hour
       }
     }
   },
@@ -302,7 +308,11 @@ watch(
 );
 // ES: Re-chequea deudas saldadas ante cualquier edición de deudas (watch profundo).
 // EN: Re-check settled debts on any debt edit (deep watch over the array).
-watch(() => f.deudas, () => revisarDeudasSaldadas(), { deep: true });
+watch(
+  () => f.deudas,
+  () => revisarDeudasSaldadas(),
+  { deep: true }
+);
 
 // ES: Limpia el temporizador del re-chequeo horario al desmontar el shell (evita
 //     intervalos huérfanos con HMR en desarrollo y es el cierre correcto igual).
@@ -324,7 +334,9 @@ onUnmounted(() => {
   <!-- ES: App desbloqueada / EN: Unlocked app -->
   <div v-else-if="sesion.desbloqueado" class="min-h-screen flex">
     <!-- ES: Navegación lateral / EN: Side navigation -->
-    <aside class="w-56 shrink-0 border-r border-border bg-surface/50 flex flex-col py-5 px-3 no-select">
+    <aside
+      class="w-56 shrink-0 border-r border-border bg-surface/50 flex flex-col py-5 px-3 no-select"
+    >
       <h1 class="font-display text-2xl font-extrabold px-3 mb-6">
         Bolsillo<span class="text-brand">.</span>
       </h1>
@@ -349,7 +361,9 @@ onUnmounted(() => {
       <!-- ES: Barra superior con el selector de mes / EN: Top bar with the month selector -->
       <header class="flex items-center justify-between gap-3 px-8 py-4 border-b border-border">
         <p class="text-muted text-sm truncate">
-          <span v-if="ajustes.nombre">{{ t("hola") }}, <span class="text-ink font-medium">{{ ajustes.nombre }}</span></span>
+          <span v-if="ajustes.nombre"
+            >{{ t("hola") }}, <span class="text-ink font-medium">{{ ajustes.nombre }}</span></span
+          >
         </p>
         <select
           v-if="mostrarMes"
@@ -369,5 +383,7 @@ onUnmounted(() => {
   </div>
 
   <!-- ES: Cargando (instante inicial antes de resolver el estado) / EN: Loader (initial instant before state resolves) -->
-  <div v-else class="min-h-screen flex items-center justify-center text-muted">{{ t("cargando") }}</div>
+  <div v-else class="min-h-screen flex items-center justify-center text-muted">
+    {{ t("cargando") }}
+  </div>
 </template>

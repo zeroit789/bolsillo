@@ -714,8 +714,10 @@ function quitarCategoria(nombre: string): void {
       <div v-else class="mt-4 space-y-3">
         <!-- ES: Indicador de bloqueo activo. / EN: Active-lock indicator. -->
         <p class="text-ink">
-          {{ t("bloqueoEtiqueta") }} <span class="text-ok font-medium">{{ t("estadoActivo") }}</span>
-          ({{ etiquetaTipoActivo }}).
+          {{ t("bloqueoEtiqueta") }}
+          <span class="text-ok font-medium">{{ t("estadoActivo") }}</span> ({{
+            etiquetaTipoActivo
+          }}).
         </p>
         <!-- ES: Botón peligroso para quitar el bloqueo. / EN: Dangerous button to remove the lock. -->
         <button
