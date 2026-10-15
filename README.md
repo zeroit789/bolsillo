@@ -72,7 +72,7 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 |---|---|---|
 | Núcleo de escritorio | `tauri` (Rust) · `@tauri-apps/cli` | 2.11.2 · 2.11.2 |
 | API de Tauri para el frontend | `@tauri-apps/api` | 2.11.0 |
-| Plugins de Tauri | `plugin-dialog` · `plugin-notification` · `plugin-opener` · `plugin-fs` | 2.7.1 · 2.3.3 · 2.5.4 · 2.5.1 |
+| Plugins de Tauri | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
 | Interfaz | `vue` | 3.5.38 |
 | Estado | `pinia` | 3.0.4 |
 | Estilos | `tailwindcss` · `@tailwindcss/vite` | 4.3.1 · 4.3.1 |
@@ -195,7 +195,7 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 |---|---|---|
 | Desktop core | `tauri` (Rust) · `@tauri-apps/cli` | 2.11.2 · 2.11.2 |
 | Tauri API for the frontend | `@tauri-apps/api` | 2.11.0 |
-| Tauri plugins | `plugin-dialog` · `plugin-notification` · `plugin-opener` · `plugin-fs` | 2.7.1 · 2.3.3 · 2.5.4 · 2.5.1 |
+| Tauri plugins | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4 |
 | UI | `vue` | 3.5.38 |
 | State | `pinia` | 3.0.4 |
 | Styling | `tailwindcss` · `@tailwindcss/vite` | 4.3.1 · 4.3.1 |
