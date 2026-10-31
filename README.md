@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/zeroit789/bolsillo/actions/workflows/ci.yml"><img src="https://github.com/zeroit789/bolsillo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/Tauri-2.11-FFC131?logo=tauri&logoColor=black" alt="Tauri 2.11">
+  <img src="https://img.shields.io/badge/Tauri-2.12-FFC131?logo=tauri&logoColor=black" alt="Tauri 2.12">
   <img src="https://img.shields.io/badge/Vue-3.5-42B883?logo=vuedotjs&logoColor=white" alt="Vue 3.5">
   <img src="https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.6">
   <img src="https://img.shields.io/badge/Tailwind_CSS-4.3-38BDF8?logo=tailwindcss&logoColor=white" alt="Tailwind CSS 4.3">
@@ -71,16 +71,16 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 
 | Pieza                         | Paquete                                                   | Versión                    |
 | ----------------------------- | --------------------------------------------------------- | -------------------------- |
-| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2            |
-| API de Tauri para el frontend | `@tauri-apps/api`                                         | 2.11.0                     |
-| Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4      |
-| Interfaz                      | `vue`                                                     | 3.5.38                     |
+| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.12.5 · 2.12.4            |
+| API de Tauri para el frontend | `@tauri-apps/api`                                         | 2.12.4                     |
+| Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.8.4 · 2.8.0 · 2.7.2      |
+| Interfaz                      | `vue`                                                     | 3.5.44                     |
 | Estado                        | `pinia`                                                   | 3.0.4                      |
 | Estilos                       | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1              |
-| Build                         | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4              |
+| Build                         | `vite` · `@vitejs/plugin-vue`                             | 6.4.5 · 5.2.4              |
 | Tipos                         | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12             |
 | Lint y formato                | `eslint` · `eslint-plugin-vue` · `prettier`               | 10.12.0 · 10.11.1 · 3.9.10 |
-| Tests                         | `vitest` · `happy-dom`                                    | 5.0.4 · 21.0.1             |
+| Tests                         | `vitest` · `happy-dom`                                    | 5.0.4 · 21.0.4             |
 | Exportación                   | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8      |
 | Serialización (Rust)          | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150          |
 
@@ -114,8 +114,9 @@ En el navegador (`pnpm dev`) la interfaz funciona, pero lo que depende de Tauri 
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), en cada push y pull request a `main`:
   1. **Secretos**: `gitleaks` 8.30.1 (binario verificado por SHA256) sobre todo el historial.
   2. **Frontend**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `vue-tsc --noEmit` y `vite build` con Node 24 y pnpm 12.
+  3. **Rust**: `cargo check --locked` del backend en Windows (`windows-latest`, con caché de cargo), después del `vite build` que Tauri necesita para compilar. Comprueba tipos y dependencias con el `Cargo.lock` tal cual; no genera el instalador.
 
-  La app de escritorio (Rust) no se compila en la CI.
+  Las acciones de GitHub van fijadas por SHA completo.
 
 Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`.
 
@@ -123,7 +124,7 @@ Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm lint && pnp
 
 ```
 bolsillo/
-├─ .github/workflows/ci.yml   # CI: gitleaks + lint + formato + tests + vue-tsc + build
+├─ .github/workflows/ci.yml   # CI: gitleaks + lint + formato + tests + vue-tsc + build + cargo check
 ├─ docs/screenshot.png        # captura del README (datos de ejemplo)
 ├─ art/                       # material gráfico
 ├─ public/                    # recursos estáticos
@@ -203,16 +204,16 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 
 | Part                       | Package                                                   | Version                    |
 | -------------------------- | --------------------------------------------------------- | -------------------------- |
-| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.11.2 · 2.11.2            |
-| Tauri API for the frontend | `@tauri-apps/api`                                         | 2.11.0                     |
-| Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.7.1 · 2.3.3 · 2.5.4      |
-| UI                         | `vue`                                                     | 3.5.38                     |
+| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                        | 2.12.5 · 2.12.4            |
+| Tauri API for the frontend | `@tauri-apps/api`                                         | 2.12.4                     |
+| Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener` | 2.8.4 · 2.8.0 · 2.7.2      |
+| UI                         | `vue`                                                     | 3.5.44                     |
 | State                      | `pinia`                                                   | 3.0.4                      |
 | Styling                    | `tailwindcss` · `@tailwindcss/vite`                       | 4.3.1 · 4.3.1              |
-| Build                      | `vite` · `@vitejs/plugin-vue`                             | 6.4.3 · 5.2.4              |
+| Build                      | `vite` · `@vitejs/plugin-vue`                             | 6.4.5 · 5.2.4              |
 | Types                      | `typescript` · `vue-tsc`                                  | 5.6.3 · 2.2.12             |
 | Linting and formatting     | `eslint` · `eslint-plugin-vue` · `prettier`               | 10.12.0 · 10.11.1 · 3.9.10 |
-| Tests                      | `vitest` · `happy-dom`                                    | 5.0.4 · 21.0.1             |
+| Tests                      | `vitest` · `happy-dom`                                    | 5.0.4 · 21.0.4             |
 | Export                     | `exceljs` · `jspdf` · `jspdf-autotable`                   | 4.4.0 · 4.2.1 · 5.0.8      |
 | Serialization (Rust)       | `serde` · `serde_json`                                    | 1.0.228 · 1.0.150          |
 
@@ -246,8 +247,9 @@ In the browser (`pnpm dev`) the UI works, but anything that relies on Tauri (the
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request to `main`:
   1. **Secrets**: `gitleaks` 8.30.1 (binary verified by SHA256) over the full history.
   2. **Frontend**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `vue-tsc --noEmit` and `vite build` on Node 24 and pnpm 12.
+  3. **Rust**: `cargo check --locked` of the backend on Windows (`windows-latest`, with a cargo cache), after the `vite build` Tauri needs to compile. It checks types and dependencies against the committed `Cargo.lock`; it doesn't build the installer.
 
-  The desktop app (Rust) isn't compiled in CI.
+  GitHub Actions are pinned to full commit SHAs.
 
 To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`.
 
@@ -255,7 +257,7 @@ To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm lint && pnpm fo
 
 ```
 bolsillo/
-├─ .github/workflows/ci.yml   # CI: gitleaks + lint + format + tests + vue-tsc + build
+├─ .github/workflows/ci.yml   # CI: gitleaks + lint + format + tests + vue-tsc + build + cargo check
 ├─ docs/screenshot.png        # README screenshot (sample data)
 ├─ art/                       # artwork
 ├─ public/                    # static assets
