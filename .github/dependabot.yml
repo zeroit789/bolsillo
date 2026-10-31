@@ -1,0 +1,50 @@
+# ES: Configuración de Dependabot. Cada lunes revisa si hay versiones nuevas y
+#     abre PR agrupadas por ecosistema: una con los cambios menores y parches, y
+#     otra con las versiones mayores (que suelen romper y conviene probar aparte).
+# EN: Dependabot configuration. Every Monday it checks for new versions and
+#     opens grouped PRs per ecosystem: one with minor and patch updates, and
+#     another with major versions (they tend to break and are tested separately).
+version: 2
+updates:
+  # ES: Dependencias de npm del frontend (Vue + Vite) / EN: frontend npm dependencies (Vue + Vite)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    groups:
+      npm-menores:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      npm-mayores:
+        patterns: ["*"]
+        update-types: [major]
+
+  # ES: Crates de Rust del backend Tauri / EN: Rust crates of the Tauri backend
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    groups:
+      cargo-menores:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      cargo-mayores:
+        patterns: ["*"]
+        update-types: [major]
+
+  # ES: Acciones de GitHub usadas en la CI / EN: GitHub Actions used by CI
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Madrid
+    groups:
+      actions:
+        patterns: ["*"]
