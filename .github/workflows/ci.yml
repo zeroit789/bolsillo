@@ -3,13 +3,13 @@
 #       1. secretos  -> gitleaks sobre todo el historial
 #       2. frontend  -> ESLint, formato (Prettier), tests (Vitest), tipos (vue-tsc)
 #                       y build de Vite
-#     El backend Rust no se compila aquí.
+#       3. rust      -> cargo check del backend en Windows (valida el Cargo.lock)
 # EN: Bolsillo continuous integration (Tauri + Vue + TypeScript desktop app).
 #     Runs on every push and pull request to main:
 #       1. secrets   -> gitleaks over the whole history
 #       2. frontend  -> ESLint, formatting (Prettier), tests (Vitest), type check
 #                       (vue-tsc) and Vite build
-#     The Rust backend is not compiled here.
+#       3. rust      -> cargo check of the backend on Windows (validates Cargo.lock)
 name: CI
 
 on:
@@ -79,3 +79,33 @@ jobs:
         run: pnpm exec vue-tsc --noEmit
       - name: Build (Vite)
         run: pnpm exec vite build
+
+  # --- 3. Backend Rust: comprueba que compila con el Cargo.lock tal cual
+  #        (checks that it compiles with the Cargo.lock as committed) ----------
+  # ES: Se hace en Windows (la plataforma de la app) porque ahí no hace falta
+  #     instalar webkit/gtk. `cargo check` no genera el ejecutable: solo valida
+  #     tipos y dependencias. Tauri necesita la carpeta dist/ al compilar
+  #     (generate_context!), por eso antes se hace el build de Vite.
+  # EN: Runs on Windows (the app's platform) because no webkit/gtk install is
+  #     needed there. `cargo check` does not produce the executable: it only
+  #     validates types and dependencies. Tauri needs the dist/ folder at
+  #     compile time (generate_context!), so the Vite build runs first.
+  rust:
+    name: Backend Rust (cargo check)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Build (Vite) para dist/
+        run: pnpm exec vite build
+      - name: Cargo check (--locked)
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml

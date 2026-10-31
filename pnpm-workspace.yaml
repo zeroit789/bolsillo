@@ -9,3 +9,14 @@
 allowBuilds:
   esbuild: true
   core-js: false
+
+# ES: overrides: fuerza versiones de dependencias indirectas con avisos de seguridad.
+#      - uuid: exceljs 4.4.0 (sin versión nueva) fija uuid ^8.3.0, afectado por un
+#        aviso; se fuerza la 11.x (11.1.1 trae el arreglo y mantiene el build CommonJS
+#        que usa exceljs). Quitarlo cuando exceljs publique una versión que lo suba.
+# EN: overrides: force versions of indirect dependencies with security advisories.
+#      - uuid: exceljs 4.4.0 (no newer release) pins uuid ^8.3.0, which has an
+#        advisory; force 11.x (11.1.1 has the fix and keeps the CommonJS build that
+#        exceljs uses). Remove it once exceljs ships a release that bumps it.
+overrides:
+  uuid: ^11.1.1
