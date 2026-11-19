@@ -98,6 +98,12 @@ struct Reenvoltura {
     //     the change was never published and there is nothing to do.
     #[serde(default)]
     dek_id: Option<String>,
+    // ES: Sal de la envoltura de recuperación que hay que quitar ("recuperacion"):
+    //     si la copia ya tiene otra (la nueva), no se toca.
+    // EN: Salt of the recovery wrapping to remove ("recuperacion"): if the
+    //     backup already has another one (the new one), it is left alone.
+    #[serde(default)]
+    sal: Option<String>,
 }
 
 type R<T> = Result<T, ErrorAlmacen>;
@@ -741,6 +747,17 @@ impl Boveda {
             .unwrap_or_default()
     }
 
+    // ES: Lectura estricta: sin fichero, lista vacía; ilegible o mal formado,
+    //     error (para no sobrescribir trabajos pendientes).
+    // EN: Strict read: no file, empty list; unreadable or malformed, error (so
+    //     pending work is not overwritten).
+    fn leer_pendientes_estricto(&self) -> R<Vec<Reenvoltura>> {
+        match self.dir.leer(PENDIENTES)? {
+            None => Ok(Vec::new()),
+            Some(b) => serde_json::from_slice(&b).map_err(|_| ErrorAlmacen::Danado),
+        }
+    }
+
     fn escribir_pendientes(&self, v: &[Reenvoltura]) -> R<()> {
         let b = serde_json::to_vec(v).map_err(|_| ErrorAlmacen::Interno)?;
         Ok(self.dir.escribir(PENDIENTES, &b)?)
@@ -755,7 +772,7 @@ impl Boveda {
     //     Si el registro no se puede escribir, la operación NO sigue.
     // EN: If the record cannot be written, the operation does NOT go on.
     fn preanotar(&self, accion: &str, dek_id: &str) -> R<Vec<Reenvoltura>> {
-        let previas = self.leer_pendientes();
+        let previas = self.leer_pendientes_estricto()?;
         let todas = self.con_entradas(&previas, self.dir.ficheros_con_dek(), accion, dek_id);
         self.escribir_pendientes(&todas)?;
         Ok(previas)
@@ -797,10 +814,19 @@ impl Boveda {
                 .unwrap_or(&r)
                 .to_string_lossy()
                 .replace('\\', "/");
+            let sal = if accion == "recuperacion" {
+                std::fs::read(&r)
+                    .ok()
+                    .and_then(|b| desde_bytes(&b).ok())
+                    .and_then(|f| f.envolturas.recuperacion.map(|e| e.kdf.sal))
+            } else {
+                None
+            };
             let nueva = Reenvoltura {
                 ruta: rel,
                 accion: accion.into(),
                 dek_id: Some(dek_id.into()),
+                sal,
             };
             if !v.contains(&nueva) {
                 v.push(nueva);
@@ -868,7 +894,10 @@ impl Boveda {
             let hecho = (|| -> R<()> {
                 let mut f = desde_bytes(&std::fs::read(&ruta)?)?;
                 match p.accion.as_str() {
-                    "proteger" if f.bloqueo == Bloqueo::Ninguno => {
+                    "proteger"
+                        if f.bloqueo == Bloqueo::Ninguno
+                            && p.dek_id.as_deref().is_none_or(|d| d == f.dek_id) =>
+                    {
                         let d = f.abrir_dek(None)?;
                         f.envolturas = crate::formato::Envolturas {
                             credencial: Some(envolver_con_kek(
@@ -896,8 +925,10 @@ impl Boveda {
                     }
                     "recuperacion"
                         if f.envolturas.credencial.is_some()
-                            && (p.dek_id.is_none()
-                                || p.dek_id.as_deref() == Some(f.dek_id.as_str())) =>
+                            && p.dek_id.as_deref().is_none_or(|d| d == f.dek_id)
+                            && p.sal.is_some()
+                            && f.envolturas.recuperacion.as_ref().map(|e| &e.kdf.sal)
+                                == p.sal.as_ref() =>
                     {
                         f.envolturas.recuperacion = None;
                     }
@@ -1616,6 +1647,46 @@ mod tests {
         assert!(b.configurar_bloqueo(Bloqueo::Pin, "4831").is_err());
         let f = desde_bytes(&b.dir.leer(PRINCIPAL).unwrap().unwrap()).unwrap();
         assert_eq!(f.bloqueo, Bloqueo::Ninguno);
+    }
+
+    #[test]
+    fn el_reintento_no_quita_la_recuperacion_nueva_de_una_copia_ya_reenvuelta() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let viejo = b.abierta().unwrap().cabecera.dek_id.clone();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let sal_vieja = desde_bytes(&b.dir.leer_copia(&copia).unwrap())
+            .unwrap()
+            .envolturas
+            .recuperacion
+            .unwrap()
+            .kdf
+            .sal;
+        b.regenerar_recuperacion("4831").unwrap();
+        // ES: Como si el cierre del registro hubiera fallado: queda la entrada vieja.
+        // EN: As if closing the record had failed: the old entry remains.
+        let reg = format!(
+            r#"[{{"ruta":"copias/{copia}","accion":"recuperacion","dek_id":"{viejo}","sal":"{sal_vieja}"}}]"#
+        );
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        assert!(f.envolturas.recuperacion.is_some());
+    }
+
+    #[test]
+    fn un_registro_ilegible_impide_cambiar_la_proteccion() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        b.dir.escribir(PENDIENTES, b"{no es una lista").unwrap();
+        assert!(b.configurar_bloqueo(Bloqueo::Pin, "4831").is_err());
+        assert_eq!(
+            b.dir.leer(PENDIENTES).unwrap().unwrap(),
+            b"{no es una lista"
+        );
     }
 
     #[test]

@@ -1052,6 +1052,14 @@ export const useSesion = defineStore("sesion", () => {
           sincronizarAjustes(e.bloqueo);
           tieneRecuperacion.value = e.tieneRecuperacion;
           copiasPendientes.value = e.copiasPendientes;
+        } else {
+          // ES: Sin estado: el bloqueo se deduce de la credencial con que se
+          //     abrió la copia (con credencial, la copia tiene bloqueo), para
+          //     que el autobloqueo no quede apagado.
+          // EN: Without state: the lock is deduced from the credential the
+          //     backup was opened with (with a credential, it has a lock), so
+          //     the auto-lock is not left off.
+          sincronizarAjustes(credencial ? tipoDe(credencial) : "ninguno");
         }
         modo.value = "fichero";
         necesitaOnboarding.value = false;
