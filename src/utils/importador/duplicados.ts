@@ -6,10 +6,10 @@
  *       1. "apuntado": casa con un movimiento que ya está en la app: mismo
  *          signo, mismos CÉNTIMOS, concepto normalizado igual (si no se apaga
  *          con compararConcepto: false) y fechas a no más de `toleranciaDias`
- *          días. El emparejamiento es 1 a 1 y global: se ordenan todas las
- *          parejas posibles por distancia en días (luego por línea y por
- *          posición del apunte) y cada fila y cada apunte se usan una sola
- *          vez. Así un café apuntado no tapa los dos cafés del extracto.
+ *          días. El emparejamiento es 1 a 1 y máximo: cada fila y cada
+ *          apunte se usan una sola vez, se busca el mayor número de parejas
+ *          y, a igualdad, se prefieren las más cercanas. Así un café apuntado
+ *          no tapa los dos cafés del extracto.
  *       2. "fichero": fila idéntica (fecha, céntimos, signo y concepto
  *          normalizado) a otra anterior del mismo fichero. Es solo un aviso:
  *          dos cafés iguales el mismo día son legítimos.
@@ -26,10 +26,10 @@
  *       1. "apuntado": matches a movement already in the app: same sign, same
  *          CENTS, equal normalised concept (unless turned off with
  *          compararConcepto: false) and dates no more than `toleranciaDias`
- *          days apart. Pairing is 1 to 1 and global: every possible pair is
- *          sorted by distance in days (then by line and entry position) and
- *          every row and entry is used only once. So one entered coffee does
- *          not hide the two coffees in the statement.
+ *          days apart. Pairing is 1 to 1 and maximum: every row and entry is
+ *          used only once, the largest number of pairs is sought and, if
+ *          tied, closer ones are preferred. So one entered coffee does not
+ *          hide the two coffees in the statement.
  *       2. "fichero": row identical (date, cents, sign and normalised concept)
  *          to an earlier one in the same file. Only a warning: two equal
  *          coffees on the same day are legit.
@@ -103,28 +103,48 @@ export function detectarDuplicados(
     lista.push({ indice, dia: diaUTC(a.fecha) });
     grupos.set(k, lista);
   });
-  const parejas: { fila: number; apunte: number; dias: number }[] = [];
-  filas.forEach((f, posicion) => {
-    const candidatos = grupos.get(clave(f.signo, f.centimos, f.concepto));
-    if (!candidatos) return;
+  // ES: Candidatos de cada fila dentro de la tolerancia, del más cercano al
+  //     más lejano (a igualdad, por posición del apunte).
+  // EN: Each row's candidates within tolerance, closest first (if tied, by
+  //     entry position).
+  const opciones1a1 = filas.map((f) => {
     const dia = diaUTC(f.fecha);
-    for (const c of candidatos) {
-      const dias = Math.abs(dia - c.dia);
-      if (dias <= tolerancia) parejas.push({ fila: posicion, apunte: c.indice, dias });
-    }
+    return (grupos.get(clave(f.signo, f.centimos, f.concepto)) ?? [])
+      .map((c) => ({ apunte: c.indice, dias: Math.abs(dia - c.dia) }))
+      .filter((c) => c.dias <= tolerancia)
+      .sort((a, b) => a.dias - b.dias || a.apunte - b.apunte);
   });
-  parejas.sort(
-    (a, b) => a.dias - b.dias || filas[a.fila].linea - filas[b.fila].linea || a.apunte - b.apunte
-  );
-  const filasUsadas = new Set<number>();
-  const apuntesUsados = new Set<number>();
-  for (const p of parejas) {
-    if (filasUsadas.has(p.fila) || apuntesUsados.has(p.apunte)) continue;
-    filasUsadas.add(p.fila);
-    apuntesUsados.add(p.apunte);
-    const linea = filas[p.fila].linea;
-    const id = apuntados[p.apunte].id ?? String(p.apunte);
-    marcas.set(linea, { linea, tipo: "apuntado", id, dias: p.dias });
+
+  // ES: Emparejamiento máximo (caminos de aumento de Kuhn): primero se busca
+  //     el MAYOR número de parejas; se prueba antes cada fila con la pareja
+  //     más cercana y las filas con coincidencias exactas van primero, así que
+  //     a igualdad de parejas se prefieren las cercanas.
+  // EN: Maximum matching (Kuhn's augmenting paths): the LARGEST number of
+  //     pairs is sought first; each row tries its closest pair first and rows
+  //     with exact matches go first, so with equal pair counts close ones win.
+  const parejaDeApunte = new Map<number, number>(); // ES: apunte -> fila / EN: entry -> row
+  const intentar = (fila: number, visitados: Set<number>): boolean => {
+    for (const { apunte } of opciones1a1[fila]) {
+      if (visitados.has(apunte)) continue;
+      visitados.add(apunte);
+      const ocupante = parejaDeApunte.get(apunte);
+      if (ocupante === undefined || intentar(ocupante, visitados)) {
+        parejaDeApunte.set(apunte, fila);
+        return true;
+      }
+    }
+    return false;
+  };
+  const orden = filas
+    .map((f, i) => ({ i, cerca: opciones1a1[i][0]?.dias ?? Infinity, linea: f.linea }))
+    .filter((x) => x.cerca !== Infinity)
+    .sort((a, b) => a.cerca - b.cerca || a.linea - b.linea);
+  for (const { i } of orden) intentar(i, new Set());
+  for (const [apunte, fila] of parejaDeApunte) {
+    const linea = filas[fila].linea;
+    const dias = Math.abs(diaUTC(filas[fila].fecha) - diaUTC(apuntados[apunte].fecha));
+    const id = apuntados[apunte].id ?? String(apunte);
+    marcas.set(linea, { linea, tipo: "apuntado", id, dias });
   }
 
   // ── 2. Dentro del fichero / Within the file ────────────────────────────────
