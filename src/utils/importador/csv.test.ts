@@ -11,7 +11,7 @@
  *     All data is made up.
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
-import { detectarSeparador, leerCSV } from "./csv";
+import { detectarSeparador, ErrorCSV, leerCSV } from "./csv";
 
 describe("detectarSeparador", () => {
   it("punto y coma, el habitual en bancos españoles / semicolon, the usual one in Spanish banks", () => {
@@ -68,8 +68,24 @@ describe("leerCSV", () => {
     ]);
   });
 
-  it("comilla sin cerrar: lo que queda va a la celda / unclosed quote: the rest goes into the cell", () => {
-    expect(leerCSV('a;"b;c\nd')).toEqual([["a", "b;c\nd"]]);
+  it("comilla sin cerrar: error con la fila donde empieza / unclosed quote: error with the row where it starts", () => {
+    expect(() => leerCSV('a;b\nc;"d;e\nf')).toThrow(ErrorCSV);
+    try {
+      leerCSV('a;b\nc;"d;e\nf');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ErrorCSV);
+      expect((e as ErrorCSV).fila).toBe(2);
+    }
+  });
+
+  it("una comilla en mitad de una celda sin comillas es texto / a quote in the middle of an unquoted cell is text", () => {
+    const texto = 'Fecha;Concepto;Importe\n01/02/2026;BAR "PEPE;-1,20\n02/02/2026;PAN;-2,00\n';
+    expect(detectarSeparador(texto)).toBe(";");
+    expect(leerCSV(texto)).toEqual([
+      ["Fecha", "Concepto", "Importe"],
+      ["01/02/2026", 'BAR "PEPE', "-1,20"],
+      ["02/02/2026", "PAN", "-2,00"],
+    ]);
   });
 
   it("solo retornos de carro antiguos (CR) / legacy carriage returns only (CR)", () => {

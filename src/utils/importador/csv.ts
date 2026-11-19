@@ -6,23 +6,32 @@
  *       - Separador `;` (el habitual, porque la coma es el decimal), `,` o
  *         tabulador, detectado solo o forzado por el perfil del banco.
  *       - Celdas entre comillas con el separador o saltos de línea dentro y
- *         comillas dobladas ("") como comilla literal (RFC 4180).
+ *         comillas dobladas ("") como comilla literal (RFC 4180). Una comilla
+ *         solo abre si va al principio de la celda; en mitad de una celda sin
+ *         comillas (BAR "PEPE) es texto normal.
  *       - BOM al principio y finales de línea CRLF, LF o CR.
  *     Devuelve una matriz de texto (filas × celdas). Las celdas sin comillas se
  *     recortan; las entrecomilladas se dejan tal cual. Las líneas vacías (o
- *     solo con espacios) se saltan. Una comilla sin cerrar no rompe la lectura:
- *     lo que queda del fichero va a esa celda y la vista previa lo marcará.
+ *     solo con espacios) se saltan. Una comilla sin cerrar lanza ErrorCSV con
+ *     la fila donde empieza: si no, se tragaría en silencio el resto del
+ *     fichero y se perderían movimientos.
+ *     La detección del separador usa el MISMO recorrido que la lectura, así
+ *     que las dos entienden igual las comillas.
  * EN: Dependency-free CSV reader for bank statements. It covers what Spanish
  *     banks produce:
  *       - `;` separator (the usual one, because the comma is the decimal mark),
  *         `,` or tab, detected automatically or forced by the bank profile.
  *       - Quoted cells holding the separator or line breaks, and doubled quotes
- *         ("") as a literal quote (RFC 4180).
+ *         ("") as a literal quote (RFC 4180). A quote only opens at the start
+ *         of a cell; in the middle of an unquoted cell (BAR "PEPE) it is plain
+ *         text.
  *       - BOM at the start and CRLF, LF or CR line endings.
  *     Returns a text matrix (rows × cells). Unquoted cells are trimmed; quoted
  *     ones are kept as they are. Empty lines (or blanks only) are skipped. An
- *     unclosed quote does not break reading: the rest of the file goes into
- *     that cell and the preview will flag it.
+ *     unclosed quote throws ErrorCSV with the row where it starts: otherwise
+ *     the rest of the file would be silently swallowed and movements lost.
+ *     Separator detection uses the SAME pass as reading, so both understand
+ *     quotes the same way.
  * ===========================================================================*/
 
 // ES: Separadores admitidos. / EN: Supported separators.
@@ -34,77 +43,30 @@ export interface OpcionesCSV {
   separador?: SeparadorCSV;
 }
 
+// ES: Error de formato del CSV; `fila` es la fila (desde 1, en la matriz
+//     leída) donde empieza la comilla sin cerrar.
+// EN: CSV format error; `fila` is the row (from 1, in the matrix read) where
+//     the unclosed quote starts.
+export class ErrorCSV extends Error {
+  constructor(public readonly fila: number) {
+    super(`Comilla sin cerrar en la fila ${fila} / Unclosed quote on row ${fila}`);
+    this.name = "ErrorCSV";
+  }
+}
+
 // ES: Candidatos en orden de preferencia en caso de empate.
 // EN: Candidates in order of preference when tied.
 const CANDIDATOS: SeparadorCSV[] = [";", "\t", ","];
 
-// ES: Cuenta cuántas veces sale `sep` fuera de comillas en cada una de las
-//     primeras líneas lógicas (hasta 20). Sirve para elegir el separador.
-// EN: Counts how many times `sep` appears outside quotes in each of the first
-//     logical lines (up to 20). Used to choose the separator.
-function conteosPorLinea(texto: string, sep: string): number[] {
-  const conteos: number[] = [];
-  let actual = 0;
-  let enComillas = false;
-  let lineaConContenido = false;
-  for (let i = 0; i < texto.length && conteos.length < 20; i++) {
-    const c = texto[i];
-    if (c === '"') enComillas = !enComillas;
-    else if (!enComillas && (c === "\n" || c === "\r")) {
-      if (lineaConContenido) conteos.push(actual);
-      actual = 0;
-      lineaConContenido = false;
-      continue;
-    } else if (!enComillas && c === sep) actual++;
-    if (c.trim() !== "") lineaConContenido = true;
-  }
-  if (lineaConContenido && conteos.length < 20) conteos.push(actual);
-  return conteos;
-}
-
-// ES: Elige el separador: el que aparece en más líneas con el mismo número de
-//     veces (columnas constantes) y, a igualdad, el que más columnas da. Los
-//     extractos con líneas de preámbulo (titular, periodo…) solo restan algo
-//     de constancia, no cambian el ganador. Si ninguno aparece, `;`.
-// EN: Chooses the separator: the one appearing the same number of times in
-//     the most lines (steady column count) and, when tied, the one giving more
-//     columns. Statements with preamble lines (holder, period…) only lose a
-//     bit of steadiness, they do not change the winner. If none appears, `;`.
-export function detectarSeparador(texto: string): SeparadorCSV {
-  let mejor: SeparadorCSV = ";";
-  let mejorLineas = 0;
-  let mejorColumnas = 0;
-  for (const sep of CANDIDATOS) {
-    const conteos = conteosPorLinea(texto.replace(/^\ufeff/, ""), sep).filter((n) => n > 0);
-    if (!conteos.length) continue;
-    // ES: Moda: el número de separadores más repetido y en cuántas líneas sale.
-    // EN: Mode: the most repeated separator count and in how many lines it shows.
-    const frecuencia = new Map<number, number>();
-    for (const n of conteos) frecuencia.set(n, (frecuencia.get(n) ?? 0) + 1);
-    let moda = 0;
-    let lineas = 0;
-    for (const [n, veces] of frecuencia) {
-      if (veces > lineas || (veces === lineas && n > moda)) {
-        moda = n;
-        lineas = veces;
-      }
-    }
-    if (lineas > mejorLineas || (lineas === mejorLineas && moda > mejorColumnas)) {
-      mejor = sep;
-      mejorLineas = lineas;
-      mejorColumnas = moda;
-    }
-  }
-  return mejor;
-}
-
-// ES: Lee el CSV completo a una matriz de texto. Máquina de estados de un solo
-//     recorrido: dentro o fuera de comillas, acumulando la celda actual.
-// EN: Reads the whole CSV into a text matrix. Single-pass state machine:
-//     inside or outside quotes, accumulating the current cell.
-export function leerCSV(texto: string, opciones: OpcionesCSV = {}): string[][] {
-  const fuente = texto.replace(/^\ufeff/, "");
-  const sep = opciones.separador ?? detectarSeparador(fuente);
+// ES: Recorrido único que comparten lectura y detección. Lee hasta `limite`
+//     filas y dice si terminó dentro de una comilla abierta (y en qué fila).
+// EN: Single pass shared by reading and detection. Reads up to `limite` rows
+//     and tells whether it ended inside an open quote (and on which row).
+function recorrer(
+  fuente: string,
+  sep: string,
+  limite = Number.POSITIVE_INFINITY
+): { filas: string[][]; comillaSinCerrar: number | null } {
   const filas: string[][] = [];
   let fila: string[] = [];
   let celda = "";
@@ -132,7 +94,7 @@ export function leerCSV(texto: string, opciones: OpcionesCSV = {}): string[][] {
     filaConContenido = false;
   };
 
-  for (let i = 0; i < fuente.length; i++) {
+  for (let i = 0; i < fuente.length && filas.length < limite; i++) {
     const c = fuente[i];
     if (enComillas) {
       if (c === '"') {
@@ -146,8 +108,8 @@ export function leerCSV(texto: string, opciones: OpcionesCSV = {}): string[][] {
       continue;
     }
     if (c === '"' && !entrecomillada && celda.trim() === "") {
-      // ES: Comilla de apertura (se ignoran los espacios previos).
-      // EN: Opening quote (leading spaces are ignored).
+      // ES: Comilla de apertura (solo al principio de la celda).
+      // EN: Opening quote (only at the start of the cell).
       celda = "";
       enComillas = true;
       entrecomillada = true;
@@ -166,7 +128,61 @@ export function leerCSV(texto: string, opciones: OpcionesCSV = {}): string[][] {
       if (c.trim() !== "") filaConContenido = true;
     }
   }
-  // ES: Última fila sin salto final. / EN: Last row without a final break.
-  cerrarFila();
+  // ES: Fila donde quedó abierta la comilla (la que se está leyendo).
+  // EN: Row where the quote was left open (the one being read).
+  const comillaSinCerrar = enComillas ? filas.length + 1 : null;
+  if (filas.length < limite) cerrarFila();
+  return { filas, comillaSinCerrar };
+}
+
+// ES: Elige el separador mirando las primeras 20 filas: el que da el mismo
+//     número de celdas (más de una) en más filas y, a igualdad, el que más
+//     celdas da. Los extractos con líneas de preámbulo (titular, periodo…)
+//     solo restan algo de constancia, no cambian el ganador. Si ninguno
+//     aparece, `;`.
+// EN: Chooses the separator looking at the first 20 rows: the one giving the
+//     same number of cells (more than one) in the most rows and, when tied,
+//     the one giving more cells. Statements with preamble lines (holder,
+//     period…) only lose a bit of steadiness, they do not change the winner.
+//     If none appears, `;`.
+export function detectarSeparador(texto: string): SeparadorCSV {
+  const fuente = texto.replace(/^\ufeff/, "");
+  let mejor: SeparadorCSV = ";";
+  let mejorFilas = 0;
+  let mejorCeldas = 0;
+  for (const sep of CANDIDATOS) {
+    const anchos = recorrer(fuente, sep, 20)
+      .filas.map((f) => f.length)
+      .filter((n) => n > 1);
+    // ES: Moda: el ancho más repetido y en cuántas filas sale.
+    // EN: Mode: the most repeated width and in how many rows it shows.
+    const frecuencia = new Map<number, number>();
+    for (const n of anchos) frecuencia.set(n, (frecuencia.get(n) ?? 0) + 1);
+    let moda = 0;
+    let filas = 0;
+    for (const [n, veces] of frecuencia) {
+      if (veces > filas || (veces === filas && n > moda)) {
+        moda = n;
+        filas = veces;
+      }
+    }
+    if (filas > mejorFilas || (filas === mejorFilas && moda > mejorCeldas)) {
+      mejor = sep;
+      mejorFilas = filas;
+      mejorCeldas = moda;
+    }
+  }
+  return mejor;
+}
+
+// ES: Lee el CSV completo a una matriz de texto. Lanza ErrorCSV si queda una
+//     comilla sin cerrar.
+// EN: Reads the whole CSV into a text matrix. Throws ErrorCSV if a quote is
+//     left unclosed.
+export function leerCSV(texto: string, opciones: OpcionesCSV = {}): string[][] {
+  const fuente = texto.replace(/^\ufeff/, "");
+  const sep = opciones.separador ?? detectarSeparador(fuente);
+  const { filas, comillaSinCerrar } = recorrer(fuente, sep);
+  if (comillaSinCerrar !== null) throw new ErrorCSV(comillaSinCerrar);
   return filas;
 }
