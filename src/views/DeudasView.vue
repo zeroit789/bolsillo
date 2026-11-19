@@ -461,7 +461,14 @@ function borrar(deuda: Deuda) {
             </select>
           </div>
 
-          <!-- ES: Total y cuota mensual en dos columnas / EN: Total and monthly payment in two columns -->
+          <!-- ES: Total y cuota mensual en dos columnas. Los importes son texto con
+               teclado decimal (no type="number"): un número mal escrito llega
+               tal cual a analizarImporte y se rechaza, en vez de llegar vacío y
+               valer 0 (lo mismo con "ya pagado").
+               EN: Total and monthly payment in two columns. Amounts are text
+               with a decimal keyboard (not type="number"): a mistyped number
+               reaches analizarImporte as is and is rejected, instead of
+               arriving empty and counting as 0 (same for "already paid"). -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label :for="`${uid}-labelTotal`" class="mb-1 block text-sm text-muted">{{
@@ -469,10 +476,9 @@ function borrar(deuda: Deuda) {
               }}</label>
               <input
                 :id="`${uid}-labelTotal`"
-                v-model.number="form.total"
-                type="number"
-                min="0"
-                step="0.01"
+                v-model="form.total"
+                type="text"
+                inputmode="decimal"
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
               />
             </div>
@@ -482,10 +488,9 @@ function borrar(deuda: Deuda) {
               }}</label>
               <input
                 :id="`${uid}-labelCuotaMensual`"
-                v-model.number="form.cuotaMensual"
-                type="number"
-                min="0"
-                step="0.01"
+                v-model="form.cuotaMensual"
+                type="text"
+                inputmode="decimal"
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
               />
             </div>
@@ -499,10 +504,9 @@ function borrar(deuda: Deuda) {
               }}</label>
               <input
                 :id="`${uid}-labelYaPagado`"
-                v-model.number="form.pagadoInicial"
-                type="number"
-                min="0"
-                step="0.01"
+                v-model="form.pagadoInicial"
+                type="text"
+                inputmode="decimal"
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
               />
             </div>

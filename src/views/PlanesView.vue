@@ -485,8 +485,13 @@ function borrar(plan: Plan) {
             />
           </div>
 
-          <!-- ES: Objetivo y ya aportado en dos columnas -->
-          <!-- EN: Goal and already-saved in two columns -->
+          <!-- ES: Objetivo y ya aportado en dos columnas. Son texto con teclado
+               decimal (no type="number"): un número mal escrito llega tal cual
+               a analizarImporte y se rechaza, en vez de llegar vacío y valer 0. -->
+          <!-- EN: Goal and already-saved in two columns. They are text with a
+               decimal keyboard (not type="number"): a mistyped number reaches
+               analizarImporte as is and is rejected, instead of arriving empty
+               and counting as 0. -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label :for="`${uid}-objetivo`" class="mb-1 block text-sm text-muted">{{
@@ -494,10 +499,9 @@ function borrar(plan: Plan) {
               }}</label>
               <input
                 :id="`${uid}-objetivo`"
-                v-model.number="form.objetivo"
-                type="number"
-                min="0"
-                step="0.01"
+                v-model="form.objetivo"
+                type="text"
+                inputmode="decimal"
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
               />
             </div>
@@ -507,10 +511,9 @@ function borrar(plan: Plan) {
               }}</label>
               <input
                 :id="`${uid}-yaAportado`"
-                v-model.number="form.aportado"
-                type="number"
-                min="0"
-                step="0.01"
+                v-model="form.aportado"
+                type="text"
+                inputmode="decimal"
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
               />
             </div>
