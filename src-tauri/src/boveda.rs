@@ -923,8 +923,15 @@ impl Boveda {
                 continue;
             }
             let ruta = self.dir.ruta(&p.ruta);
-            if !ruta.exists() {
-                continue;
+            // ES: Solo se descarta si de verdad no existe; otro error la conserva.
+            // EN: It is dropped only if it really does not exist; any other error keeps it.
+            match std::fs::symlink_metadata(&ruta) {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(_) => {
+                    quedan.push(p);
+                    continue;
+                }
+                Ok(_) => {}
             }
             // ES: Nunca a través de un enlace o unión (podría apuntar fuera).
             // EN: Never through a link or junction (it could point outside).
@@ -938,7 +945,7 @@ impl Boveda {
             let hecho = (|| -> R<()> {
                 // ES: Sin DEK registrada no se puede comprobar: queda para revisión.
                 // EN: Without a recorded DEK it cannot be checked: kept for review.
-                if p.accion != "credencial" && p.dek_id.is_none() {
+                if p.dek_id.is_none() {
                     return Err(ErrorAlmacen::Interno);
                 }
                 let mut f = desde_bytes(&std::fs::read(&ruta)?)?;
@@ -961,7 +968,9 @@ impl Boveda {
                         };
                         f.bloqueo = bloqueo;
                     }
-                    "credencial" if f.dek_id == dek_id => {
+                    "credencial"
+                        if f.dek_id == dek_id && p.dek_id.as_deref() == Some(f.dek_id.as_str()) =>
+                    {
                         f.envolturas.credencial = Some(envolver_con_kek(
                             &kek,
                             &sal,
@@ -998,6 +1007,34 @@ impl Boveda {
             }
         }
         let _ = self.escribir_pendientes(&quedan);
+    }
+
+    // ES: Antes de que una restauración cambie la DEK del principal, el
+    //     registro deja de depender de ella: lo no publicado (DEK previa igual
+    //     a la actual) se quita y lo demás se marca como publicado. Si no se
+    //     puede escribir, no se restaura.
+    // EN: Before a restore changes the main-file DEK, the record stops
+    //     depending on it: what was not published (previous DEK equal to the
+    //     current one) is removed and the rest is marked as published. If it
+    //     cannot be written, nothing is restored.
+    fn resolver_pendientes(&self, dek_actual: Option<&str>) -> R<()> {
+        let Ok(v) = self.leer_pendientes_estricto() else {
+            return Ok(());
+        };
+        if v.is_empty() {
+            return Ok(());
+        }
+        let v: Vec<Reenvoltura> = v
+            .into_iter()
+            .filter(|p| {
+                p.publicada || p.accion == "credencial" || p.dek_id.as_deref() != dek_actual
+            })
+            .map(|mut p| {
+                p.publicada = true;
+                p
+            })
+            .collect();
+        self.escribir_pendientes(&v)
     }
 
     // ES: Deriva una KEK con sal nueva (para envolver varias cosas con una sola
@@ -1251,7 +1288,13 @@ impl Boveda {
     //     main file. It is left open with the backup's DEK; returns its data.
     pub fn restaurar_copia(&mut self, nombre: &str, credencial: Option<&str>) -> R<String> {
         let (bytes, f, dek, texto) = self.abrir_copia(nombre, credencial)?;
-        if let Some(actual) = self.dir.leer(PRINCIPAL)? {
+        let actual = self.dir.leer(PRINCIPAL)?;
+        let dek_actual = actual
+            .as_ref()
+            .and_then(|b| desde_bytes(b).ok())
+            .map(|f| f.dek_id);
+        self.resolver_pendientes(dek_actual.as_deref())?;
+        if let Some(actual) = actual {
             let nombre_antes = self.dir.nombre_copia_libre("antes", self.ahora());
             self.dir.escribir_copia(&nombre_antes, &actual)?;
         }
@@ -1765,6 +1808,38 @@ mod tests {
         let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
         assert!(f.envolturas.recuperacion.is_none());
         assert_eq!(b.estado().copias_pendientes, 0);
+    }
+
+    #[test]
+    fn restaurar_una_copia_de_la_dek_vieja_no_anula_la_revocacion_pendiente() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let vieja = b.abierta().unwrap().cabecera.dek_id.clone();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let bytes = b.dir.leer_copia(&copia).unwrap();
+        let sal = desde_bytes(&bytes)
+            .unwrap()
+            .envolturas
+            .recuperacion
+            .unwrap()
+            .kdf
+            .sal;
+        b.regenerar_recuperacion("4831").unwrap();
+        // ES: Como si esa copia no se hubiera podido reenvolver y el cierre
+        //     del registro hubiera fallado.
+        // EN: As if that backup could not be rewrapped and closing the
+        //     record had failed.
+        b.dir.escribir_copia(&copia, &bytes).unwrap();
+        let reg = format!(
+            r#"[{{"ruta":"copias/{copia}","accion":"recuperacion","dek_id":"{vieja}","sal":"{sal}"}}]"#
+        );
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.restaurar_copia(&copia, Some("4831")).unwrap();
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        assert!(f.envolturas.recuperacion.is_none());
     }
 
     #[test]

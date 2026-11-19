@@ -107,20 +107,26 @@ pub fn id_recibo_valido(id: &str) -> bool {
 //     following links (symlink_metadata) and, on Windows, the reparse point
 //     attribute (FILE_ATTRIBUTE_REPARSE_POINT = 0x400), which also covers junctions.
 pub fn sin_redireccion(p: &Path) -> bool {
-    let Ok(m) = fs::symlink_metadata(p) else {
-        return false;
-    };
+    matches!(es_redireccion(p), Ok(false))
+}
+
+// ES: ¿Es una redirección? Un error al consultarla se devuelve (no se
+//     confunde con "es redirección" ni con "no existe").
+// EN: Is it a redirection? An error while checking is returned (it is not
+//     confused with "is a redirection" or "does not exist").
+pub fn es_redireccion(p: &Path) -> io::Result<bool> {
+    let m = fs::symlink_metadata(p)?;
     if m.file_type().is_symlink() {
-        return false;
+        return Ok(true);
     }
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
         if m.file_attributes() & 0x400 != 0 {
-            return false;
+            return Ok(true);
         }
     }
-    true
+    Ok(false)
 }
 
 // ES: Información de una copia automática para la lista del frontend.
@@ -521,7 +527,7 @@ impl Directorio {
             }
             for e in fs::read_dir(&carpeta)? {
                 let p = e?.path();
-                if p.extension().is_some_and(|x| x == "bolsillo") && sin_redireccion(&p) {
+                if p.extension().is_some_and(|x| x == "bolsillo") && !es_redireccion(&p)? {
                     v.push(p);
                 }
             }
