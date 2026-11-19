@@ -7,11 +7,19 @@
  *     'cerrar'. Si recibe la prop `inicial`, el formulario se PRECARGA con esos
  *     valores y el modal pasa a modo edición. Los fijos pueden llevar un "día de
  *     pago" (1-31). Un gasto puntual puede DIVIDIRSE en varias categorías.
+ *     Desde la v4 los fijos tienen además frecuencia (semanal, mensual,
+ *     trimestral, anual), primer día opcional y fin por fecha o por número de
+ *     cobros; el formulario enseña el primer cobro para que se vea si el
+ *     primer ciclo se salta.
  * EN: Modal to ADD or EDIT a transaction: expense/income, fixed (recurring) or
  *     variable (one-off). Emits 'guardar' with already-normalized data and
  *     'cerrar'. If the `inicial` prop is passed, the form is PRELOADED with those
  *     values and the modal switches to edit mode. Fixed ones may carry a
  *     "payment day" (1-31). A one-off expense can be SPLIT across categories.
+ *     Since v4 fixed ones also have a frequency (weekly, monthly, quarterly,
+ *     yearly), an optional first day and an end by date or by number of
+ *     charges; the form shows the first charge so a skipped first cycle is
+ *     visible.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
  *   1. Importaciones / Imports
@@ -24,6 +32,7 @@
  *   8. Gestión de imagen del recibo / Receipt image handling
  *   9. Banderas derivadas de la clase / Derived class flags
  *  10. Guardar (validar + normalizar + emitir) / Save handler (validate + normalize + emit)
+ *  11. Recurrencia: frecuencia, inicio y fin / Recurrence: frequency, start & end
  * ===========================================================================*/
 
 // ── 1. Importaciones / Imports ────────────────────────────────────────────────
@@ -35,11 +44,12 @@ import { ref, reactive, computed, useId } from "vue";
 import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
-import { euro } from "../utils/format";
+import { euro, fechaLegible, mesActual } from "../utils/format";
+import { primerCobro } from "../utils/recurrencia";
 import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
 import { totalPartes, validarPartes } from "../utils/partes";
 import { crearT } from "../i18n";
-import type { Signo, Subdivision } from "../types";
+import { CUOTAS_MAX, esFechaValida, type Frecuencia, type Signo, type Subdivision } from "../types";
 
 // ── 2. Diccionario de textos de la UI (i18n) / UI texts dictionary (i18n) ──────
 // ES: Textos visibles del modal (ES/EN). t("clave") devuelve el idioma activo
@@ -56,9 +66,9 @@ const t = crearT({
   // ES: Opciones del <select> de clase (gasto/ingreso, fijo/variable)
   // EN: Options of the class <select> (expense/income, fixed/variable)
   gastoVariable: { es: "Gasto variable", en: "Variable expense" },
-  gastoFijo: { es: "Gasto fijo (cada mes)", en: "Fixed expense (monthly)" },
+  gastoFijo: { es: "Gasto fijo (se repite)", en: "Fixed expense (recurring)" },
   ingresoPuntual: { es: "Ingreso puntual", en: "One-off income" },
-  ingresoFijo: { es: "Ingreso fijo (cada mes)", en: "Fixed income (monthly)" },
+  ingresoFijo: { es: "Ingreso fijo (se repite)", en: "Fixed income (recurring)" },
   concepto: { es: "Concepto", en: "Description" },
   conceptoPlaceholder: { es: "Ej. Supermercado", en: "E.g. Groceries" },
   importe: { es: "Importe (€)", en: "Amount (€)" },
@@ -86,8 +96,39 @@ const t = crearT({
   reciboAlt: { es: "Recibo", en: "Receipt" },
   quitar: { es: "Quitar", en: "Remove" },
   avisoFijos: {
-    es: "Los fijos se repiten automáticamente en todos los meses desde hoy.",
-    en: "Fixed transactions repeat automatically every month from today.",
+    es: "Los fijos se repiten solos según su frecuencia desde su primer día (o desde este mes).",
+    en: "Fixed transactions repeat on their own by their frequency from their first day (or from this month).",
+  },
+  // ES: Recurrencia (v4) / EN: Recurrence (v4)
+  frecuencia: { es: "Frecuencia", en: "Frequency" },
+  semanal: { es: "Cada semana", en: "Every week" },
+  mensual: { es: "Cada mes", en: "Every month" },
+  trimestral: { es: "Cada 3 meses", en: "Every 3 months" },
+  anual: { es: "Cada año", en: "Every year" },
+  fechaInicio: { es: "Primer día (opcional)", en: "First day (optional)" },
+  fechaInicioSemanal: { es: "Primer día", en: "First day" },
+  fin: { es: "Termina", en: "Ends" },
+  finNunca: { es: "Nunca", en: "Never" },
+  finFecha: { es: "En una fecha", en: "On a date" },
+  finCuotas: { es: "Tras un número de cobros", en: "After a number of charges" },
+  fechaFin: { es: "Último día", en: "Last day" },
+  cuotas: { es: "Número de cobros", en: "Number of charges" },
+  primerCobro: { es: "Primer cobro: @f", en: "First charge: @f" },
+  sinCobros: {
+    es: "Con estos datos no toca ningún cobro.",
+    en: "With these details no charge falls due.",
+  },
+  errSemanal: {
+    es: "Un fijo semanal necesita su primer día (marca el día de la semana).",
+    en: "A weekly fixed item needs its first day (it sets the weekday).",
+  },
+  errFechaFin: {
+    es: "Pon un último día válido, igual o posterior al primero.",
+    en: "Enter a valid last day, on or after the first one.",
+  },
+  errCuotas: {
+    es: "El número de cobros debe ser un entero entre 1 y 5200.",
+    en: "The number of charges must be a whole number between 1 and 5200.",
   },
   cancelar: { es: "Cancelar", en: "Cancel" },
   guardar: { es: "Guardar", en: "Save" },
@@ -133,6 +174,12 @@ interface MovimientoInicial {
   recibo?: string; // ES: imagen del recibo en base64 (solo gastos puntuales) / EN: receipt image in base64 (one-off expenses only)
   cuenta?: string; // ES: id de la cuenta a la que pertenece; opcional / EN: id of the account it belongs to; optional
   subdivisiones?: Subdivision[]; // ES: gasto dividido en varias categorías; opcional / EN: expense split across several categories; optional
+  // ES: Recurrencia (solo fijos, v4). / EN: Recurrence (fixed only, v4).
+  desde?: string; // ES: mes de alta "YYYY-MM" (para enseñar el primer cobro) / EN: start month "YYYY-MM" (to show the first charge)
+  frecuencia?: Frecuencia;
+  fechaInicio?: string;
+  fechaFin?: string;
+  cuotas?: number;
 }
 
 // ES: Props del modal: datos iniciales opcionales (si llegan, modo edición).
@@ -161,6 +208,11 @@ const emit = defineEmits<{
       recibo?: string; // ES: imagen del recibo en base64 (solo puntuales); opcional / EN: receipt image in base64 (one-off only); optional
       cuenta?: string; // ES: id de la cuenta a la que pertenece; opcional (undefined si vacío) / EN: id of the account it belongs to; optional (undefined if empty)
       subdivisiones?: Subdivision[]; // ES: partes del gasto dividido (solo gasto puntual); opcional / EN: parts of the split expense (one-off expense only); optional
+      // ES: Recurrencia (solo fijos; undefined = sin ese dato). / EN: Recurrence (fixed only; undefined = not set).
+      frecuencia?: Frecuencia;
+      fechaInicio?: string;
+      fechaFin?: string;
+      cuotas?: number;
     },
   ];
   cerrar: [];
@@ -267,6 +319,19 @@ const form = reactive({
   // ES: Cuenta/monedero al que pertenece el movimiento. "" = sin cuenta.
   // EN: Account/wallet the transaction belongs to. "" = no account.
   cuenta: props.inicial?.cuenta ?? "",
+  // ES: Recurrencia: frecuencia (por defecto mensual), primer día opcional y
+  //     fin ("nunca", por fecha o por número de cobros).
+  // EN: Recurrence: frequency (monthly by default), optional first day and
+  //     end ("never", by date or by number of charges).
+  frecuencia: (props.inicial?.frecuencia ?? "mensual") as Frecuencia,
+  fechaInicio: props.inicial?.fechaInicio ?? "",
+  fin: (props.inicial?.cuotas !== undefined
+    ? "cuotas"
+    : props.inicial?.fechaFin
+      ? "fecha"
+      : "nunca") as "nunca" | "fecha" | "cuotas",
+  fechaFin: props.inicial?.fechaFin ?? "",
+  cuotas: (props.inicial?.cuotas ?? "") as number | "",
 });
 
 // ── 7. Gasto dividido (subdivisiones) / Split expense (subdivisions) ──────────
@@ -445,7 +510,8 @@ function guardar() {
   //     We truncate to an integer and reject out-of-range values (a user could
   //     type 99 by hand); anything invalid becomes undefined (no day stored).
   const d = Math.trunc(Number(form.diaPago) || 0);
-  const diaPago = esRecurrente.value && d >= 1 && d <= 31 ? d : undefined;
+  const diaPago =
+    esRecurrente.value && form.frecuencia !== "semanal" && d >= 1 && d <= 31 ? d : undefined;
 
   // ES: Comercio: undefined si está vacío (no guardamos cadenas en blanco).
   // EN: Merchant: undefined if empty (we don't store blank strings).
@@ -469,6 +535,10 @@ function guardar() {
   // EN: Account: undefined if none was picked (we don't store "").
   const cuenta = form.cuenta || undefined;
 
+  // ES: Recurrencia (solo fijos). / EN: Recurrence (fixed only).
+  const rec = esRecurrente.value ? validarRecurrencia() : null;
+  if (rec && "error" in rec) return (error.value = t(rec.error));
+
   // ES: Emite el payload limpio. FIX — si está dividido, mantenemos la `categoria`
   //     principal coherente con las partes usando la categoría de la primera
   //     subdivisión; si no, usamos la categoría del formulario.
@@ -491,8 +561,54 @@ function guardar() {
     recibo,
     cuenta,
     subdivisiones,
+    ...(rec ?? {}),
   });
 }
+
+// ── 11. Recurrencia: frecuencia, inicio y fin / Recurrence: frequency, start & end ──
+// ES: Valida la recurrencia del formulario y devuelve los campos a guardar
+//     (undefined = quitar el dato al editar) o la clave del error.
+// EN: Validates the form's recurrence and returns the fields to save
+//     (undefined = drop the field when editing) or the error key.
+function validarRecurrencia():
+  | { frecuencia: Frecuencia; fechaInicio?: string; fechaFin?: string; cuotas?: number }
+  | { error: string } {
+  const fechaInicio = form.fechaInicio || undefined;
+  if (fechaInicio && !esFechaValida(fechaInicio)) return { error: "errFecha" };
+  if (form.frecuencia === "semanal" && !fechaInicio) return { error: "errSemanal" };
+  let fechaFin: string | undefined;
+  let cuotas: number | undefined;
+  if (form.fin === "fecha") {
+    fechaFin = form.fechaFin;
+    if (!esFechaValida(fechaFin) || (fechaInicio && fechaFin < fechaInicio)) {
+      return { error: "errFechaFin" };
+    }
+  } else if (form.fin === "cuotas") {
+    const n = Number(form.cuotas);
+    if (!Number.isInteger(n) || n < 1 || n > CUOTAS_MAX) return { error: "errCuotas" };
+    cuotas = n;
+  }
+  return { frecuencia: form.frecuencia, fechaInicio, fechaFin, cuotas };
+}
+
+// ES: Primer cobro con los datos del formulario (o null si no toca nunca),
+//     para que se vea si el primer ciclo se salta (alta el 20, pago el 5).
+// EN: First charge with the form's data (or null if it never falls due), so
+//     a skipped first cycle is visible (created on the 20th, paid on the 5th).
+const primerCobroTexto = computed(() => {
+  if (!esRecurrente.value) return "";
+  const r = validarRecurrencia();
+  if ("error" in r) return "";
+  const d = Math.trunc(Number(form.diaPago) || 0);
+  const f = primerCobro({
+    importe: 1,
+    desde: props.inicial?.desde ?? mesActual(),
+    hasta: null,
+    diaPago: d >= 1 && d <= 31 && r.frecuencia !== "semanal" ? d : undefined,
+    ...r,
+  });
+  return f ? t("primerCobro").replace("@f", fechaLegible(f)) : t("sinCobros");
+});
 </script>
 
 <template>
@@ -508,7 +624,7 @@ function guardar() {
       role="dialog"
       aria-modal="true"
       :aria-labelledby="idTitulo"
-      class="w-full max-w-md rounded-2xl bg-surface border border-border p-6 shadow-2xl"
+      class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-border p-6 shadow-2xl"
     >
       <!-- ES: Título según el modo (edición vs alta). -->
       <!-- EN: Title depending on the mode (edit vs new). -->
@@ -587,7 +703,7 @@ function guardar() {
           </div>
           <!-- ES: Día de pago: solo para fijos (recurrentes), opcional. -->
           <!-- EN: Payment day: only for fixed (recurring) transactions, optional. -->
-          <div v-if="esRecurrente" class="flex-1">
+          <div v-if="esRecurrente && form.frecuencia !== 'semanal'" class="flex-1">
             <label :for="`${uid}-diaPago`" class="text-muted text-sm">{{ t("diaPago") }}</label>
             <input
               :id="`${uid}-diaPago`"
@@ -600,6 +716,76 @@ function guardar() {
             />
           </div>
         </div>
+
+        <!-- ES: Recurrencia (solo fijos): frecuencia, primer día y fin.
+             EN: Recurrence (fixed only): frequency, first day and end. -->
+        <fieldset v-if="esRecurrente" class="rounded-lg border border-border p-3 space-y-3">
+          <legend class="px-1 text-sm text-muted">{{ t("frecuencia") }}</legend>
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <label :for="`${uid}-frecuencia`" class="sr-only">{{ t("frecuencia") }}</label>
+              <select
+                :id="`${uid}-frecuencia`"
+                v-model="form.frecuencia"
+                class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+              >
+                <option value="semanal">{{ t("semanal") }}</option>
+                <option value="mensual">{{ t("mensual") }}</option>
+                <option value="trimestral">{{ t("trimestral") }}</option>
+                <option value="anual">{{ t("anual") }}</option>
+              </select>
+            </div>
+            <div class="flex-1">
+              <label :for="`${uid}-fechaInicio`" class="text-muted text-xs">{{
+                form.frecuencia === "semanal" ? t("fechaInicioSemanal") : t("fechaInicio")
+              }}</label>
+              <input
+                :id="`${uid}-fechaInicio`"
+                v-model="form.fechaInicio"
+                type="date"
+                class="w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-ink outline-none focus:border-brand"
+              />
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <label :for="`${uid}-fin`" class="text-muted text-xs">{{ t("fin") }}</label>
+              <select
+                :id="`${uid}-fin`"
+                v-model="form.fin"
+                class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+              >
+                <option value="nunca">{{ t("finNunca") }}</option>
+                <option value="fecha">{{ t("finFecha") }}</option>
+                <option value="cuotas">{{ t("finCuotas") }}</option>
+              </select>
+            </div>
+            <div v-if="form.fin === 'fecha'" class="flex-1">
+              <label :for="`${uid}-fechaFin`" class="text-muted text-xs">{{ t("fechaFin") }}</label>
+              <input
+                :id="`${uid}-fechaFin`"
+                v-model="form.fechaFin"
+                type="date"
+                class="w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-ink outline-none focus:border-brand"
+              />
+            </div>
+            <div v-if="form.fin === 'cuotas'" class="flex-1">
+              <label :for="`${uid}-cuotas`" class="text-muted text-xs">{{ t("cuotas") }}</label>
+              <input
+                :id="`${uid}-cuotas`"
+                v-model="form.cuotas"
+                type="number"
+                min="1"
+                :max="CUOTAS_MAX"
+                step="1"
+                class="w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-ink outline-none focus:border-brand"
+              />
+            </div>
+          </div>
+          <p v-if="primerCobroTexto" class="text-xs text-faint" aria-live="polite">
+            {{ primerCobroTexto }}
+          </p>
+        </fieldset>
 
         <!-- ES: Selector de categoría agrupado con <optgroup>.
              EN: Category selector grouped with <optgroup>. -->

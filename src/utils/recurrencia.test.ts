@@ -15,7 +15,12 @@
  *     All data is made up.
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
-import { cobrosProximos, ocurrenciasEnMes, type RecurrenteProgramable } from "./recurrencia";
+import {
+  cobrosProximos,
+  ocurrenciasEnMes,
+  primerCobro,
+  type RecurrenteProgramable,
+} from "./recurrencia";
 
 // ES: Fechas del mes de un recurrente (atajo). / EN: Month dates of an entry (shortcut).
 const fechas = (r: RecurrenteProgramable, mes: string) => ocurrenciasEnMes(r, mes).fechas;
@@ -346,4 +351,23 @@ describe("cobros próximos / upcoming charges", () => {
     expect(cobrosProximos(r, "2026-01-30", 3)).toEqual([]);
     expect(cobrosProximos(r, "2026-13-01", 3)).toEqual([]);
   });
+});
+
+describe("primer cobro / first charge", () => {
+  it("salta el primer ciclo si el día de pago ya pasó / skips the first cycle if the payment day has passed", () => {
+    const r: RecurrenteProgramable = { importe: 5, desde: "2026-01", hasta: null, diaPago: 5, fechaInicio: "2026-01-20" };
+    expect(primerCobro(r)).toBe("2026-02-05");
+    expect(primerCobro({ ...r, frecuencia: "trimestral" })).toBe("2026-04-05");
+    expect(primerCobro({ ...r, frecuencia: "anual" })).toBe("2027-01-05");
+  }); // prettier-ignore
+
+  it("semanal y sin campos nuevos / weekly and without new fields", () => {
+    expect(primerCobro({ importe: 5, desde: "2026-01", hasta: null, frecuencia: "semanal", fechaInicio: "2026-01-07" })).toBe("2026-01-07");
+    expect(primerCobro({ importe: 5, desde: "2026-03", hasta: null })).toBe("2026-03-01");
+  }); // prettier-ignore
+
+  it("null si nunca toca / null if it never falls due", () => {
+    expect(primerCobro({ importe: 5, desde: "2026-01", hasta: null, diaPago: 5, fechaInicio: "2026-01-20", fechaFin: "2026-01-31" })).toBeNull();
+    expect(primerCobro({ importe: 5, desde: "mal", hasta: null })).toBeNull();
+  }); // prettier-ignore
 });

@@ -221,3 +221,24 @@ export function cobrosProximos(r: RecurrenteProgramable, hoy: string, dias: numb
   }
   return fechas;
 }
+
+// ES: Primera fecha en que toca el recurrente, buscando desde su mes de alta
+//     (`desde` o el de `fechaInicio`) hasta 13 meses después (cubre el anual);
+//     null si no toca nunca en ese tramo. El formulario la enseña para que se
+//     vea si el primer ciclo se salta (alta el 20 con pago el 5).
+// EN: First date the recurring entry falls due, searching from its start
+//     month (`desde` or `fechaInicio`'s) up to 13 months later (covers
+//     yearly); null if it never falls due in that span. The form shows it so
+//     it is clear whether the first cycle is skipped (created on the 20th,
+//     paid on the 5th).
+export function primerCobro(r: RecurrenteProgramable): string | null {
+  const inicio = leerMes(r.fechaInicio?.slice(0, 7) ?? r.desde);
+  if (!inicio) return null;
+  for (let i = 0; i <= 13; i++) {
+    const total = inicio.anio * 12 + (inicio.mes - 1) + i;
+    const mes = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+    const f = ocurrenciasEnMes(r, mes).fechas;
+    if (f.length) return f[0];
+  }
+  return null;
+}

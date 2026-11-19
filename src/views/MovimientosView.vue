@@ -28,8 +28,9 @@ import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
 import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
 import { categoriasPorGrupo } from "../data/categorias";
-import type { LineaMes, Signo, Plantilla, Subdivision } from "../types";
+import type { Frecuencia, LineaMes, Signo, Plantilla, Subdivision } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
+import ImportarExtracto from "../components/ImportarExtracto.vue";
 import { crearT } from "../i18n";
 
 // ES: Diccionario de traducciones de esta vista (ES/EN). Claves cortas en camelCase.
@@ -40,6 +41,13 @@ const uid = useId();
 const t = crearT({
   titulo: { es: "Movimientos", en: "Transactions" },
   anadir: { es: "+ Añadir", en: "+ Add" },
+  importarExtracto: { es: "Importar extracto", en: "Import statement" },
+  // ES: Chips de recurrencia (v4): frecuencia y veces del mes.
+  // EN: Recurrence chips (v4): frequency and times in the month.
+  frecSemanal: { es: "Semanal", en: "Weekly" },
+  frecTrimestral: { es: "Trimestral", en: "Quarterly" },
+  frecAnual: { es: "Anual", en: "Yearly" },
+  veces: { es: "×@n este mes", en: "×@n this month" },
   registrarHoy: { es: "Registrar hoy", en: "Log today" },
   eliminarAtajo: { es: "Eliminar atajo", en: "Delete shortcut" },
   masPlantilla: { es: "+ Plantilla", en: "+ Template" },
@@ -112,6 +120,9 @@ const t = crearT({
 // EN: Finance store (single source of truth) and modal open/closed flag.
 const f = useFinanzas();
 const modal = ref(false);
+// ES: Asistente de importación de extractos abierto/cerrado.
+// EN: Statement import wizard open/closed.
+const importando = ref(false);
 // ES: Línea que se está editando (null = el modal está en modo alta).
 // EN: Line currently being edited (null = modal is in "add new" mode).
 const editando = ref<LineaMes | null>(null);
@@ -130,6 +141,12 @@ const inicial = ref<{
   recibo?: string; // ES: imagen base64 (solo puntuales); opcional / EN: base64 image (one-off only); optional
   cuenta?: string; // ES: id de cuenta; opcional / EN: account id; optional
   subdivisiones?: Subdivision[]; // ES: gasto dividido (solo puntuales); opcional / EN: split expense (one-off only); optional
+  // ES: Recurrencia (solo fijos, v4). / EN: Recurrence (fixed only, v4).
+  desde?: string;
+  frecuencia?: Frecuencia;
+  fechaInicio?: string;
+  fechaFin?: string;
+  cuotas?: number;
 } | null>(null);
 
 // ES: Recibo que se muestra en el lightbox (null = lightbox cerrado).
@@ -206,6 +223,12 @@ function editar(linea: LineaMes) {
       comercio: r.comercio,
       tags: r.tags,
       cuenta: r.cuenta, // ES: cuenta a la que pertenece; opcional / EN: account it belongs to; optional
+      // ES: Recurrencia (v4). / EN: Recurrence (v4).
+      desde: r.desde,
+      frecuencia: r.frecuencia,
+      fechaInicio: r.fechaInicio,
+      fechaFin: r.fechaFin,
+      cuotas: r.cuotas,
     };
   } else {
     // ES: Puntual: lo buscamos por id en el store.
@@ -247,6 +270,10 @@ function onGuardar(mov: {
   recibo?: string;
   cuenta?: string; // ES: id de cuenta; opcional / EN: account id; optional
   subdivisiones?: Subdivision[]; // ES: gasto dividido (solo puntuales); opcional / EN: split expense (one-off only); optional
+  frecuencia?: Frecuencia; // ES: recurrencia (solo fijos) / EN: recurrence (fixed only)
+  fechaInicio?: string;
+  fechaFin?: string;
+  cuotas?: number;
 }) {
   if (editando.value) {
     // ES: --- Modo edición ---
@@ -261,6 +288,12 @@ function onGuardar(mov: {
         comercio: mov.comercio,
         tags: mov.tags,
         cuenta: mov.cuenta, // ES: cuenta a la que pertenece / EN: account it belongs to
+        // ES: Recurrencia: undefined quita el dato (se omite al guardar en JSON).
+        // EN: Recurrence: undefined drops the field (omitted when saved as JSON).
+        frecuencia: mov.frecuencia === "mensual" ? undefined : mov.frecuencia,
+        fechaInicio: mov.fechaInicio,
+        fechaFin: mov.fechaFin,
+        cuotas: mov.cuotas,
       });
     } else if (editando.value.origen === "puntual") {
       f.actualizarPuntual(editando.value.id, {
@@ -291,6 +324,12 @@ function onGuardar(mov: {
         comercio: mov.comercio,
         tags: mov.tags,
         cuenta: mov.cuenta, // ES: cuenta a la que pertenece / EN: account it belongs to
+        // ES: Recurrencia (v4); el store saca `desde` de fechaInicio si la hay.
+        // EN: Recurrence (v4); the store derives `desde` from fechaInicio if any.
+        ...(mov.frecuencia && mov.frecuencia !== "mensual" ? { frecuencia: mov.frecuencia } : {}),
+        ...(mov.fechaInicio ? { fechaInicio: mov.fechaInicio } : {}),
+        ...(mov.fechaFin ? { fechaFin: mov.fechaFin } : {}),
+        ...(mov.cuotas !== undefined ? { cuotas: mov.cuotas } : {}),
       });
     } else {
       f.addPuntual({
@@ -475,12 +514,21 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
     <!-- EN: Header: title + "Add" button (opens the modal in add mode). -->
     <div class="flex items-center justify-between mb-6">
       <h2 class="font-display text-2xl font-bold">{{ t("titulo") }}</h2>
-      <button
-        class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
-        @click="abrirAlta"
-      >
-        {{ t("anadir") }}
-      </button>
+      <div class="flex flex-wrap justify-end gap-2">
+        <!-- ES: Importar extracto del banco (CSV/XLSX). / EN: Import a bank statement (CSV/XLSX). -->
+        <button
+          class="rounded-lg bg-surface-2 border border-border px-4 py-2 text-ink font-medium hover:border-brand transition-colors"
+          @click="importando = true"
+        >
+          {{ t("importarExtracto") }}
+        </button>
+        <button
+          class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
+          @click="abrirAlta"
+        >
+          {{ t("anadir") }}
+        </button>
+      </div>
     </div>
 
     <!-- ES: ENTRADA RÁPIDA: chips de plantillas + alta de plantilla nueva. -->
@@ -673,6 +721,24 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
               <span v-if="l.fijo" class="rounded-full bg-surface-2 px-2 py-0.5">{{
                 t("fijo")
               }}</span>
+              <!-- ES: Frecuencia distinta de mensual y veces del mes (recurrentes v4).
+                   EN: Non-monthly frequency and times in the month (v4 recurring). -->
+              <span
+                v-if="l.frecuencia && l.frecuencia !== 'mensual'"
+                class="rounded-full bg-surface-2 px-2 py-0.5"
+                >{{
+                  t(
+                    l.frecuencia === "semanal"
+                      ? "frecSemanal"
+                      : l.frecuencia === "trimestral"
+                        ? "frecTrimestral"
+                        : "frecAnual"
+                  )
+                }}</span
+              >
+              <span v-if="(l.veces ?? 1) > 1" class="rounded-full bg-surface-2 px-2 py-0.5">{{
+                t("veces").replace("@n", String(l.veces))
+              }}</span>
               <!-- ES: Chip "Dividido": el gasto se reparte en varias categorías / EN: "Split" chip: the expense is spread across several categories -->
               <span
                 v-if="l.subdivisiones?.length"
@@ -757,6 +823,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       @guardar="onGuardar"
       @cerrar="cerrarModal"
     />
+
+    <!-- ES: Asistente «Importar extracto». / EN: "Import statement" wizard. -->
+    <ImportarExtracto v-if="importando" @cerrar="importando = false" />
 
     <!-- ES: Lightbox del recibo: clic fuera o en la imagen lo cierra. -->
     <!-- EN: Receipt lightbox: click outside or on the image closes it. -->
