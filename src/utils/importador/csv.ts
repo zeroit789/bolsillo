@@ -66,10 +66,19 @@ function recorrer(
   fuente: string,
   sep: string,
   limite = Number.POSITIVE_INFINITY
-): { filas: string[][]; comillaSinCerrar: number | null; sueltas: number } {
+): {
+  filas: string[][];
+  comillaSinCerrar: number | null;
+  sueltas: number;
+  sueltasPorFila: number[];
+} {
   // ES: Comillas fuera de sitio (ver más abajo); sirve para elegir separador.
   // EN: Out-of-place quotes (see below); used to choose the separator.
   let sueltas = 0;
+  // ES: Comillas sueltas de cada fila guardada y de la fila en curso.
+  // EN: Stray quotes of every stored row and of the current row.
+  const sueltasPorFila: number[] = [];
+  let sueltasFila = 0;
   const filas: string[][] = [];
   let fila: string[] = [];
   let celda = "";
@@ -92,7 +101,11 @@ function recorrer(
   // EN: Closes the row; it is dropped if it is an empty or blank-only line.
   const cerrarFila = () => {
     cerrarCelda();
-    if (filaConContenido) filas.push(fila);
+    if (filaConContenido) {
+      filas.push(fila);
+      sueltasPorFila.push(sueltasFila);
+    }
+    sueltasFila = 0;
     fila = [];
     filaConContenido = false;
   };
@@ -131,7 +144,10 @@ function recorrer(
       // EN: Normal text (after closing quotes only spaces are ignored). A
       //     quote in the middle of a cell or text after closing quotes counts
       //     as "stray": with the right separator it almost never happens.
-      if ((c === '"' && !entrecomillada) || entrecomillada) sueltas++;
+      if ((c === '"' && !entrecomillada) || entrecomillada) {
+        sueltas++;
+        sueltasFila++;
+      }
       celda += c;
       if (c.trim() !== "") filaConContenido = true;
     }
@@ -140,19 +156,19 @@ function recorrer(
   // EN: Row where the quote was left open (the one being read).
   const comillaSinCerrar = enComillas ? filas.length + 1 : null;
   if (filas.length < limite) cerrarFila();
-  return { filas, comillaSinCerrar, sueltas };
+  return { filas, comillaSinCerrar, sueltas, sueltasPorFila };
 }
 
 // ES: Elige el separador mirando las primeras 20 filas: primero, el que no
 //     deja una comilla sin cerrar; luego, el que da el mismo número de
-//     celdas (más de una) en más filas; a igualdad, el que deja menos
+//     celdas (más de una) en más filas sin comillas sueltas; a igualdad, el que deja menos
 //     comillas fuera de sitio (el que respeta las celdas entrecomilladas) y,
 //     al final, el que más celdas da. Los extractos con líneas de preámbulo (titular,
 //     periodo…) solo restan algo de constancia, no cambian el ganador. Si
 //     ninguno aparece, `;`.
 // EN: Chooses the separator looking at the first 20 rows: first, the one
 //     leaving no unclosed quote; then, the one giving the same number of
-//     cells (more than one) in the most rows; when tied, the one leaving the
+//     cells (more than one) in the most rows without stray quotes; when tied, the one leaving the
 //     fewest out-of-place quotes (the one respecting quoted cells) and, last,
 //     the one giving more cells. Statements with preamble lines (holder, period…) only lose a
 //     bit of steadiness, they do not change the winner. If none appears, `;`.
@@ -167,7 +183,14 @@ export function detectarSeparador(texto: string): SeparadorCSV {
     const recorrido = recorrer(fuente, sep, 20);
     const sinCerrar = recorrido.comillaSinCerrar !== null ? 1 : 0;
     const sueltas = recorrido.sueltas;
-    const anchos = recorrido.filas.map((f) => f.length).filter((n) => n > 1);
+    // ES: Una fila con comillas sueltas está mal partida con este separador:
+    //     no cuenta para la constancia.
+    // EN: A row with stray quotes is badly split by this separator: it does
+    //     not count towards steadiness.
+    const anchos = recorrido.filas
+      .filter((_, i) => recorrido.sueltasPorFila[i] === 0)
+      .map((f) => f.length)
+      .filter((n) => n > 1);
     // ES: Moda: el ancho más repetido y en cuántas filas sale.
     // EN: Mode: the most repeated width and in how many rows it shows.
     const frecuencia = new Map<number, number>();

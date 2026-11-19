@@ -36,6 +36,10 @@ describe("detectarSeparador", () => {
     expect(detectarSeparador(texto)).toBe(";");
   });
 
+  it("las filas partidas por un separador falso no cuentan como constantes / rows split by a false separator do not count as steady", () => {
+    expect(detectarSeparador('a;"b,x\nc";-1,20')).toBe(";");
+  });
+
   it("tabulador / tab", () => {
     expect(detectarSeparador("Fecha\tConcepto\tImporte\n01/02/2026\tPan\t-1,20")).toBe("\t");
   });
