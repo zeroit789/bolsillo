@@ -526,8 +526,14 @@ impl Directorio {
                 return Err(io::Error::other("carpeta redirigida"));
             }
             for e in fs::read_dir(&carpeta)? {
-                let p = e?.path();
-                if p.extension().is_some_and(|x| x == "bolsillo") && !es_redireccion(&p)? {
+                // ES: Solo ficheros normales (el tipo de la entrada no sigue enlaces).
+                // EN: Only regular files (the entry type does not follow links).
+                let e = e?;
+                let p = e.path();
+                if p.extension().is_some_and(|x| x == "bolsillo")
+                    && e.file_type()?.is_file()
+                    && !es_redireccion(&p)?
+                {
                     v.push(p);
                 }
             }

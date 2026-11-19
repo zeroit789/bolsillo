@@ -1017,12 +1017,18 @@ impl Boveda {
     //     depending on it: what was not published (previous DEK equal to the
     //     current one) is removed and the rest is marked as published. If it
     //     cannot be written, nothing is restored.
-    fn resolver_pendientes(&self, dek_actual: Option<&str>) -> R<()> {
-        let Ok(v) = self.leer_pendientes_estricto() else {
-            return Ok(());
+    //     Devuelve el registro ya resuelto. Un error al leerlo se propaga
+    //     (solo un registro mal formado, irrecuperable, se ignora).
+    // EN: Returns the resolved record. An error while reading it is
+    //     propagated (only a malformed, unrecoverable record is ignored).
+    fn resolver_pendientes(&self, dek_actual: Option<&str>) -> R<Vec<Reenvoltura>> {
+        let v = match self.leer_pendientes_estricto() {
+            Ok(v) => v,
+            Err(ErrorAlmacen::Danado) => return Ok(Vec::new()),
+            Err(e) => return Err(e),
         };
         if v.is_empty() {
-            return Ok(());
+            return Ok(v);
         }
         let v: Vec<Reenvoltura> = v
             .into_iter()
@@ -1034,7 +1040,8 @@ impl Boveda {
                 p
             })
             .collect();
-        self.escribir_pendientes(&v)
+        self.escribir_pendientes(&v)?;
+        Ok(v)
     }
 
     // ES: Deriva una KEK con sal nueva (para envolver varias cosas con una sola
@@ -1287,13 +1294,33 @@ impl Boveda {
     //     without one if it has no lock): a damaged backup never displaces the
     //     main file. It is left open with the backup's DEK; returns its data.
     pub fn restaurar_copia(&mut self, nombre: &str, credencial: Option<&str>) -> R<String> {
-        let (bytes, f, dek, texto) = self.abrir_copia(nombre, credencial)?;
+        let (mut bytes, mut f, dek, texto) = self.abrir_copia(nombre, credencial)?;
         let actual = self.dir.leer(PRINCIPAL)?;
         let dek_actual = actual
             .as_ref()
             .and_then(|b| desde_bytes(b).ok())
             .map(|f| f.dek_id);
-        self.resolver_pendientes(dek_actual.as_deref())?;
+        let pendientes = self.resolver_pendientes(dek_actual.as_deref())?;
+        // ES: Si esta copia tiene una clave de recuperación ya revocada (una
+        //     regeneración publicada que no llegó a reenvolverla), se le quita
+        //     antes de publicarla: restaurar no la reactiva.
+        // EN: If this backup has an already revoked recovery key (a published
+        //     regeneration that did not get to rewrap it), it is removed before
+        //     publishing: restoring does not reactivate it.
+        let ruta = format!("copias/{nombre}");
+        let revocada = f.envolturas.credencial.is_some()
+            && f.envolturas.recuperacion.as_ref().is_some_and(|rec| {
+                pendientes.iter().any(|p| {
+                    p.accion == "recuperacion"
+                        && p.ruta == ruta
+                        && p.dek_id.as_deref() == Some(f.dek_id.as_str())
+                        && p.sal.as_ref() == Some(&rec.kdf.sal)
+                })
+            });
+        if revocada {
+            f.envolturas.recuperacion = None;
+            bytes = a_bytes(&f)?;
+        }
         if let Some(actual) = actual {
             let nombre_antes = self.dir.nombre_copia_libre("antes", self.ahora());
             self.dir.escribir_copia(&nombre_antes, &actual)?;
@@ -1836,10 +1863,22 @@ mod tests {
         );
         b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
         b.restaurar_copia(&copia, Some("4831")).unwrap();
+        // ES: La clave revocada no vuelve con la copia restaurada.
+        // EN: The revoked key does not come back with the restored backup.
+        assert!(!b.estado().tiene_recuperacion);
         b.bloquear();
         b.abrir(Some("4831")).unwrap();
         let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
         assert!(f.envolturas.recuperacion.is_none());
+    }
+
+    #[test]
+    fn una_carpeta_con_extension_bolsillo_no_bloquea_cambios() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        std::fs::create_dir(b.dir.ruta("copias/raro.bolsillo")).unwrap();
+        assert!(b.regenerar_recuperacion("4831").is_ok());
     }
 
     #[test]
