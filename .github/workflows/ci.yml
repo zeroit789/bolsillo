@@ -3,13 +3,15 @@
 #       1. secretos  -> gitleaks sobre todo el historial
 #       2. frontend  -> ESLint, formato (Prettier), tests (Vitest), tipos (vue-tsc)
 #                       y build de Vite
-#       3. rust      -> cargo check del backend en Windows (valida el Cargo.lock)
+#       3. rust      -> cargo check y cargo clippy (-D warnings) del backend en
+#                       Windows (valida el Cargo.lock)
 # EN: Bolsillo continuous integration (Tauri + Vue + TypeScript desktop app).
 #     Runs on every push and pull request to main:
 #       1. secrets   -> gitleaks over the whole history
 #       2. frontend  -> ESLint, formatting (Prettier), tests (Vitest), type check
 #                       (vue-tsc) and Vite build
-#       3. rust      -> cargo check of the backend on Windows (validates Cargo.lock)
+#       3. rust      -> cargo check and cargo clippy (-D warnings) of the backend
+#                       on Windows (validates Cargo.lock)
 #
 # ES: Todas las acciones van fijadas por SHA completo (el comentario indica la
 #     versión); Dependabot (.github/dependabot.yml) propone las subidas.
@@ -99,7 +101,7 @@ jobs:
   #     validates types and dependencies. Tauri needs the dist/ folder at
   #     compile time (generate_context!), so the Vite build runs first.
   rust:
-    name: Backend Rust (cargo check)
+    name: Backend Rust (cargo check + clippy)
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -124,3 +126,11 @@ jobs:
           workspaces: src-tauri -> target
       - name: Cargo check (--locked)
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      # ES: Clippy (linter de Rust) con los avisos tratados como errores. Se
+      #     instala con rustup, que ya trae el runner, sin acciones nuevas.
+      # EN: Clippy (Rust linter) with warnings treated as errors. Installed
+      #     with rustup, already on the runner, with no new actions.
+      - name: Instalar clippy
+        run: rustup component add clippy
+      - name: Cargo clippy (--locked, -D warnings)
+        run: cargo clippy --all-targets --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
