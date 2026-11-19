@@ -31,7 +31,8 @@
 //     formateador de moneda, la fábrica de i18n y los tipos compartidos del contrato.
 // EN: Vue reactivity primitives, category data, finance store, currency
 //     formatter, the i18n factory and the shared types used in the contract.
-import { ref, reactive, computed } from "vue";
+import { ref, reactive, computed, useId } from "vue";
+import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
@@ -282,6 +283,14 @@ const nombresCategoria = NOMBRES_CATEGORIA;
 // EN: Current validation error message shown to the user ("" = none).
 const error = ref("");
 
+// ES: Diálogo accesible: foco atrapado en la tarjeta, Escape cierra (emite
+//     'cerrar') e id del título para aria-labelledby.
+// EN: Accessible dialog: focus trapped in the card, Escape closes (emits
+//     'cerrar') and title id for aria-labelledby.
+const cajaModal = ref<HTMLElement | null>(null);
+const idTitulo = useId();
+useFocoAtrapado(cajaModal, { alEscape: () => emit("cerrar") });
+
 // ES: Convierte un texto con coma/punto decimal a número redondeado a céntimos.
 //     Devuelve 0 si no es un número válido.
 // EN: Turns a text with comma/dot decimal into a number rounded to cents.
@@ -470,10 +479,16 @@ function guardar() {
     @click.self="emit('cerrar')"
   >
     <!-- ES: Tarjeta del modal. / EN: Modal card. -->
-    <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-6 shadow-2xl">
+    <div
+      ref="cajaModal"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="idTitulo"
+      class="w-full max-w-md rounded-2xl bg-surface border border-border p-6 shadow-2xl"
+    >
       <!-- ES: Título según el modo (edición vs alta). -->
       <!-- EN: Title depending on the mode (edit vs new). -->
-      <h2 class="font-display text-xl font-bold mb-4">
+      <h2 :id="idTitulo" class="font-display text-xl font-bold mb-4">
         {{ esEdicion ? t("tituloEditar") : t("tituloNuevo") }}
       </h2>
 

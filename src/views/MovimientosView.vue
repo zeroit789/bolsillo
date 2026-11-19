@@ -21,7 +21,8 @@
  * ===========================================================================*/
 
 // ── 1. Imports y traducciones / Imports & translations ────────────────────────
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, useId } from "vue";
+import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
 import { importeDesdeTexto } from "../utils/importe";
@@ -78,6 +79,7 @@ const t = crearT({
   eliminar: { es: "Eliminar", en: "Delete" },
   gestionadoDeudas: { es: "Se gestiona en Deudas", en: "Managed in Debts" },
   reciboAlt: { es: "Recibo", en: "Receipt" },
+  cerrarRecibo: { es: "Cerrar el recibo", en: "Close the receipt" },
   // ES: Mensajes de confirmación (texto fijo; el concepto se concatena aparte).
   // EN: Confirmation messages (fixed text; the concept is appended separately).
   confirmEliminar: { es: "¿Eliminar", en: "Delete" },
@@ -116,6 +118,10 @@ const inicial = ref<{
 // ES: Recibo que se muestra en el lightbox (null = lightbox cerrado).
 // EN: Receipt shown in the lightbox (null = lightbox closed).
 const reciboVisible = ref<string | null>(null);
+// ES: Visor del recibo como diálogo: foco atrapado (en su botón de cerrar) y Escape cierra.
+// EN: Receipt viewer as a dialog: focus trap (on its close button) and Escape closes.
+const cajaRecibo = ref<HTMLElement | null>(null);
+useFocoAtrapado(cajaRecibo, { alEscape: () => (reciboVisible.value = null) });
 
 // ES: Texto del buscador y filtro de tipo (todos/ingreso/fijo/variable).
 // EN: Search box text and type filter (all/income/fixed/variable).
@@ -375,6 +381,12 @@ function abrirFormPlantilla(): void {
 
 // ES: Cierra el mini-formulario sin guardar.
 // EN: Closes the mini-form without saving.
+// ES: Mini-diálogo de atajo nuevo: foco atrapado, Escape cierra e id del título.
+// EN: New-shortcut mini-dialog: focus trap, Escape closes and title id.
+const cajaPlantilla = ref<HTMLElement | null>(null);
+const idTituloPlantilla = useId();
+useFocoAtrapado(cajaPlantilla, { alEscape: cerrarFormPlantilla });
+
 function cerrarFormPlantilla(): void {
   formAbierto.value = false;
 }
@@ -500,8 +512,16 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
       @click.self="cerrarFormPlantilla"
     >
-      <div class="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 space-y-4">
-        <h3 class="font-display text-lg font-bold">{{ t("nuevoAtajo") }}</h3>
+      <div
+        ref="cajaPlantilla"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="idTituloPlantilla"
+        class="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 space-y-4"
+      >
+        <h3 :id="idTituloPlantilla" class="font-display text-lg font-bold">
+          {{ t("nuevoAtajo") }}
+        </h3>
 
         <!-- ES: Concepto / EN: Concept -->
         <div>
@@ -707,11 +727,30 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
       @click="reciboVisible = null"
     >
-      <img
-        :src="reciboVisible"
-        :alt="t('reciboAlt')"
-        class="max-h-[90vh] max-w-full rounded-lg shadow-2xl"
-      />
+      <div
+        ref="cajaRecibo"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('reciboAlt')"
+        class="relative"
+      >
+        <!-- ES: Botón de cerrar visible para teclado y lector de pantalla. -->
+        <!-- EN: Visible close button for keyboard and screen reader users. -->
+        <button
+          type="button"
+          class="absolute -top-3 -right-3 rounded-full bg-surface border border-border w-8 h-8 text-ink hover:text-danger"
+          :title="t('cerrarRecibo')"
+          :aria-label="t('cerrarRecibo')"
+          @click.stop="reciboVisible = null"
+        >
+          <span aria-hidden="true">✕</span>
+        </button>
+        <img
+          :src="reciboVisible"
+          :alt="t('reciboAlt')"
+          class="max-h-[90vh] max-w-full rounded-lg shadow-2xl"
+        />
+      </div>
     </div>
   </div>
 </template>

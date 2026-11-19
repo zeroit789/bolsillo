@@ -20,7 +20,8 @@
  * ===========================================================================*/
 
 // ── 1. Importaciones y store / Imports & store ───────────────────────────────
-import { ref, reactive, computed } from "vue";
+import { ref, reactive, computed, useId } from "vue";
+import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
 import { importeDesdeTexto } from "../utils/importe";
@@ -119,6 +120,12 @@ function abrirEditar(cuenta: Cuenta) {
 
 // ES: Cierra el modal sin guardar.
 // EN: Closes the modal without saving.
+// ES: Diálogo de alta/edición: foco atrapado, Escape cierra e id del título para aria-labelledby.
+// EN: Create/edit dialog: focus trap, Escape closes and title id for aria-labelledby.
+const cajaModal = ref<HTMLElement | null>(null);
+const idTituloModal = useId();
+useFocoAtrapado(cajaModal, { alEscape: cerrarModal });
+
 function cerrarModal() {
   modalAbierto.value = false;
 }
@@ -278,8 +285,14 @@ function borrar(cuenta: Cuenta) {
       @click.self="cerrarModal"
     >
       <!-- ES: Tarjeta del modal / EN: Modal card -->
-      <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-5">
-        <h3 class="font-display font-bold text-lg">{{ tituloModal }}</h3>
+      <div
+        ref="cajaModal"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="idTituloModal"
+        class="w-full max-w-md rounded-2xl bg-surface border border-border p-5"
+      >
+        <h3 :id="idTituloModal" class="font-display font-bold text-lg">{{ tituloModal }}</h3>
 
         <!-- ES: Formulario / EN: Form -->
         <form class="mt-4 space-y-4" @submit.prevent="guardar">

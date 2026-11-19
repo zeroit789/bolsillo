@@ -37,7 +37,8 @@
  * ===========================================================================*/
 
 // ── 1. Importaciones y store / Imports & store ────────────────────────────────
-import { ref, reactive, computed } from "vue";
+import { ref, reactive, computed, useId } from "vue";
+import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import type { Plan } from "../types";
 import { euro } from "../utils/format";
@@ -180,6 +181,12 @@ function abrirEditar(plan: Plan) {
 }
 
 // ES: Cierra el modal sin guardar. / EN: Closes the modal without saving.
+// ES: Diálogo de alta/edición: foco atrapado, Escape cierra e id del título para aria-labelledby.
+// EN: Create/edit dialog: focus trap, Escape closes and title id for aria-labelledby.
+const cajaModal = ref<HTMLElement | null>(null);
+const idTituloModal = useId();
+useFocoAtrapado(cajaModal, { alEscape: cerrarModal });
+
 function cerrarModal() {
   modalAbierto.value = false;
 }
@@ -239,6 +246,12 @@ function aportar(plan: Plan) {
 
 // ES: Cierra el mini-modal de aportar sin guardar.
 // EN: Closes the add-funds mini-modal without saving.
+// ES: Mini-diálogo de aportar: mismo trato de foco y Escape.
+// EN: Add-funds mini-dialog: same focus and Escape handling.
+const cajaAportar = ref<HTMLElement | null>(null);
+const idTituloAportar = useId();
+useFocoAtrapado(cajaAportar, { alEscape: cerrarModalAportar });
+
 function cerrarModalAportar() {
   modalAportar.value = false;
 }
@@ -406,8 +419,14 @@ function borrar(plan: Plan) {
       @click.self="cerrarModal"
     >
       <!-- ES: Tarjeta del modal / EN: Modal card -->
-      <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-5">
-        <h3 class="font-display font-bold text-lg">{{ tituloModal }}</h3>
+      <div
+        ref="cajaModal"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="idTituloModal"
+        class="w-full max-w-md rounded-2xl bg-surface border border-border p-5"
+      >
+        <h3 :id="idTituloModal" class="font-display font-bold text-lg">{{ tituloModal }}</h3>
 
         <!-- ES: Formulario / EN: Form -->
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
@@ -478,8 +497,14 @@ function borrar(plan: Plan) {
       @click.self="cerrarModalAportar"
     >
       <!-- ES: Tarjeta del mini-modal / EN: Mini-modal card -->
-      <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-5">
-        <h3 class="font-display font-bold text-lg">
+      <div
+        ref="cajaAportar"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="idTituloAportar"
+        class="w-full max-w-md rounded-2xl bg-surface border border-border p-5"
+      >
+        <h3 :id="idTituloAportar" class="font-display font-bold text-lg">
           {{ t("aportarA") }} {{ planAportar?.nombre }}
         </h3>
 
