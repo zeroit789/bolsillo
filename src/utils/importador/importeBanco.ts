@@ -120,8 +120,12 @@ export function analizarImporteBanco(
   // EN: Spaces INSIDE the number: only as a thousands separator in groups of
   //     three ("1 234,56"); "1 2,34" is an error, not 12.34.
   if (/\s/.test(t)) {
-    if (!/^\d{1,3}(?:\s\d{3})+(?:[.,]\d+)?$/.test(t)) return { tipo: "invalido" };
-    t = t.replace(/\s/g, "");
+    // ES: Solo espacio normal, duro o duro estrecho; un tabulador o un salto
+    //     de línea dentro del número es un error.
+    // EN: Only a normal, non-breaking or narrow non-breaking space; a tab or a
+    //     line break inside the number is an error.
+    if (!/^\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?$/.test(t)) return { tipo: "invalido" };
+    t = t.replace(/[ \u00a0\u202f]/g, "");
   }
 
   // ES: El resto tiene que ser un número bien formado en el formato pedido.

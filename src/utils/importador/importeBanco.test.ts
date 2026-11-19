@@ -75,6 +75,8 @@ describe("analizarImporteBanco con coma decimal / with decimal comma", () => {
     expect(c("1 2,34")).toBe("invalido");
     expect(c("12 34,00")).toBe("invalido");
     expect(c("1 234,5 6")).toBe("invalido");
+    expect(c("1\n234,56")).toBe("invalido");
+    expect(c("1\t234,56")).toBe("invalido");
   });
 
   it("vacío / empty", () => {
