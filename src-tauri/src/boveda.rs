@@ -60,6 +60,23 @@ use crate::recuperacion;
 // EN: Backup rewraps that could not be done (retried on open).
 const PENDIENTES: &str = "pendientes.json";
 
+// ES: ¿Ruta de reenvoltura aceptable? "copias/…" o "rescate/…" con un nombre
+//     simple acabado en .bolsillo (sin subcarpetas ni "..").
+// EN: Acceptable rewrap path? "copias/…" or "rescate/…" with a plain name
+//     ending in .bolsillo (no subfolders nor "..").
+fn ruta_pendiente_valida(r: &str) -> bool {
+    let r = r.replace('\\', "/");
+    let Some((dir, nombre)) = r.split_once('/') else {
+        return false;
+    };
+    (dir == "copias" || dir == "rescate")
+        && nombre.ends_with(".bolsillo")
+        && !nombre.contains("..")
+        && nombre
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_')
+}
+
 // ES: Comparación en tiempo constante (no se corta en el primer byte distinto).
 // EN: Constant-time comparison (it does not stop at the first different byte).
 fn iguales_ct(a: &[u8], b: &[u8]) -> bool {
@@ -299,12 +316,20 @@ impl Boveda {
             }
             // ES: Si ya existe, solo vale si se descifra y coincide; si no, se reescribe.
             // EN: If it already exists, it only counts if it decrypts and matches; otherwise it is rewritten.
-            let vale = self
+            // ES: Uno que se descifra pero es OTRO recibo no se pisa (lo usan
+            //     copias viejas): conflicto. Solo se repara el ilegible.
+            // EN: One that decrypts but is ANOTHER receipt is not overwritten
+            //     (old backups use it): conflict. Only an unreadable one is repaired.
+            let existente = self
                 .dir
                 .leer_recibo(dek_id, &r.id)?
-                .and_then(|b| descifrar_recibo(dek, dek_id, &r.id, &b).ok())
-                .is_some_and(|c| iguales_ct(&c, r.datos.as_bytes()));
-            if !vale {
+                .and_then(|b| descifrar_recibo(dek, dek_id, &r.id, &b).ok());
+            if let Some(c) = &existente {
+                if !iguales_ct(c, r.datos.as_bytes()) {
+                    return Err(ErrorAlmacen::Conflicto);
+                }
+            }
+            if existente.is_none() {
                 let c = cifrar_recibo(dek, dek_id, &r.id, r.datos.as_bytes())?;
                 self.dir.escribir_recibo(dek_id, &r.id, &c)?;
             }
@@ -716,6 +741,30 @@ impl Boveda {
         }
     }
 
+    // ES: Antes de cambiar la protección se apuntan TODAS las copias como
+    //     pendientes (si la app se corta a mitad, al abrir se reintentan; las
+    //     que no necesiten nada se descartan solas). Devuelve la lista previa.
+    // EN: Before changing the protection ALL backups are recorded as pending
+    //     (if the app is cut halfway, they are retried on open; the ones that
+    //     need nothing drop out by themselves). Returns the previous list.
+    fn preanotar(&self, accion: &str) -> Vec<Reenvoltura> {
+        let previas = self.leer_pendientes();
+        self.anotar_pendientes(self.dir.ficheros_con_dek(), accion);
+        previas
+    }
+
+    // ES: Tras reenvolver: quedan las previas más las que fallaron ahora.
+    // EN: After rewrapping: the previous ones plus the ones that failed now remain.
+    fn cerrar_pendientes(
+        &self,
+        previas: Vec<Reenvoltura>,
+        fallos: Vec<std::path::PathBuf>,
+        accion: &str,
+    ) {
+        self.escribir_pendientes(&previas);
+        self.anotar_pendientes(fallos, accion);
+    }
+
     // ES: Apunta en disco (duradero) las copias que no se pudieron reenvolver.
     // EN: Records on disk (durably) the backups that could not be rewrapped.
     fn anotar_pendientes(&self, rutas: Vec<std::path::PathBuf>, accion: &str) {
@@ -766,6 +815,13 @@ impl Boveda {
         let kdf = self.kdf;
         let mut quedan = Vec::new();
         for p in v {
+            // ES: Solo copias o rescates .bolsillo de este almacén (un registro
+            //     alterado nunca hace reescribir otro fichero).
+            // EN: Only .bolsillo backups or rescues of this store (a tampered
+            //     record never makes another file be rewritten).
+            if !ruta_pendiente_valida(&p.ruta) {
+                continue;
+            }
             let ruta = self.dir.ruta(&p.ruta);
             if !ruta.exists() {
                 continue;
@@ -801,6 +857,13 @@ impl Boveda {
                     }
                     "recuperacion" if f.envolturas.credencial.is_some() => {
                         f.envolturas.recuperacion = None;
+                    }
+                    // ES: Copia de otra DEK con la credencial vieja: no se puede
+                    //     arreglar, pero el aviso sigue hasta que rote y desaparezca.
+                    // EN: Backup of another DEK with the old credential: it cannot
+                    //     be fixed, but the warning stays until it rotates away.
+                    "credencial" if f.envolturas.credencial.is_some() => {
+                        return Err(ErrorAlmacen::Credencial);
                     }
                     _ => return Ok(()),
                 }
@@ -866,7 +929,11 @@ impl Boveda {
                 ofuscacion: None,
             })
         };
-        self.rotar_dek(bloqueo, envolver)?;
+        let previas = self.preanotar("proteger");
+        if let Err(e) = self.rotar_dek(bloqueo, envolver) {
+            self.escribir_pendientes(&previas);
+            return Err(e);
+        }
         let fallos = self.reenvolver_copias(&viejo_id, |f| {
             if f.bloqueo == Bloqueo::Ninguno {
                 f.bloqueo = bloqueo;
@@ -874,7 +941,7 @@ impl Boveda {
             }
             Ok(())
         });
-        self.anotar_pendientes(fallos, "proteger");
+        self.cerrar_pendientes(previas, fallos, "proteger");
         Ok(clave)
     }
 
@@ -946,7 +1013,11 @@ impl Boveda {
         let nueva_env = f.envolturas.credencial.clone();
         let dek_id = f.dek_id.clone();
         let dek = Zeroizing::new(*a.dek);
-        self.escribir_principal(f, dek, false)?;
+        let previas = self.preanotar("credencial");
+        if let Err(e) = self.escribir_principal(f, dek, false) {
+            self.escribir_pendientes(&previas);
+            return Err(e);
+        }
         let fallos = self.reenvolver_copias(&dek_id, |c| {
             if c.envolturas.credencial.is_some() {
                 c.bloqueo = bloqueo;
@@ -954,7 +1025,7 @@ impl Boveda {
             }
             Ok(())
         });
-        self.anotar_pendientes(fallos, "credencial");
+        self.cerrar_pendientes(previas, fallos, "credencial");
         Ok(())
     }
 
@@ -979,7 +1050,8 @@ impl Boveda {
         let (kek_c, sal_c) = self.kek_nueva(credencial.as_bytes())?;
         let (kek_r, sal_r) = self.kek_nueva(norm.as_bytes())?;
         let kdf = self.kdf;
-        self.rotar_dek(bloqueo, |dek, id| {
+        let previas = self.preanotar("recuperacion");
+        let rotada = self.rotar_dek(bloqueo, |dek, id| {
             Ok(crate::formato::Envolturas {
                 credencial: Some(envolver_con_kek(
                     &kek_c,
@@ -999,7 +1071,11 @@ impl Boveda {
                 )?),
                 ofuscacion: None,
             })
-        })?;
+        });
+        if let Err(e) = rotada {
+            self.escribir_pendientes(&previas);
+            return Err(e);
+        }
         let fallos = self.reenvolver_copias(&viejo_id, |f| {
             if f.envolturas.recuperacion.is_some() {
                 f.envolturas.recuperacion = Some(envolver_con_kek(
@@ -1013,7 +1089,7 @@ impl Boveda {
             }
             Ok(())
         });
-        self.anotar_pendientes(fallos, "recuperacion");
+        self.cerrar_pendientes(previas, fallos, "recuperacion");
         Ok(clave)
     }
 
@@ -1484,6 +1560,50 @@ mod tests {
         assert_eq!(f.bloqueo, Bloqueo::Pin);
         assert!(f.abrir_dek(None).is_err());
         assert!(f.abrir_dek(Some(Llave::Credencial("4831"))).is_ok());
+    }
+
+    #[test]
+    fn una_ruta_de_pendientes_alterada_no_reescribe_el_principal() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let antes = b.dir.leer(PRINCIPAL).unwrap();
+        b.dir
+            .escribir(
+                PENDIENTES,
+                br#"[{"ruta":"datos.bolsillo","accion":"credencial"},{"ruta":"copias/../datos.bolsillo","accion":"credencial"}]"#,
+            )
+            .unwrap();
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
+        assert_eq!(b.dir.leer(PRINCIPAL).unwrap(), antes);
+        assert_eq!(b.estado().copias_pendientes, 0);
+        assert!(ruta_pendiente_valida(
+            "copias/reciente-000000000001.bolsillo"
+        ));
+        assert!(!ruta_pendiente_valida("copias/../x.bolsillo"));
+    }
+
+    #[test]
+    fn un_recibo_distinto_con_el_mismo_id_no_se_pisa() {
+        let (_t, mut b) = boveda();
+        b.crear(
+            "{}",
+            &[recibo("r1", 10)],
+            Bloqueo::Ninguno,
+            None,
+            false,
+            "t",
+        )
+        .unwrap();
+        assert_eq!(
+            b.guardar("{}", &[recibo("r1", 11)]).err(),
+            Some(ErrorAlmacen::Conflicto)
+        );
+        assert_eq!(
+            b.leer_recibos(&["r1".into()]).unwrap()[0].datos,
+            Some(recibo("r1", 10).datos)
+        );
     }
 
     #[test]

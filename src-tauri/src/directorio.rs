@@ -173,8 +173,10 @@ where
     let mut tmp = ruta.as_os_str().to_owned();
     tmp.push(format!(".{unico:016x}.tmp"));
     let tmp = PathBuf::from(tmp);
+    let mut creado = false;
     let resultado = (|| {
         let mut f = File::create_new(&tmp)?;
+        creado = true;
         escribir(&mut f, bytes)?;
         f.sync_all()?;
         drop(f);
@@ -186,9 +188,9 @@ where
         }
         fs::rename(&tmp, ruta)
     })();
-    if resultado.is_err() {
-        // ES: El .tmp a medias se quita (es nuestro, nunca el original).
-        // EN: The half-written .tmp is removed (it is ours, never the original).
+    if resultado.is_err() && creado {
+        // ES: El .tmp a medias se quita solo si lo creó esta escritura.
+        // EN: The half-written .tmp is removed only if this write created it.
         let _ = fs::remove_file(&tmp);
     }
     resultado
@@ -239,7 +241,12 @@ impl Directorio {
     //     in between.
     pub fn publicar_sin_reemplazo(&self, de: &str, a: &str) -> io::Result<()> {
         fs::hard_link(self.ruta(de), self.ruta(a))?;
-        fs::remove_file(self.ruta(de))
+        // ES: El enlace ya es la confirmación: si no se puede quitar el nombre
+        //     viejo, queda un resto inofensivo, pero no se devuelve error.
+        // EN: The link is already the commit: if the old name cannot be
+        //     removed, a harmless leftover remains, but no error is returned.
+        let _ = fs::remove_file(self.ruta(de));
+        Ok(())
     }
 
     // ES: ¿Hay algo en copias/ o rescate/? (señal de que ya hubo un almacén).
@@ -382,8 +389,10 @@ impl Directorio {
         let origen = if mover {
             self.ruta(nombre)
         } else {
-            let tmp = dir.join(format!(".{prefijo}-{ahora:012}.tmp"));
-            let _ = fs::remove_file(&tmp);
+            let unico: u64 = crate::cripto::aleatorio::<8>()
+                .map(u64::from_le_bytes)
+                .unwrap_or(0);
+            let tmp = dir.join(format!(".{prefijo}-{ahora:012}-{unico:016x}.tmp"));
             escribir_atomico(&tmp, &fs::read(self.ruta(nombre))?)?;
             tmp
         };
