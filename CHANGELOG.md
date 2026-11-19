@@ -10,7 +10,7 @@ All notable changes to Bolsillo are in this file. The format follows [Keep a Cha
 
 ## Español
 
-### [1.2.0] - sin publicar
+### [1.2.0] - 2026-11-19
 
 Antes de actualizar, lee los avisos del final de esta versión y [`docs/MIGRACION.md`](docs/MIGRACION.md).
 
@@ -70,7 +70,7 @@ Primera versión publicada: movimientos fijos y puntuales con categoría, comerc
 
 ## English
 
-### [1.2.0] - unreleased
+### [1.2.0] - 2026-11-19
 
 Before updating, read the notices at the end of this version and [`docs/MIGRACION.md`](docs/MIGRACION.md).
 
