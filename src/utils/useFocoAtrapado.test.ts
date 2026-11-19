@@ -145,10 +145,14 @@ describe("useFocoAtrapado", () => {
   });
 
   it("si el foco se ha escapado, Tab lo devuelve al diálogo", async () => {
-    const abridor = crearAbridor();
+    crearAbridor();
     montarDialogo();
     await nextTick();
-    abridor.focus();
+    // ES: Con el fondo inerte, el foco solo puede quedar fuera en el body
+    //     (p. ej. tras un clic en el fondo).
+    // EN: With the background inert, focus can only end up outside on the
+    //     body (e.g. after a click on the backdrop).
+    (document.activeElement as HTMLElement).blur();
     const ev = pulsar("Tab");
     expect(ev.defaultPrevented).toBe(true);
     expect(conFoco()).toBe("primero");
@@ -178,6 +182,25 @@ describe("useFocoAtrapado", () => {
     abierto.value = false;
     await nextTick();
     await nextTick();
+    expect(document.activeElement).toBe(abridor);
+  });
+
+  it("el fondo queda inerte mientras está abierto y vuelve como estaba al cerrar", async () => {
+    const abridor = crearAbridor();
+    const yaInerte = document.createElement("div");
+    yaInerte.setAttribute("inert", "");
+    document.body.appendChild(yaInerte);
+    const { abierto, raiz } = montarDialogo();
+    await nextTick();
+    // ES: Lo que queda fuera del diálogo no se alcanza ni con foco programático.
+    // EN: What is outside the dialog cannot be reached even with programmatic focus.
+    expect(abridor.hasAttribute("inert")).toBe(true);
+    expect(raiz.hasAttribute("inert")).toBe(false);
+    abierto.value = false;
+    await nextTick();
+    await nextTick();
+    expect(abridor.hasAttribute("inert")).toBe(false);
+    expect(yaInerte.hasAttribute("inert")).toBe(true);
     expect(document.activeElement).toBe(abridor);
   });
 

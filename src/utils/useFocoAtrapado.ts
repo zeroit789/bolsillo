@@ -8,7 +8,10 @@
  *         salta al último (el foco no se escapa al fondo de la página);
  *       - Escape llama a `alEscape` (normalmente, cerrar);
  *       - al cerrar (v-if a false) o desmontar, devuelve el foco al elemento
- *         que lo tenía antes de abrir (el botón que abrió el diálogo).
+ *         que lo tenía antes de abrir (el botón que abrió el diálogo);
+ *       - mientras está abierto, todo lo que queda fuera del diálogo lleva el
+ *         atributo `inert`: no se alcanza ni con el ratón, ni con Tab ni con
+ *         un focus() del código, y el lector de pantalla no lo lee.
  *     Funciona solo con la ref de plantilla del contenedor: cuando la ref pasa
  *     a tener elemento se activa y cuando vuelve a null se desactiva. Si hay
  *     varios diálogos abiertos a la vez (uno encima de otro), solo responde el
@@ -20,7 +23,10 @@
  *         first jumps to the last (focus never escapes to the page behind);
  *       - Escape calls `alEscape` (usually, close);
  *       - on close (v-if to false) or unmount, focus goes back to the element
- *         that had it before opening (the button that opened the dialog).
+ *         that had it before opening (the button that opened the dialog);
+ *       - while open, everything outside the dialog gets the `inert`
+ *         attribute: it cannot be reached by mouse, Tab or a focus() from the
+ *         code, and the screen reader does not read it.
  *     It works only from the container's template ref: when the ref gets an
  *     element it activates and when it goes back to null it deactivates. If
  *     several dialogs are open at once (one on top of another), only the last
@@ -29,7 +35,8 @@
  * ÍNDICE / INDEX:
  *   1. Tipos y constantes / Types & constants
  *   2. Pila de diálogos abiertos / Stack of open dialogs
- *   3. Composable / Composable
+ *   3. Fondo inerte / Inert background
+ *   4. Composable / Composable
  * ===========================================================================*/
 import { onScopeDispose, watch, type Ref } from "vue";
 
@@ -122,7 +129,32 @@ export function hayDialogoAbierto(): boolean {
   return pila.length > 0;
 }
 
-// ── 3. Composable / Composable ────────────────────────────────────────────────
+// ── 3. Fondo inerte / Inert background ────────────────────────────────────────
+// ES: Pone `inert` a los hermanos de cada antecesor del diálogo hasta <body>
+//     (todo lo que no es el diálogo ni lo contiene). Solo toca los que no lo
+//     tenían y devuelve una función que se lo quita a esos mismos.
+// EN: Sets `inert` on the siblings of every ancestor of the dialog up to
+//     <body> (everything that is not the dialog nor contains it). It only
+//     touches the ones that did not have it and returns a function that
+//     removes it from those same ones.
+function inertizarFondo(caja: HTMLElement): () => void {
+  const tocados: Element[] = [];
+  let nodo: HTMLElement | null = caja;
+  while (nodo && nodo !== document.body && nodo.parentElement) {
+    for (const hermano of Array.from(nodo.parentElement.children)) {
+      if (hermano === nodo || hermano.hasAttribute("inert")) continue;
+      if (hermano.tagName === "SCRIPT" || hermano.tagName === "STYLE") continue;
+      hermano.setAttribute("inert", "");
+      tocados.push(hermano);
+    }
+    nodo = nodo.parentElement;
+  }
+  return () => {
+    for (const e of tocados) e.removeAttribute("inert");
+  };
+}
+
+// ── 4. Composable / Composable ────────────────────────────────────────────────
 // ES: Activa el foco atrapado sobre el contenedor de la ref mientras exista.
 // EN: Enables the focus trap on the ref's container while it exists.
 export function useFocoAtrapado(
@@ -191,6 +223,7 @@ export function useFocoAtrapado(
     };
 
     document.addEventListener("keydown", alTeclado);
+    const liberarFondo = inertizarFondo(caja);
     enfocarInicio();
 
     // ES: Al desactivar: quitar el oyente, salir de la pila y devolver el foco
@@ -202,6 +235,9 @@ export function useFocoAtrapado(
     //     focus stays on the body.
     desactivar = () => {
       document.removeEventListener("keydown", alTeclado);
+      // ES: El fondo vuelve a estar activo antes de devolverle el foco.
+      // EN: The background becomes active again before getting focus back.
+      liberarFondo();
       const i = pila.indexOf(token);
       if (i !== -1) pila.splice(i, 1);
       if (anterior && anterior.isConnected && typeof anterior.focus === "function") {
