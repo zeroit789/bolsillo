@@ -209,10 +209,16 @@ describe("descompresión real / real decompression", () => {
     expect(await descomprimidoReal(bytes, MAX_DESCOMPRIMIDO)).toBeGreaterThan(0);
   });
 
-  it("una firma falsa dentro del comentario no engaña / a fake signature inside the comment does not fool it", async () => {
+  it("una firma de fin dentro del comentario hace que se rechace (JSZip elegiría esa) / an end signature inside the comment gets it rejected (JSZip would pick that one)", async () => {
     const trampa = "PK\u0005\u0006" + "x".repeat(30);
     const zip = await zipDeflate(new Uint8Array(1000), 1000, trampa);
-    expect(tamanoDescomprimido(zip)).toBe(1000);
+    expect(tamanoDescomprimido(zip)).toBeNull();
+    // ES: Firma en los últimos bytes (sin sitio para un registro entero).
+    // EN: Signature in the last bytes (no room for a whole record).
+    const corto = await zipDeflate(new Uint8Array(1000), 1000, "abcdefgh" + "PK\u0005\u0006");
+    expect(tamanoDescomprimido(corto)).toBeNull();
+    // ES: Sin comentario raro, el mismo ZIP vale. / EN: Without an odd comment, the same ZIP is fine.
+    expect(tamanoDescomprimido(await zipDeflate(new Uint8Array(1000), 1000, "hola"))).toBe(1000);
   });
 
   it("datos deflate rotos dan null, no exceso / broken deflate data gives null, not excess", async () => {

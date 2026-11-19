@@ -67,30 +67,42 @@ interface EntradaZip {
 }
 
 // ES: Lee el directorio central del ZIP (un .xlsx es un ZIP) o null si no es
-//     coherente: el registro de fin tiene que cerrar el fichero (su comentario
-//     llega justo al final, así una firma dentro del comentario no engaña),
+//     coherente: el registro de fin (la última firma, como JSZip) tiene que
+//     cerrar el fichero (su comentario llega justo al final),
 //     el directorio tiene que ir justo antes de ese registro y cada entrada,
 //     con su nombre, extra y comentario, tiene que caber en el directorio.
 //     ZIP64 (tamaños 0xFFFFFFFF) no se admite.
 // EN: Reads the ZIP central directory (an .xlsx is a ZIP) or null if it is
-//     not consistent: the end record must close the file (its comment reaches
-//     exactly the end, so a signature inside the comment does not fool it),
+//     not consistent: the end record (the last signature, as JSZip) must
+//     close the file (its comment reaches exactly the end),
 //     the directory must sit right before that record and every entry, with its
 //     name, extra and comment, must fit in the directory. ZIP64 (0xFFFFFFFF
 //     sizes) is not supported.
 function entradasZip(datos: Uint8Array): { entradas: EntradaZip[]; inicioDir: number } | null {
   const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
+  // ES: La ÚLTIMA firma de fin de todo el fichero, como hace JSZip 3.10.1
+  //     (lastIndexOfSignature), que es quien descomprime para ExcelJS: así los
+  //     dos leen el mismo directorio. Si esa firma no cierra el fichero (no
+  //     cabe el registro o su comentario no llega justo al final), se rechaza
+  //     en vez de buscar otra.
+  // EN: The LAST end signature of the whole file, as JSZip 3.10.1 does
+  //     (lastIndexOfSignature), which is what decompresses for ExcelJS: so
+  //     both read the same directory. If that signature does not close the
+  //     file (the record does not fit or its comment does not reach exactly
+  //     the end), it is rejected instead of looking for another one.
   let fin = -1;
-  for (let i = datos.length - 22; i >= Math.max(0, datos.length - 65557); i--) {
-    if (
-      v.getUint32(i, true) === 0x06054b50 &&
-      i + 22 + v.getUint16(i + 20, true) === datos.length
-    ) {
+  for (let i = datos.length - 4; i >= 0; i--) {
+    if (v.getUint32(i, true) === 0x06054b50) {
       fin = i;
       break;
     }
   }
-  if (fin < 0) return null;
+  if (fin < 0 || fin + 22 > datos.length) return null;
+  if (fin + 22 + v.getUint16(fin + 20, true) !== datos.length) return null;
+  // ES: Un localizador ZIP64 delante del registro: JSZip leería el directorio
+  //     ZIP64, que aquí no se admite. / EN: A ZIP64 locator before the record:
+  //     JSZip would read the ZIP64 directory, which is not supported here.
+  if (fin >= 20 && v.getUint32(fin - 20, true) === 0x07064b50) return null;
   const total = v.getUint16(fin + 10, true);
   const tamDir = v.getUint32(fin + 12, true);
   const inicioDir = v.getUint32(fin + 16, true);
