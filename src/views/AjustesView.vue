@@ -5,14 +5,15 @@
  * ES: Vista de Ajustes de Bolsillo. Cuatro tarjetas: Apariencia (tema/moneda/
  *     idioma), Seguridad (bloqueo con PIN o contraseña, cambiar credencial,
  *     bloquear ahora, autobloqueo y clave de recuperación), Copia (cifrada,
- *     JSON, importar y copias automáticas, en CopiasSeguridad.vue) y
- *     Categorías propias.
+ *     JSON, importar y copias automáticas, en CopiasSeguridad.vue),
+ *     Categorías propias y Reglas de categoría (ReglasCategoria.vue).
  *     No toca disco directamente: delega la persistencia en los stores de Pinia
  *     (ajustes/sesion/finanzas) y en el módulo de datos categorias (localStorage).
  * EN: Settings view of Bolsillo. Four cards: Appearance (theme/currency/language),
  *     Security (PIN or password lock, change credential, lock now, auto-lock
  *     and recovery key), Backup (encrypted, JSON, import and automatic
- *     backups, in CopiasSeguridad.vue) and Custom categories. It never touches the disk
+ *     backups, in CopiasSeguridad.vue), Custom categories and Category rules
+ *     (ReglasCategoria.vue). It never touches the disk
  *     directly: it delegates persistence to the Pinia stores (ajustes/sesion/
  *     finanzas) and to the categorias data module (localStorage).
  * -----------------------------------------------------------------------------
@@ -37,6 +38,7 @@ import { crearT } from "../i18n";
 import AvisoPinDebil from "../components/AvisoPinDebil.vue";
 import SeguridadSesion from "../components/SeguridadSesion.vue";
 import CopiasSeguridad from "../components/CopiasSeguridad.vue";
+import ReglasCategoria from "../components/ReglasCategoria.vue";
 
 // ── 1. Stores y traducciones / Stores & translations ─────────────────────────
 // ES: Stores de Pinia que usa esta vista. ajustes = preferencias (tema/moneda/
@@ -788,5 +790,9 @@ function quitarCategoria(nombre: string): void {
       <!-- ES: Aviso cuando todavía no hay categorías propias. / EN: Notice when there are no custom categories yet. -->
       <p v-else class="text-faint text-xs mt-3">{{ t("sinCategorias") }}</p>
     </section>
+
+    <!-- ES: SECCIÓN — Reglas de categoría para importar extractos (v4).
+         EN: SECTION — Category rules for statement import (v4). -->
+    <ReglasCategoria />
   </div>
 </template>
