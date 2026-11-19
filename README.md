@@ -93,7 +93,7 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 
 ```bash
 pnpm install        # instala las dependencias
-pnpm tauri dev      # app de escritorio en modo desarrollo
+pnpm tauri:dev      # app de escritorio en modo desarrollo (perfil «Bolsillo Dev»)
 pnpm dev            # solo el frontend, en el navegador (http://localhost:1420)
 pnpm build          # comprueba tipos (vue-tsc) y genera el frontend en dist/
 pnpm preview        # sirve el build de dist/ para revisarlo
@@ -101,8 +101,11 @@ pnpm lint           # ESLint (Vue + TypeScript)
 pnpm format         # formatea el código con Prettier
 pnpm format:check   # comprueba el formato sin tocar nada
 pnpm test           # tests con Vitest
-pnpm tauri build    # ejecutable e instaladores en src-tauri/target/release/bundle/
+pnpm tauri:build:dev  # ejecutable de pruebas «Bolsillo Dev» en src-tauri/target/release/, sin instaladores
+pnpm tauri build    # ejecutable e instaladores de la versión publicada en src-tauri/target/release/bundle/
 ```
+
+**Perfil de desarrollo.** `pnpm tauri:dev` y `pnpm tauri:build:dev` fusionan `src-tauri/tauri.dev.conf.json` (JSON Merge Patch, RFC 7396) con la configuración normal. Cambian el nombre a «Bolsillo Dev» y el identificador a `com.zeroit.bolsillo.dev`, así que los datos de pruebas van a otra carpeta y no tocan los de la app instalada. **`pnpm tauri dev` a pelo usa el identificador de producción (`com.zeroit.bolsillo`) y abre los datos reales**: úsalo solo si sabes lo que haces.
 
 En el navegador (`pnpm dev`) la interfaz funciona, pero lo que depende de Tauri (diálogo de guardar al exportar y notificaciones nativas) solo va dentro de la app de escritorio.
 
@@ -226,7 +229,7 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 
 ```bash
 pnpm install        # install dependencies
-pnpm tauri dev      # desktop app in development mode
+pnpm tauri:dev      # desktop app in development mode ("Bolsillo Dev" profile)
 pnpm dev            # frontend only, in the browser (http://localhost:1420)
 pnpm build          # type-check (vue-tsc) and build the frontend into dist/
 pnpm preview        # serve the dist/ build to check it
@@ -234,8 +237,11 @@ pnpm lint           # ESLint (Vue + TypeScript)
 pnpm format         # format the code with Prettier
 pnpm format:check   # check formatting without changing anything
 pnpm test           # Vitest tests
-pnpm tauri build    # executable and installers in src-tauri/target/release/bundle/
+pnpm tauri:build:dev  # "Bolsillo Dev" test executable in src-tauri/target/release/, no installers
+pnpm tauri build    # executable and installers of the released app in src-tauri/target/release/bundle/
 ```
+
+**Development profile.** `pnpm tauri:dev` and `pnpm tauri:build:dev` merge `src-tauri/tauri.dev.conf.json` (JSON Merge Patch, RFC 7396) into the normal configuration. They change the name to "Bolsillo Dev" and the identifier to `com.zeroit.bolsillo.dev`, so test data goes to another folder and never touches the installed app's data. **Plain `pnpm tauri dev` uses the production identifier (`com.zeroit.bolsillo`) and opens the real data**: only use it if you know what you are doing.
 
 In the browser (`pnpm dev`) the UI works, but anything that relies on Tauri (the save dialog when exporting and native notifications) only works inside the desktop app.
 
