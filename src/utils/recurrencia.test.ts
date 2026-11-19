@@ -307,5 +307,9 @@ describe("fin por fecha o por cuotas / end by date or by instalments", () => {
       expect(ocurrenciasEnMes({ ...base, diaPago }, "2026-02").veces).toBe(0);
     }
     expect(ocurrenciasEnMes({ ...base, desde: "2026-1" }, "2026-02").veces).toBe(0);
+    // ES: Años 0000-0099: Date.UTC los llevaría a 1900-1999.
+    // EN: Years 0000-0099: Date.UTC would turn them into 1900-1999.
+    expect(ocurrenciasEnMes({ ...base, desde: "0099-01" }, "0099-01").veces).toBe(0);
+    expect(ocurrenciasEnMes({ ...base, fechaInicio: "0050-01-01" }, "2026-02").veces).toBe(0);
   });
 });

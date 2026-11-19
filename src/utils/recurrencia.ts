@@ -106,7 +106,9 @@ function diasDelMes(anio: number, mes: number): number {
 // ES: Lee "AAAA-MM" (mes 1-12) o null. / EN: Reads "YYYY-MM" (month 1-12) or null.
 function leerMes(texto: string): { anio: number; mes: number } | null {
   const m = /^(\d{4})-(\d{2})$/.exec(texto);
-  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return null;
+  // ES: Años < 1000 fuera: Date.UTC lleva 0000-0099 a 1900-1999.
+  // EN: Years < 1000 rejected: Date.UTC maps 0000-0099 to 1900-1999.
+  if (!m || Number(m[1]) < 1000 || Number(m[2]) < 1 || Number(m[2]) > 12) return null;
   return { anio: Number(m[1]), mes: Number(m[2]) };
 }
 
@@ -119,7 +121,7 @@ function leerFecha(texto: string | undefined): number | null {
   const m = texto ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto) : null;
   if (!m) return null;
   const [anio, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (mes < 1 || mes > 12 || d < 1 || d > diasDelMes(anio, mes)) return null;
+  if (anio < 1000 || mes < 1 || mes > 12 || d < 1 || d > diasDelMes(anio, mes)) return null;
   return dia(anio, mes, d);
 }
 
