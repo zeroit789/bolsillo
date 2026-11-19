@@ -42,7 +42,7 @@ import type {
 import { mesActual, diffMeses, sumarMeses } from "../utils/format";
 import { estadoDeuda } from "../utils/deuda";
 import { nuevoId } from "../utils/id";
-import { redondear2 } from "../utils/importe";
+import { importeDentroDeRango, redondear2 } from "../utils/importe";
 
 // ES: Resumen de KPIs de un solo mes (la forma que usan el dashboard y el historial).
 // EN: KPI summary of a single month (the shape the dashboard and history use).
@@ -416,20 +416,35 @@ export const useFinanzas = defineStore("finanzas", () => {
     planes.value = planes.value.filter((p) => p.id !== id);
   }
   // ES: Suma una cantidad a lo aportado de un plan (se permite superar la meta).
-  // EN: Add an amount to a plan's contributed total (overshooting the goal is allowed).
-  function aportarAPlan(id: string, cantidad: number) {
-    // ES: Invariante del store: solo cantidades válidas y positivas. Evita NaN
-    //     que, al persistirse cifrado, invalidaría todo el blob al recargar.
-    // EN: Store invariant: only valid, positive amounts. This blocks NaN, which
-    //     once persisted (encrypted) would invalidate the whole blob on reload.
-    if (!Number.isFinite(cantidad) || cantidad <= 0) return;
-    const i = planes.value.findIndex((p) => p.id === id);
-    if (i !== -1) {
-      // ES: Redondea a 2 decimales para evitar deriva de coma flotante en el total guardado.
-      // EN: Round to 2 decimals to avoid floating-point drift in the saved total.
-      const aportado = redondear2(planes.value[i].aportado + cantidad);
-      planes.value[i] = { ...planes.value[i], aportado };
+  //     Devuelve true si la ha sumado y false si la rechaza (cantidad no
+  //     válida, plan inexistente o acumulado por encima del tope).
+  // EN: Add an amount to a plan's contributed total (overshooting the goal is
+  //     allowed). Returns true if it was added and false if it is rejected
+  //     (invalid amount, missing plan or total above the cap).
+  function aportarAPlan(id: string, cantidad: number): boolean {
+    // ES: Invariante del store: solo cantidades válidas, positivas y dentro del
+    //     tope. Evita NaN que, al persistirse cifrado, invalidaría todo el blob
+    //     al recargar.
+    // EN: Store invariant: only valid, positive amounts within the cap. This
+    //     blocks NaN, which once persisted (encrypted) would invalidate the
+    //     whole blob on reload.
+    if (!Number.isFinite(cantidad) || cantidad <= 0 || !importeDentroDeRango(cantidad)) {
+      return false;
     }
+    const i = planes.value.findIndex((p) => p.id === id);
+    if (i === -1) return false;
+    // ES: Redondea a 2 decimales para evitar deriva de coma flotante en el total guardado.
+    // EN: Round to 2 decimals to avoid floating-point drift in the saved total.
+    const aportado = redondear2(planes.value[i].aportado + cantidad);
+    // ES: El acumulado tampoco puede pasar del tope: si no, el plan ya no se
+    //     podría guardar desde el editor. Se comprueba aquí para que valga
+    //     venga de donde venga la aportación.
+    // EN: The total cannot exceed the cap either: otherwise the plan could no
+    //     longer be saved from the editor. Checked here so it holds wherever
+    //     the contribution comes from.
+    if (!importeDentroDeRango(aportado)) return false;
+    planes.value[i] = { ...planes.value[i], aportado };
+    return true;
   }
 
   // ── 8. Acciones: presupuestos por categoría / Actions: budgets ───────────────
