@@ -59,7 +59,7 @@ La 1.1.0 no sabe leer `datos.bolsillo` y no lo toca. Si más tarde vuelves a la 
 - **Sin PIN ni contraseña, el fichero solo está ofuscado**: la clave que envuelve la clave de datos está en el código público.
 - Las copias automáticas están **en el mismo disco**. Guarda también una copia cifrada fuera del PC.
 - Si olvidas el PIN y pierdes la clave de recuperación, los datos no se pueden recuperar.
-- Generar otra clave de recuperación revoca del todo la anterior, también en las copias automáticas: una copia hecha con un PIN olvidado deja de abrirse con cualquier clave. Es a propósito, para que una clave filtrada no sirva de nada.
+- Generar otra clave de recuperación retira la anterior también de las copias automáticas, a propósito, para que una clave filtrada deje de servir. Las copias recientes se abren con la clave nueva; las de generaciones anteriores solo con el PIN que tenían entonces, así que una copia hecha con un PIN olvidado ya no se abre. Si una copia no se puede actualizar en el momento, la clave vieja la sigue abriendo hasta que el reintento salga bien (la app avisa).
 
 ## English
 
@@ -117,4 +117,4 @@ Even if 1.1.0 accepts that backup, **it loses what it does not know**: a weekly,
 - **Without a PIN or password, the file is only obfuscated**: the key that wraps the data key lives in the public code.
 - Automatic backups are **on the same disk**. Also keep an encrypted backup off the PC.
 - If you forget the PIN and lose the recovery key, the data cannot be recovered.
-- Generating a new recovery key fully revokes the previous one, including in the automatic backups: a backup made with a forgotten PIN can no longer be opened with any key. This is on purpose, so a leaked key is useless.
+- Generating a new recovery key also removes the previous one from the automatic backups, on purpose, so a leaked key stops working. Recent backups open with the new key; backups from earlier generations only with the PIN they had back then, so a backup made with a forgotten PIN no longer opens. If a backup can't be updated at that moment, the old key keeps opening it until the retry succeeds (the app warns you).
