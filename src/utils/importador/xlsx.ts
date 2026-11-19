@@ -57,39 +57,119 @@ export interface OpcionesXLSX {
   hoja?: string | number;
 }
 
-// ES: Suma de los tamaños descomprimidos que declara el directorio central
-//     del ZIP (un .xlsx es un ZIP), o null si no se encuentra o es ZIP64.
-//     Así un libro pequeño que se descomprimiría en cientos de MB se rechaza
-//     ANTES de que ExcelJS lo descomprima en memoria. Es una defensa parcial:
-//     se fía de lo que declara el fichero.
-// EN: Sum of the uncompressed sizes the ZIP central directory declares (an
-//     .xlsx is a ZIP), or null if it cannot be found or is ZIP64. So a small
-//     workbook that would decompress into hundreds of MB is rejected BEFORE
-//     ExcelJS decompresses it in memory. It is a partial defence: it trusts
-//     what the file declares.
-export function tamanoDescomprimido(datos: Uint8Array): number | null {
+// ES: Entrada del directorio central de un ZIP (lo que hace falta para medir).
+// EN: ZIP central directory entry (what is needed to measure it).
+interface EntradaZip {
+  metodo: number; // ES: 0 = sin comprimir, 8 = deflate / EN: 0 = stored, 8 = deflate
+  comprimido: number;
+  descomprimido: number;
+  local: number; // ES: posición de su cabecera local / EN: position of its local header
+}
+
+// ES: Lee el directorio central del ZIP (un .xlsx es un ZIP) o null si no es
+//     coherente: el registro de fin tiene que cerrar el fichero (su comentario
+//     llega justo al final, así una firma dentro del comentario no engaña),
+//     el directorio tiene que caber antes de ese registro y cada entrada,
+//     con su nombre, extra y comentario, tiene que caber en el directorio.
+//     ZIP64 (tamaños 0xFFFFFFFF) no se admite.
+// EN: Reads the ZIP central directory (an .xlsx is a ZIP) or null if it is
+//     not consistent: the end record must close the file (its comment reaches
+//     exactly the end, so a signature inside the comment does not fool it),
+//     the directory must fit before that record and every entry, with its
+//     name, extra and comment, must fit in the directory. ZIP64 (0xFFFFFFFF
+//     sizes) is not supported.
+function entradasZip(datos: Uint8Array): EntradaZip[] | null {
   const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
-  // ES: Fin del directorio central: firma 0x06054b50 en los últimos 64 KB + 22.
-  // EN: End of central directory: signature 0x06054b50 in the last 64 KB + 22.
   let fin = -1;
   for (let i = datos.length - 22; i >= Math.max(0, datos.length - 65557); i--) {
-    if (v.getUint32(i, true) === 0x06054b50) {
+    if (
+      v.getUint32(i, true) === 0x06054b50 &&
+      i + 22 + v.getUint16(i + 20, true) === datos.length
+    ) {
       fin = i;
       break;
     }
   }
   if (fin < 0) return null;
-  const entradas = v.getUint16(fin + 10, true);
-  let pos = v.getUint32(fin + 16, true);
-  if (entradas === 0xffff || pos === 0xffffffff) return null;
-  let total = 0;
-  for (let n = 0; n < entradas; n++) {
-    if (pos + 46 > datos.length || v.getUint32(pos, true) !== 0x02014b50) return null;
-    const tam = v.getUint32(pos + 24, true);
-    if (tam === 0xffffffff) return null;
-    total += tam;
-    pos +=
+  const total = v.getUint16(fin + 10, true);
+  const tamDir = v.getUint32(fin + 12, true);
+  const inicioDir = v.getUint32(fin + 16, true);
+  if (total === 0xffff || inicioDir === 0xffffffff || inicioDir + tamDir > fin) return null;
+  const finDir = inicioDir + tamDir;
+  const entradas: EntradaZip[] = [];
+  let pos = inicioDir;
+  for (let n = 0; n < total; n++) {
+    if (pos + 46 > finDir || v.getUint32(pos, true) !== 0x02014b50) return null;
+    const largo =
       46 + v.getUint16(pos + 28, true) + v.getUint16(pos + 30, true) + v.getUint16(pos + 32, true);
+    if (pos + largo > finDir) return null;
+    const e: EntradaZip = {
+      metodo: v.getUint16(pos + 10, true),
+      comprimido: v.getUint32(pos + 20, true),
+      descomprimido: v.getUint32(pos + 24, true),
+      local: v.getUint32(pos + 42, true),
+    };
+    if (e.comprimido === 0xffffffff || e.descomprimido === 0xffffffff) return null;
+    entradas.push(e);
+    pos += largo;
+  }
+  return entradas;
+}
+
+// ES: Suma de los tamaños descomprimidos que DECLARA el directorio central,
+//     o null si el ZIP no es coherente (ver entradasZip). Primer filtro,
+//     barato, antes de descomprimir nada.
+// EN: Sum of the uncompressed sizes the central directory DECLARES, or null
+//     if the ZIP is not consistent (see entradasZip). First, cheap filter
+//     before decompressing anything.
+export function tamanoDescomprimido(datos: Uint8Array): number | null {
+  const entradas = entradasZip(datos);
+  return entradas ? entradas.reduce((a, e) => a + e.descomprimido, 0) : null;
+}
+
+// ES: Bytes que salen DE VERDAD al descomprimir todas las entradas, cortando
+//     en cuanto se pasa de `max` (null si se pasa, si el ZIP no es coherente
+//     o si usa un método que no es "sin comprimir" ni deflate). Así un ZIP que
+//     miente en sus tamaños tampoco llega a ExcelJS. Usa DecompressionStream
+//     ("deflate-raw"), que tienen WebView2 y Node.
+// EN: Bytes that REALLY come out when decompressing every entry, stopping as
+//     soon as `max` is passed (null if passed, if the ZIP is not consistent
+//     or if it uses a method other than stored or deflate). So a ZIP lying
+//     about its sizes does not reach ExcelJS either. Uses DecompressionStream
+//     ("deflate-raw"), available in WebView2 and Node.
+export async function descomprimidoReal(datos: Uint8Array, max: number): Promise<number | null> {
+  const entradas = entradasZip(datos);
+  if (!entradas) return null;
+  const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
+  let total = 0;
+  for (const e of entradas) {
+    if (e.local + 30 > datos.length || v.getUint32(e.local, true) !== 0x04034b50) return null;
+    const inicio = e.local + 30 + v.getUint16(e.local + 26, true) + v.getUint16(e.local + 28, true);
+    if (inicio + e.comprimido > datos.length) return null;
+    const trozo = datos.subarray(inicio, inicio + e.comprimido);
+    if (e.metodo === 0) {
+      total += trozo.length;
+      if (total > max) return null;
+      continue;
+    }
+    if (e.metodo !== 8) return null;
+    const lector = new Blob([trozo as BlobPart])
+      .stream()
+      .pipeThrough(new DecompressionStream("deflate-raw"))
+      .getReader();
+    try {
+      for (;;) {
+        const { done, value } = await lector.read();
+        if (done) break;
+        total += value.length;
+        if (total > max) {
+          await lector.cancel();
+          return null;
+        }
+      }
+    } catch {
+      return null;
+    }
   }
   return total;
 }
@@ -155,6 +235,9 @@ export async function leerXLSX(
   const descomprimido = tamanoDescomprimido(bytes);
   if (descomprimido === null) throw new Error("ZIP no válido / Invalid ZIP");
   if (descomprimido > MAX_DESCOMPRIMIDO) throw new ErrorXLSX("bytes");
+  // ES: Y lo que sale de verdad al descomprimir, con el mismo tope.
+  // EN: And what really comes out when decompressing, with the same cap.
+  if ((await descomprimidoReal(bytes, MAX_DESCOMPRIMIDO)) === null) throw new ErrorXLSX("bytes");
   const ExcelJS = await cargarExcelJS();
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(bytes as unknown as ArrayBuffer);

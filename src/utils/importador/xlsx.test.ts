@@ -16,6 +16,7 @@ import {
   ErrorXLSX,
   leerXLSX,
   MAX_BYTES,
+  descomprimidoReal,
   MAX_DESCOMPRIMIDO,
   tamanoDescomprimido,
   valorCelda,
@@ -156,4 +157,68 @@ describe("tamaño descomprimido / uncompressed size", () => {
     await expect(leerXLSX(zipFalso(MAX_DESCOMPRIMIDO + 1))).rejects.toEqual(new ErrorXLSX("bytes"));
     await expect(leerXLSX(zipFalso(0xffffffff))).rejects.toThrow("ZIP");
   }); // prettier-ignore
+});
+
+// ES: ZIP de una entrada deflate con el tamaño declarado que se quiera (puede
+//     mentir) y un comentario opcional en el registro de fin.
+// EN: One-entry deflate ZIP with whatever declared size (it may lie) and an
+//     optional comment on the end record.
+async function zipDeflate(contenido: Uint8Array, declarado: number, comentario = ""): Promise<Uint8Array> {
+  const flujo = new Blob([contenido as BlobPart]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  const datos = new Uint8Array(await new Response(flujo).arrayBuffer());
+  const local = new Uint8Array(30 + 1);
+  const l = new DataView(local.buffer);
+  l.setUint32(0, 0x04034b50, true);
+  l.setUint16(8, 8, true);
+  l.setUint32(18, datos.length, true);
+  l.setUint32(22, declarado, true);
+  l.setUint16(26, 1, true);
+  local[30] = 0x61;
+  const cd = new Uint8Array(46 + 1);
+  const c = new DataView(cd.buffer);
+  c.setUint32(0, 0x02014b50, true);
+  c.setUint16(10, 8, true);
+  c.setUint32(20, datos.length, true);
+  c.setUint32(24, declarado, true);
+  c.setUint16(28, 1, true);
+  c.setUint32(42, 0, true);
+  cd[46] = 0x61;
+  const com = new TextEncoder().encode(comentario);
+  const fin = new Uint8Array(22 + com.length);
+  const f = new DataView(fin.buffer);
+  f.setUint32(0, 0x06054b50, true);
+  f.setUint16(8, 1, true);
+  f.setUint16(10, 1, true);
+  f.setUint32(12, cd.length, true);
+  f.setUint32(16, local.length + datos.length, true);
+  f.setUint16(20, com.length, true);
+  fin.set(com, 22);
+  return new Uint8Array([...local, ...datos, ...cd, ...fin]);
+} // prettier-ignore
+
+describe("descompresión real / real decompression", () => {
+  it("cuenta lo que sale de verdad aunque el ZIP declare otra cosa / counts what really comes out even if the ZIP declares otherwise", async () => {
+    const zip = await zipDeflate(new Uint8Array(200_000), 10);
+    expect(tamanoDescomprimido(zip)).toBe(10);
+    expect(await descomprimidoReal(zip, 1_000_000)).toBe(200_000);
+    expect(await descomprimidoReal(zip, 100_000)).toBeNull();
+  });
+
+  it("un libro real pasa los dos topes / a real workbook passes both caps", async () => {
+    const bytes = new Uint8Array(await libroDePrueba());
+    expect(await descomprimidoReal(bytes, MAX_DESCOMPRIMIDO)).toBeGreaterThan(0);
+  });
+
+  it("una firma falsa dentro del comentario no engaña / a fake signature inside the comment does not fool it", async () => {
+    const trampa = "PK\u0005\u0006" + "x".repeat(30);
+    const zip = await zipDeflate(new Uint8Array(1000), 1000, trampa);
+    expect(tamanoDescomprimido(zip)).toBe(1000);
+  });
+
+  it("una entrada que se sale del directorio no vale / an entry overflowing the directory is rejected", () => {
+    const zip = zipFalso(5);
+    const v = new DataView(zip.buffer);
+    v.setUint16(4 + 28, 200, true);
+    expect(tamanoDescomprimido(zip)).toBeNull();
+  });
 });
