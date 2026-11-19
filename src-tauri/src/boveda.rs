@@ -807,7 +807,21 @@ impl Boveda {
     //     Si el registro no se puede escribir, la operación NO sigue.
     // EN: If the record cannot be written, the operation does NOT go on.
     fn preanotar(&self, accion: &str, dek_id: &str) -> R<(Vec<Reenvoltura>, Vec<Reenvoltura>)> {
-        let previas = self.leer_pendientes_estricto()?;
+        // ES: Lo pendiente de operaciones anteriores se resuelve contra la DEK
+        //     actual antes de cambiarla (igual que al restaurar).
+        // EN: Pending work from earlier operations is resolved against the
+        //     current DEK before changing it (as when restoring).
+        let previas: Vec<Reenvoltura> = self
+            .leer_pendientes_estricto()?
+            .into_iter()
+            .filter(|p| {
+                p.publicada || p.accion == "credencial" || p.dek_id.as_deref() != Some(dek_id)
+            })
+            .map(|mut p| {
+                p.publicada = true;
+                p
+            })
+            .collect();
         let nuevas = self.entradas(self.dir.ficheros_con_dek()?, accion, dek_id)?;
         self.escribir_pendientes(&unir(&previas, &nuevas))?;
         Ok((previas, nuevas))
@@ -1157,6 +1171,10 @@ impl Boveda {
     //     So the DEK of the historical backups, which still ask for their PIN,
     //     is not published under a key that lives in the code.
     pub fn quitar_bloqueo(&mut self) -> R<()> {
+        // ES: Lo pendiente se resuelve contra la DEK actual antes de rotarla.
+        // EN: Pending work is resolved against the current DEK before rotating it.
+        let actual = self.abierta()?.cabecera.dek_id.clone();
+        self.resolver_pendientes(Some(&actual))?;
         self.rotar_dek(Bloqueo::Ninguno, |dek, id| {
             Ok(crate::formato::Envolturas {
                 ofuscacion: Some(envolver_ofuscacion(id, dek)?),
@@ -1977,6 +1995,31 @@ mod tests {
             .iter()
             .all(|n| n.ruta != "copias/antes-000000000001.bolsillo"));
         assert!(!nuevas.is_empty());
+    }
+
+    #[test]
+    fn una_operacion_sin_publicar_no_sobrevive_a_otra_rotacion() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let actual = b.abierta().unwrap().cabecera.dek_id.clone();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let sal = desde_bytes(&b.dir.leer_copia(&copia).unwrap())
+            .unwrap()
+            .envolturas
+            .recuperacion
+            .unwrap()
+            .kdf
+            .sal;
+        // ES: Regeneración preanotada que no llegó a publicarse.
+        // EN: Pre-recorded regeneration that was never published.
+        let reg = format!(
+            r#"[{{"ruta":"copias/{copia}","accion":"recuperacion","dek_id":"{actual}","sal":"{sal}","dek_copia":"{actual}"}}]"#
+        );
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.quitar_bloqueo().unwrap();
+        b.restaurar_copia(&copia, Some("4831")).unwrap();
+        assert!(b.estado().tiene_recuperacion);
     }
 
     #[test]

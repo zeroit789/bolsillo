@@ -322,6 +322,11 @@ export const useSesion = defineStore("sesion", () => {
       bloqueoPendiente.value = false;
       return;
     }
+    // ES: La solicitud se consume al empezar (un guardado bueno durante este
+    //     intento no programa otro); se repone solo si falla el guardado.
+    // EN: The request is consumed on start (a good save during this attempt
+    //     does not schedule another one); it is restored only if saving fails.
+    bloqueoPendiente.value = false;
     const ok = await bloquearAhora();
     // ES: Queda pendiente si lo que falló fue guardar (error o cambios que
     //     entraron a la vez; se retoma tras el siguiente guardado bueno). Si
