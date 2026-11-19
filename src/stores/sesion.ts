@@ -168,9 +168,19 @@ export const useSesion = defineStore("sesion", () => {
   //     al importar o desde el botón "Reintentar"). Es la API pública.
   // EN: Flushes the pending save (on close, before changing the credential, on
   //     import or from the "Retry" button). This is the public API.
+  //     Si hay una operación en curso, la espera primero; y repite (hasta 3
+  //     veces) si entran cambios nuevos mientras se cifra, para no dar por
+  //     guardado lo que aún no lo está.
+  // EN: If an operation is running, it waits for it first; and it repeats (up
+  //     to 3 times) if new changes arrive while encrypting, so nothing is
+  //     treated as saved before it is.
   async function vaciarGuardado(): Promise<boolean> {
-    if (operando) return false;
-    return guardarAhora();
+    if (operando) await colaOperaciones;
+    for (let i = 0; i < 3; i++) {
+      if (!(await guardarAhora())) return false;
+      if (cambios === guardados) return true;
+    }
+    return cambios === guardados;
   }
 
   // ES: Ejecuta una operación con el guardado automático en pausa (cambio de
@@ -179,18 +189,27 @@ export const useSesion = defineStore("sesion", () => {
   // EN: Runs an operation with autosave paused (credential change, import).
   //     When done, if something is still pending, it is scheduled with the
   //     secret left active.
-  async function conGuardadoEnPausa<T>(op: () => Promise<T>): Promise<T> {
-    operando = true;
-    cancelarTemporizadores();
-    try {
-      return await op();
-    } finally {
-      operando = false;
-      if (cambios !== guardados) {
-        if (estadoGuardado.value === "error") marcarFallo();
-        else programarGuardado();
+  //     Las operaciones se ejecutan de una en una (cola): dos cambios de
+  //     credencial o una importación solapados nunca se pisan.
+  // EN: Operations run one at a time (queue): two overlapping credential
+  //     changes or an import never step on each other.
+  let colaOperaciones: Promise<unknown> = Promise.resolve();
+  function conGuardadoEnPausa<T>(op: () => Promise<T>): Promise<T> {
+    const turno = colaOperaciones.then(async () => {
+      operando = true;
+      cancelarTemporizadores();
+      try {
+        return await op();
+      } finally {
+        operando = false;
+        if (cambios !== guardados) {
+          if (estadoGuardado.value === "error") marcarFallo();
+          else programarGuardado();
+        }
       }
-    }
+    });
+    colaOperaciones = turno.catch(() => {});
+    return turno;
   }
 
   // ES: Activa el guardado automático CIFRADO una sola vez. El watcher es
@@ -404,18 +423,21 @@ export const useSesion = defineStore("sesion", () => {
   //     the caller updates the settings). If it fails it throws and changes
   //     nothing: neither the active secret nor the settings, so the disk still
   //     matches what the settings say.
-  async function recifrar(secretoNuevo: string, activar: () => void) {
-    await conGuardadoEnPausa(async () => {
-      const hasta = cambios;
-      try {
-        await almacen.guardar(useFinanzas().snapshot(), secretoNuevo);
-      } catch (e) {
-        if (cambios !== guardados) estadoGuardado.value = "error";
-        throw e;
-      }
-      activar();
-      marcarGuardado(hasta);
-    });
+  //     `recifrarEnPausa` es el paso en sí y debe llamarse ya dentro de la pausa.
+  // EN: `recifrarEnPausa` is the step itself and must be called inside the pause.
+  async function recifrarEnPausa(secretoNuevo: string, activar: () => void) {
+    const hasta = cambios;
+    try {
+      await almacen.guardar(useFinanzas().snapshot(), secretoNuevo);
+    } catch (e) {
+      if (cambios !== guardados) estadoGuardado.value = "error";
+      throw e;
+    }
+    activar();
+    marcarGuardado(hasta);
+  }
+  function recifrar(secretoNuevo: string, activar: () => void) {
+    return conGuardadoEnPausa(() => recifrarEnPausa(secretoNuevo, activar));
   }
 
   // ES: Activa el bloqueo con la credencial dada. Lanza si no se pudo guardar.
@@ -450,13 +472,16 @@ export const useSesion = defineStore("sesion", () => {
     nueva: string,
     tipo: TipoBloqueo
   ): Promise<boolean> {
-    const ok = await almacen.secretoValido(antigua);
-    if (!ok) return false;
-    await recifrar(nueva, () => {
-      almacen.usarSecreto(nueva);
-      useAjustes().setBloqueo(true, tipo);
+    // ES: La comprobación de la antigua va dentro de la misma exclusión.
+    // EN: Checking the old one happens inside the same exclusion.
+    return conGuardadoEnPausa(async () => {
+      if (!(await almacen.secretoValido(antigua))) return false;
+      await recifrarEnPausa(nueva, () => {
+        almacen.usarSecreto(nueva);
+        useAjustes().setBloqueo(true, tipo);
+      });
+      return true;
     });
-    return true;
   }
 
   // ── 8. Cierre de la bienvenida / Onboarding completion ──────────────────────

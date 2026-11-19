@@ -18,6 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import * as almacen from "../utils/almacen";
+import { cifrar } from "../utils/cripto";
 import { useAjustes } from "./ajustes";
 import { useSesion } from "./sesion";
 
@@ -94,7 +95,10 @@ describe("H1: nunca se pisan datos ilegibles / unreadable data is never overwrit
 
   it("sin bloqueo, descifra pero no valida / no lock, decrypts but does not validate", async () => {
     await primerArranque(null);
-    await almacen.guardar({ hola: 1 } as never);
+    localStorage.setItem(
+      CLAVE_DATOS,
+      await cifrar(JSON.stringify({ hola: 1 }), almacen.SECRETO_OFUSCACION)
+    );
     const blob = localStorage.getItem(CLAVE_DATOS);
 
     await reabrirApp();

@@ -98,6 +98,29 @@ describe("H2: el guardado que falla avisa / a failing save warns", () => {
 });
 
 describe("guardado: reintento, debounce y credencial / save: retry, debounce and credential", () => {
+  it("nunca escribe datos que no se podrían volver a leer / never writes data that could not be read back", async () => {
+    await primerArranque(null);
+    const blob = localStorage.getItem(CLAVE_DATOS);
+    // ES: Infinity pasa a null en JSON: no debe llegar al disco.
+    // EN: Infinity becomes null in JSON: it must not reach the disk.
+    useFinanzas().addPlan({ nombre: "Roto", objetivo: Infinity, aportado: 0 });
+    const sesion = useSesion();
+    expect(await sesion.vaciarGuardado()).toBe(false);
+    expect(sesion.estadoGuardado).toBe("error");
+    expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
+  });
+
+  it("dos cambios de PIN seguidos quedan en orden / two back-to-back PIN changes stay in order", async () => {
+    await primerArranque(null);
+    const sesion = useSesion();
+    const a = sesion.configurarBloqueo("pin", "1111");
+    const b = sesion.cambiarCredencial("1111", "2222", "pin");
+    await a;
+    expect(await b).toBe(true);
+    expect(await almacen.secretoValido("2222")).toBe(true);
+    expect(useAjustes().bloqueoTipo).toBe("pin");
+  });
+
   it("tras liberar espacio, Reintentar guarda y vuelve a ok / after freeing space, Retry saves and goes back to ok", async () => {
     await primerArranque(null);
     const espia = llenarAlmacenamiento();

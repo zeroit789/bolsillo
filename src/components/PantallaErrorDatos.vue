@@ -108,11 +108,17 @@ const explicacion = computed(() => (sesion.fallo ? t(sesion.fallo) : ""));
 // ── 3. Probar otra credencial / Try another credential ────────────────────────
 const credencial = ref("");
 const probando = ref(false);
+// ES: Las salidas son excluyentes: mientras una corre, las demás se bloquean
+//     (probar una credencial e importar a la vez podría mezclar resultados).
+// EN: The ways out are exclusive: while one runs, the others are blocked
+//     (trying a credential and importing at once could mix results).
+const importando = ref(false);
+const ocupado = computed(() => probando.value || importando.value);
 
 // ES: Prueba la credencial con el store (misma lógica que la pantalla de bloqueo).
 // EN: Tries the credential through the store (same logic as the lock screen).
 async function probar() {
-  if (probando.value || !credencial.value) return;
+  if (ocupado.value || !credencial.value) return;
   probando.value = true;
   await sesion.desbloquear(credencial.value);
   probando.value = false;
@@ -132,7 +138,8 @@ async function importar(evento: Event) {
   mensaje.value = "";
   const input = evento.target as HTMLInputElement;
   const fichero = input.files?.[0];
-  if (!fichero) return;
+  if (!fichero || ocupado.value) return;
+  importando.value = true;
   try {
     const datos: unknown = JSON.parse(await fichero.text());
     const forzar = sesion.rescateFallido ? confirm(t("confirmSinRescate")) : false;
@@ -156,6 +163,7 @@ async function importar(evento: Event) {
               : t("errGuardar");
   } finally {
     input.value = "";
+    importando.value = false;
   }
 }
 
@@ -163,6 +171,7 @@ async function importar(evento: Event) {
 // ES: Empieza de cero tras confirmar (dos veces si no hay copia de rescate).
 // EN: Starts from scratch after confirming (twice if there is no rescue copy).
 function empezar() {
+  if (ocupado.value) return;
   if (!confirm(t("confirmEmpezar"))) return;
   if (sesion.empezarDeCero()) return;
   if (confirm(t("confirmSinRescate"))) sesion.empezarDeCero(true);
@@ -221,7 +230,7 @@ async function descargar() {
         <button
           type="submit"
           class="rounded-lg bg-brand px-4 py-2 text-white font-medium disabled:opacity-50"
-          :disabled="probando || !credencial"
+          :disabled="ocupado || !credencial"
         >
           {{ probando ? t("comprobando") : t("probar") }}
         </button>
@@ -232,7 +241,8 @@ async function descargar() {
       <div class="space-y-1">
         <button
           type="button"
-          class="w-full rounded-lg bg-surface-2 border border-border px-4 py-2.5 text-ink hover:border-brand"
+          class="w-full rounded-lg bg-surface-2 border border-border px-4 py-2.5 text-ink hover:border-brand disabled:opacity-50"
+          :disabled="ocupado"
           @click="inputFichero?.click()"
         >
           {{ t("importar") }}
@@ -250,7 +260,8 @@ async function descargar() {
       <!-- ES: Opción 3: empezar de cero / EN: Option 3: start from scratch -->
       <button
         type="button"
-        class="w-full rounded-lg border border-danger/60 px-4 py-2.5 text-danger hover:bg-danger/10"
+        class="w-full rounded-lg border border-danger/60 px-4 py-2.5 text-danger hover:bg-danger/10 disabled:opacity-50"
+        :disabled="ocupado"
         @click="empezar"
       >
         {{ t("empezar") }}

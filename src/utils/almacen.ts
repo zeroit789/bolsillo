@@ -19,7 +19,7 @@
  *   6. Validación del secreto / Secret validation
  *   7. Copias de rescate / Rescue copies
  * ===========================================================================*/
-import type { DatosBolsillo } from "../types";
+import { esDatosValidos, type DatosBolsillo } from "../types";
 import { cifrar, descifrar, leerSobre, ErrorSobreDanado } from "./cripto";
 import { prepararDatos, ErrorDatos } from "./migraciones";
 
@@ -148,8 +148,17 @@ let cola: Promise<void> = Promise.resolve();
 // EN: `secreto` allows encrypting with one other than the active one (when
 //     changing the credential: save with the new one first, activate it only
 //     if that worked).
+// ES: Antes de cifrar comprueba que lo que se va a escribir (ya pasado por JSON)
+//     es válido: si un fallo de la app produjera algo ilegible (p. ej. un
+//     Infinity que JSON convierte en null), el guardado falla y avisa, pero el
+//     blob bueno anterior se queda en disco en vez de bloquear el próximo arranque.
+// EN: Before encrypting it checks that what will be written (already through
+//     JSON) is valid: if an app bug produced something unreadable (e.g. an
+//     Infinity that JSON turns into null), the save fails and warns, but the
+//     previous good blob stays on disk instead of blocking the next boot.
 export function guardar(datos: DatosBolsillo, secreto: string = secretoActual): Promise<void> {
   const json = JSON.stringify(datos);
+  if (!esDatosValidos(JSON.parse(json))) return Promise.reject(new Error("datos-no-validos"));
   // ES: Ejecuta este guardado tras el anterior (haya ido bien o mal) para serializar
   //     las escrituras. `resultado` refleja el resultado de ESTA escritura y es lo
   //     que devolvemos — así quien hace await de guardar() SÍ ve su error (p.ej.
