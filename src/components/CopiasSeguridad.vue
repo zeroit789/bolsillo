@@ -24,13 +24,14 @@
  *   4. Copia JSON / JSON backup
  *   5. Copias automáticas / Automatic backups
  * ===========================================================================*/
-import { ref, useId, onMounted } from "vue";
+import { ref, useId, onMounted, computed } from "vue";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
 import { categoriasCustom } from "../data/categorias";
 import { guardarJson } from "../utils/export";
 import { validarCredencial, MIN_PASSWORD } from "../utils/credencial";
 import { useImportarCopia } from "../utils/useImportarCopia";
+import { useRestaurarCopia } from "../utils/useRestaurarCopia";
 import type { InfoCopia } from "../utils/boveda";
 import { fechaLegibleCopia } from "../utils/copias";
 import { crearT } from "../i18n";
@@ -116,6 +117,26 @@ const t = crearT({
     en: "This backup will be restored. The current state is saved first as a “before restoring” backup. If the backup had another PIN, it will be asked. Continue?",
   },
   errRestaurar: { es: "No se pudo restaurar.", en: "Could not restore." },
+  pinCopia: {
+    es: "PIN o contraseña que tenía esa copia",
+    en: "PIN or password that backup had",
+  },
+  errRestCredencial: {
+    es: "Ese PIN o contraseña no abre esta copia. No se ha tocado nada.",
+    en: "That PIN or password does not open this backup. Nothing was touched.",
+  },
+  errRestInvalida: {
+    es: "La copia está dañada o no es válida. No se ha tocado nada.",
+    en: "The backup is damaged or not valid. Nothing was touched.",
+  },
+  errRestVersion: {
+    es: "La copia es de una versión más nueva de Bolsillo.",
+    en: "The backup comes from a newer version of Bolsillo.",
+  },
+  "categorias-no-guardadas": {
+    es: "Los datos se han importado, pero no se pudieron guardar las categorías propias de la copia.",
+    en: "The data was imported, but the backup's custom categories could not be saved.",
+  },
   errPendiente: {
     es: "Hay cambios sin guardar: arregla el guardado antes de restaurar.",
     en: "There are unsaved changes: fix saving before restoring.",
@@ -195,8 +216,8 @@ async function exportarJson() {
 
 // ── 5. Copias automáticas / Automatic backups ─────────────────────────────────
 const copias = ref<InfoCopia[]>([]);
-const errRestaurar = ref("");
-const restaurando = ref(false);
+const restauracion = useRestaurarCopia(() => confirm(t("confirmRestaurar")));
+const restaurando = restauracion.ocupado;
 
 async function cargarCopias() {
   try {
@@ -214,20 +235,16 @@ function tipoCopia(nombre: string): string {
   );
 }
 
-// ES: Restaura una copia tras confirmar. / EN: Restores a backup after confirming.
-async function restaurar(nombre: string) {
-  if (restaurando.value || !confirm(t("confirmRestaurar"))) return;
-  errRestaurar.value = "";
-  restaurando.value = true;
-  try {
-    await sesion.restaurarCopia(nombre);
-  } catch (e) {
-    const m = e instanceof Error ? e.message : "";
-    errRestaurar.value = m === "guardado-pendiente" ? t("errPendiente") : t("errRestaurar");
-  } finally {
-    restaurando.value = false;
-  }
-}
+// ES: Texto del error de restauración. / EN: Restore error text.
+const errorRestaurar = computed(() => {
+  const c = restauracion.error.value;
+  if (!c) return "";
+  if (c === "copia-credencial") return t("errRestCredencial");
+  if (c === "copia-invalida") return t("errRestInvalida");
+  if (c === "copia-version") return t("errRestVersion");
+  if (c === "guardado-pendiente") return t("errPendiente");
+  return t("errRestaurar");
+});
 </script>
 
 <template>
@@ -352,14 +369,42 @@ async function restaurar(nombre: string) {
             type="button"
             class="rounded-lg border border-border px-3 py-1 text-sm text-ink hover:border-brand disabled:opacity-50"
             :disabled="restaurando"
-            @click="restaurar(c.nombre)"
+            @click="restauracion.restaurar(c)"
           >
             {{ t("restaurar") }}
           </button>
         </li>
       </ul>
       <p v-else class="text-faint text-xs">{{ t("sinCopias") }}</p>
-      <p v-if="errRestaurar" role="alert" class="text-danger text-sm">{{ errRestaurar }}</p>
+      <!-- ES: PIN o contraseña de la copia elegida / EN: PIN or password of the chosen backup -->
+      <form
+        v-if="restauracion.pidiendo.value"
+        class="flex flex-wrap gap-2"
+        @submit.prevent="restauracion.enviarPin()"
+      >
+        <input
+          v-model="restauracion.pin.value"
+          type="password"
+          :placeholder="t('pinCopia')"
+          :aria-label="t('pinCopia')"
+          class="flex-1 rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+        />
+        <button
+          type="submit"
+          class="rounded-lg bg-brand px-4 py-2 text-white font-medium disabled:opacity-50"
+          :disabled="restauracion.ocupado.value || !restauracion.pin.value"
+        >
+          {{ t("restaurar") }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border border-border px-3 py-2 text-ink"
+          @click="restauracion.cancelar()"
+        >
+          {{ t("cancelar") }}
+        </button>
+      </form>
+      <p v-if="errorRestaurar" role="alert" class="text-danger text-sm">{{ errorRestaurar }}</p>
     </div>
   </section>
 </template>

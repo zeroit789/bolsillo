@@ -7,13 +7,15 @@
  *     otra). Deja copiarla o imprimirla y no se cierra hasta marcar que está
  *     apuntada; entonces el store la olvida. Si se cierra la app antes, la
  *     clave sigue valiendo pero no se vuelve a ver: se puede generar otra en
- *     Ajustes.
+ *     Ajustes. Solo se ve con la app desbloqueada: al bloquear, la sesión la
+ *     retira y avisa para generar otra.
  * EN: Dialog shown ONCE when a recovery key is created (when setting a PIN or
  *     password, when migrating from 1.1.0 with a PIN or when generating a new
  *     one). It lets you copy or print it and does not close until you tick
  *     that it is written down; then the store forgets it. If the app is
  *     closed first, the key keeps working but is not shown again: a new one
- *     can be generated in Settings.
+ *     can be generated in Settings. It only shows with the app unlocked: on
+ *     lock, the session withdraws it and warns to generate another one.
  * ===========================================================================*/
 import { ref, useId } from "vue";
 import { useSesion } from "../stores/sesion";
@@ -81,7 +83,7 @@ function terminar() {
 
 <template>
   <div
-    v-if="sesion.claveRecuperacion"
+    v-if="sesion.claveRecuperacion && sesion.desbloqueado"
     class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4 clave-recuperacion-fondo"
   >
     <div

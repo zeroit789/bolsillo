@@ -29,6 +29,7 @@ import { useSesion } from "../stores/sesion";
 import * as almacen from "../utils/almacen";
 import { guardarJson } from "../utils/export";
 import { useImportarCopia } from "../utils/useImportarCopia";
+import { useRestaurarCopia } from "../utils/useRestaurarCopia";
 import { fechaLegibleCopia } from "../utils/copias";
 import type { InfoCopia } from "../utils/boveda";
 import { crearT } from "../i18n";
@@ -113,6 +114,30 @@ const t = crearT({
     en: "This backup will be restored (if it had a PIN, it will be asked). Continue?",
   },
   errRestaurar: { es: "No se pudo restaurar.", en: "Could not restore." },
+  pinCopia: {
+    es: "PIN o contraseña que tenía esa copia",
+    en: "PIN or password that backup had",
+  },
+  errRestCredencial: {
+    es: "Ese PIN o contraseña no abre esta copia. No se ha tocado nada.",
+    en: "That PIN or password does not open this backup. Nothing was touched.",
+  },
+  errRestInvalida: {
+    es: "La copia está dañada o no es válida. No se ha tocado nada.",
+    en: "The backup is damaged or not valid. Nothing was touched.",
+  },
+  errRestVersion: {
+    es: "La copia es de una versión más nueva de Bolsillo.",
+    en: "The backup comes from a newer version of Bolsillo.",
+  },
+  errPendiente: {
+    es: "Hay cambios sin guardar: no se restaura.",
+    en: "There are unsaved changes: nothing is restored.",
+  },
+  "categorias-no-guardadas": {
+    es: "Los datos se han importado, pero no se pudieron guardar las categorías propias de la copia.",
+    en: "The data was imported, but the backup's custom categories could not be saved.",
+  },
   contrasenaCopia: { es: "Contraseña de esa copia", en: "That backup's password" },
   abrir: { es: "Abrir", en: "Open" },
   cancelar: { es: "Cancelar", en: "Cancel" },
@@ -165,7 +190,11 @@ const probando = ref(false);
 //     (trying a credential and importing at once could mix results).
 const importando = ref(false);
 const ocupado = computed(
-  () => probando.value || importando.value || importacion?.ocupado.value === true
+  () =>
+    probando.value ||
+    importando.value ||
+    importacion?.ocupado.value === true ||
+    restauracion?.ocupado.value === true
 );
 
 // ES: Prueba la credencial con el store (misma lógica que la pantalla de bloqueo).
@@ -210,7 +239,8 @@ const errorImportar = computed(() => {
   if (c === "copia-invalida") return t("errCopiaInvalida");
   if (c === "copia-version") return t("errCopiaVersion");
   if (c === "sin-rescate") return t("rescateFallido");
-  if (c === "copia-credencial" || c === "no-autosuficiente") return t(c);
+  if (c === "copia-credencial" || c === "no-autosuficiente" || c === "categorias-no-guardadas")
+    return t(c);
   return t("errGuardar");
 });
 
@@ -225,18 +255,17 @@ onMounted(async () => {
     copias.value = [];
   }
 });
-async function restaurar(nombre: string) {
-  if (ocupado.value || !confirm(t("confirmRestaurar"))) return;
-  mensaje.value = "";
-  importando.value = true;
-  try {
-    await sesion.restaurarCopia(nombre);
-  } catch {
-    mensaje.value = t("errRestaurar");
-  } finally {
-    importando.value = false;
-  }
-}
+const restauracion = useRestaurarCopia(() => !ocupado.value && confirm(t("confirmRestaurar")));
+// ES: Texto del error de restauración. / EN: Restore error text.
+const errorRestaurar = computed(() => {
+  const c = restauracion.error.value;
+  if (!c) return "";
+  if (c === "copia-credencial") return t("errRestCredencial");
+  if (c === "copia-invalida") return t("errRestInvalida");
+  if (c === "copia-version") return t("errRestVersion");
+  if (c === "guardado-pendiente") return t("errPendiente");
+  return t("errRestaurar");
+});
 
 // ── 5. Empezar de cero y descarga del blob / Start from scratch & blob download ─
 // ES: Empieza de cero tras confirmar (dos veces si no hay copia de rescate).
@@ -356,12 +385,41 @@ async function descargar() {
               type="button"
               class="rounded-lg border border-border px-3 py-1 text-sm text-ink hover:border-brand disabled:opacity-50"
               :disabled="ocupado"
-              @click="restaurar(c.nombre)"
+              @click="restauracion.restaurar(c)"
             >
               {{ t("restaurar") }}
             </button>
           </li>
         </ul>
+        <!-- ES: PIN o contraseña de la copia elegida / EN: PIN or password of the chosen backup -->
+        <form
+          v-if="restauracion.pidiendo.value"
+          class="flex flex-wrap gap-2"
+          @submit.prevent="restauracion.enviarPin()"
+        >
+          <input
+            v-model="restauracion.pin.value"
+            type="password"
+            :placeholder="t('pinCopia')"
+            :aria-label="t('pinCopia')"
+            class="flex-1 rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <button
+            type="submit"
+            class="rounded-lg bg-brand px-4 py-2 text-white font-medium disabled:opacity-50"
+            :disabled="restauracion.ocupado.value || !restauracion.pin.value"
+          >
+            {{ t("restaurar") }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-border px-3 py-2 text-ink"
+            @click="restauracion.cancelar()"
+          >
+            {{ t("cancelar") }}
+          </button>
+        </form>
+        <p v-if="errorRestaurar" role="alert" class="text-danger text-sm">{{ errorRestaurar }}</p>
       </div>
 
       <!-- ES: Opción 3: importar copia (cifrada o JSON) / EN: Option 3: import a backup (encrypted or JSON) -->

@@ -9,7 +9,7 @@
  *          de forma atómica (sesion.importarCopiaCompleta).
  *     Los errores salen como código en `error` para que cada vista los
  *     traduzca: "copia-invalida", "copia-version", "copia-credencial",
- *     "no-autosuficiente", "sin-rescate" o "guardar".
+ *     "no-autosuficiente", "sin-rescate", "categorias-no-guardadas" o "guardar".
  * EN: Shared flow of Settings and the error screen to import a backup:
  *       1. Rust opens the native dialog and classifies the file (the path
  *          never leaves Rust).
@@ -18,7 +18,7 @@
  *          categories atomically (sesion.importarCopiaCompleta).
  *     Errors come out as a code in `error` so each view translates them:
  *     "copia-invalida", "copia-version", "copia-credencial",
- *     "no-autosuficiente", "sin-rescate" or "guardar".
+ *     "no-autosuficiente", "sin-rescate", "categorias-no-guardadas" or "guardar".
  * ===========================================================================*/
 import { ref } from "vue";
 import { useSesion } from "../stores/sesion";
@@ -36,6 +36,7 @@ export interface OpcionesImportar {
 function codigoDe(e: unknown): string {
   const m = e instanceof Error ? e.message : typeof e === "string" ? e : "";
   if (["copia-invalida", "copia-version", "copia-credencial", "sin-rescate"].includes(m)) return m;
+  if (m === "categorias-no-guardadas") return m;
   if (m === "no-autosuficiente") return m;
   if (m === "version") return "copia-version";
   if (m === "danado" || e instanceof SyntaxError) return "copia-invalida";

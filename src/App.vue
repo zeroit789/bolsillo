@@ -40,6 +40,7 @@ import AvisoAlmacen from "./components/AvisoAlmacen.vue";
 import ClaveRecuperacion from "./components/ClaveRecuperacion.vue";
 import RestablecerCredencial from "./components/RestablecerCredencial.vue";
 import { isTauri } from "@tauri-apps/api/core";
+import { esSimulado } from "./utils/boveda";
 import DashboardView from "./views/DashboardView.vue";
 import MovimientosView from "./views/MovimientosView.vue";
 import DeudasView from "./views/DeudasView.vue";
@@ -80,6 +81,11 @@ const t = crearT({
   navegacion: { es: "Secciones", en: "Sections" },
   mesSeleccionado: { es: "Mes", en: "Month" },
   bloquearAhora: { es: "Bloquear ahora", en: "Lock now" },
+  trabajando: { es: "Guardando…", en: "Saving…" },
+  modoDesarrollo: {
+    es: "Modo desarrollo en el navegador: los datos NO se cifran y se pierden al recargar.",
+    en: "Browser development mode: data is NOT encrypted and is lost on reload.",
+  },
   // ES: Textos de las notificaciones nativas. "@x/@c/@i/@d" son marcadores que se
   //     sustituyen al llamar por el valor dinámico (concepto, importe, día) —
   //     crearT no interpola, así que sustituimos a mano tras traducir.
@@ -133,6 +139,8 @@ const mostrarMes = computed(() =>
 // EN: Screen gating: locked when lock is enabled and the session is not unlocked.
 //     The template chooses between onboarding / lock / content / loader.
 const bloqueado = computed(() => ajustes.bloqueoActivo && !sesion.desbloqueado);
+// ES: Simulador de desarrollo (pnpm dev en un navegador). / EN: Development simulator (pnpm dev in a browser).
+const desarrollo = esSimulado();
 
 // ES: Al montar, arranca la sesión (hidrata datos y resuelve bloqueo/onboarding).
 // EN: On mount, boot the session (hydrate data and resolve lock/onboarding state).
@@ -402,6 +410,27 @@ onMounted(async () => {
   <ClaveRecuperacion />
   <RestablecerCredencial />
 
+  <!-- ES: Aviso fijo del simulador de desarrollo (sin cifrado, en memoria).
+       EN: Fixed notice of the development simulator (unencrypted, in memory). -->
+  <p
+    v-if="desarrollo"
+    role="status"
+    class="fixed bottom-0 inset-x-0 z-[80] bg-danger text-white text-xs text-center py-1"
+  >
+    {{ t("modoDesarrollo") }}
+  </p>
+
+  <!-- ES: Sustitución de datos en curso: la app queda cubierta y sin edición.
+       EN: Data replacement in progress: the app is covered and not editable. -->
+  <div
+    v-if="sesion.trabajando"
+    role="status"
+    aria-live="polite"
+    class="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 cursor-wait text-white"
+  >
+    {{ t("trabajando") }}
+  </div>
+
   <!-- ES: Bienvenida / onboarding (primer arranque) / EN: Welcome / onboarding (first run) -->
   <Onboarding v-if="sesion.necesitaOnboarding" />
 
@@ -412,7 +441,7 @@ onMounted(async () => {
   <PantallaBloqueo v-else-if="bloqueado" />
 
   <!-- ES: App desbloqueada / EN: Unlocked app -->
-  <div v-else-if="sesion.desbloqueado" class="min-h-screen flex">
+  <div v-else-if="sesion.desbloqueado" class="min-h-screen flex" :inert="sesion.trabajando">
     <!-- ES: Navegación lateral / EN: Side navigation -->
     <aside
       class="w-56 shrink-0 border-r border-border bg-surface/50 flex flex-col py-5 px-3 no-select"

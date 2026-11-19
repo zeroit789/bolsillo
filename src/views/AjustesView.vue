@@ -159,6 +159,10 @@ const t = crearT({
     en: "Couldn't enable the lock. Please try again.",
   },
   okBloqueoDesactivado: { es: "Bloqueo desactivado.", en: "Lock disabled." },
+  confirmQuitarBloqueo: {
+    es: "Sin PIN ni contraseña, el fichero de datos solo queda ofuscado con una clave que va dentro de la app: quien lo copie puede leerlo. Las copias automáticas anteriores siguen pidiendo su PIN. ¿Quitar el bloqueo?",
+    en: "Without a PIN or password, the data file is only obfuscated with a key that ships inside the app: whoever copies it can read it. Earlier automatic backups still ask for their PIN. Remove the lock?",
+  },
   errBloqueoQuitar: {
     es: "No se pudo quitar el bloqueo. Inténtalo de nuevo.",
     en: "Couldn't remove the lock. Please try again.",
@@ -296,6 +300,9 @@ async function activarBloqueo() {
 async function desactivarBloqueo() {
   mensajeSeguridad.value = "";
   errorSeguridad.value = "";
+  // ES: Aviso honesto: sin bloqueo el fichero solo queda ofuscado.
+  // EN: Honest warning: without a lock the file is only obfuscated.
+  if (!confirm(t("confirmQuitarBloqueo"))) return;
   try {
     await sesion.quitarBloqueo();
     mensajeSeguridad.value = t("okBloqueoDesactivado");

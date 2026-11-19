@@ -39,8 +39,8 @@ const t = crearT({
   },
   recuperacionTitulo: { es: "Clave de recuperación", en: "Recovery key" },
   recuperacionDesc: {
-    es: "Abre tus datos si olvidas el PIN o la contraseña. Si la has perdido o crees que alguien la ha visto, genera otra: la anterior dejará de valer.",
-    en: "It opens your data if you forget the PIN or password. If you lost it or think someone saw it, generate a new one: the previous one will stop working.",
+    es: "Abre tus datos si olvidas el PIN o la contraseña. Si la has perdido o crees que alguien la ha visto, genera otra: la anterior deja de abrir el fichero de datos y las copias automáticas de la clave de datos anterior. Copias aún más antiguas pueden seguir abriéndose con ella hasta que roten (30 días como mucho).",
+    en: "It opens your data if you forget the PIN or password. If you lost it or think someone saw it, generate a new one: the previous one stops opening the data file and the automatic backups of the previous data key. Even older backups may still open with it until they rotate (30 days at most).",
   },
   sinRecuperacion: {
     es: "Estos datos todavía no tienen clave de recuperación. Genérala ahora.",
