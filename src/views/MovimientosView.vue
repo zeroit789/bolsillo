@@ -488,10 +488,11 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
         <!-- ES: Aspa para eliminar el atajo / EN: Cross to delete the shortcut -->
         <button
           class="text-faint hover:text-danger transition-colors"
-          :title="t('eliminarAtajo')"
+          :title="`${t('eliminarAtajo')}: ${p.concepto}`"
+          :aria-label="`${t('eliminarAtajo')}: ${p.concepto}`"
           @click="quitarPlantilla(p)"
         >
-          ✕
+          <span aria-hidden="true">✕</span>
         </button>
       </span>
 
@@ -672,10 +673,11 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
               <button
                 v-if="l.recibo"
                 class="hover:text-ink transition-colors"
-                :title="t('verRecibo')"
+                :title="`${t('verRecibo')}: ${l.concepto}`"
+                :aria-label="`${t('verRecibo')}: ${l.concepto}`"
                 @click.stop="reciboVisible = l.recibo ?? null"
               >
-                📎
+                <span aria-hidden="true">📎</span>
               </button>
             </p>
           </div>
@@ -690,27 +692,30 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           <!-- ES: Acciones de la línea (no aplican a las cuotas de deuda) / EN: Line actions (not applicable to debt installments) -->
           <template v-if="l.origen !== 'deuda'">
             <button
-              class="opacity-0 group-hover:opacity-100 text-faint hover:text-ink transition-all shrink-0"
-              :title="t('editar')"
+              class="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-faint hover:text-ink transition-all shrink-0"
+              :title="`${t('editar')}: ${l.concepto}`"
+              :aria-label="`${t('editar')}: ${l.concepto}`"
               @click="editar(l)"
             >
-              ✏️
+              <span aria-hidden="true">✏️</span>
             </button>
             <!-- ES: Dar de baja: solo para fijos (recurrentes) / EN: Cancel: only for fixed (recurring) entries -->
             <button
               v-if="l.origen === 'recurrente'"
-              class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
-              :title="t('darDeBajaTitulo')"
+              class="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-faint hover:text-danger transition-all shrink-0"
+              :title="`${t('darDeBajaTitulo')}: ${l.concepto}`"
+              :aria-label="`${t('darDeBajaTitulo')}: ${l.concepto}`"
               @click="darDeBaja(l)"
             >
-              🚫
+              <span aria-hidden="true">🚫</span>
             </button>
             <button
-              class="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all shrink-0"
-              :title="t('eliminar')"
+              class="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-faint hover:text-danger transition-all shrink-0"
+              :title="`${t('eliminar')}: ${l.concepto}`"
+              :aria-label="`${t('eliminar')}: ${l.concepto}`"
               @click="eliminar(l)"
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
           </template>
           <span v-else class="text-faint text-xs shrink-0" :title="t('gestionadoDeudas')">🔒</span>

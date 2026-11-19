@@ -54,9 +54,7 @@ const t = crearT({
   },
   vacioBoton: { es: "+ Añadir mi primera cuenta", en: "+ Add my first account" },
   // ES: Tarjeta de cuenta / EN: Account card
-  editar: { es: "Editar", en: "Edit" },
   editarAria: { es: "Editar cuenta", en: "Edit account" },
-  eliminar: { es: "Eliminar", en: "Delete" },
   eliminarAria: { es: "Eliminar cuenta", en: "Delete account" },
   saldoInicialRef: { es: "Saldo inicial:", en: "Initial balance:" },
   // ES: Modal de alta/edición / EN: Create/edit modal
@@ -247,16 +245,16 @@ function borrar(cuenta: Cuenta) {
           <div class="flex shrink-0 gap-1">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
-              :title="t('editar')"
-              :aria-label="t('editarAria')"
+              :title="`${t('editarAria')}: ${item.cuenta.nombre}`"
+              :aria-label="`${t('editarAria')}: ${item.cuenta.nombre}`"
               @click="abrirEditar(item.cuenta)"
             >
               ✏️
             </button>
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-              :title="t('eliminar')"
-              :aria-label="t('eliminarAria')"
+              :title="`${t('eliminarAria')}: ${item.cuenta.nombre}`"
+              :aria-label="`${t('eliminarAria')}: ${item.cuenta.nombre}`"
               @click="borrar(item.cuenta)"
             >
               🗑️

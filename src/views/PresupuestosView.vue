@@ -300,8 +300,8 @@ function borrarTope(categoria: string): void {
           <!-- ES: Botón eliminar (con confirm) / EN: Delete button (with confirm) -->
           <button
             class="shrink-0 rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-            :title="t('eliminarTope')"
-            :aria-label="t('eliminarTope')"
+            :title="`${t('eliminarTope')}: ${p.categoria}`"
+            :aria-label="`${t('eliminarTope')}: ${p.categoria}`"
             @click="borrarTope(p.categoria)"
           >
             🗑️

@@ -54,9 +54,7 @@ const t = crearT({
   vacioBoton: { es: "+ Añadir mi primera deuda", en: "+ Add my first debt" },
   // ES: Tarjeta de deuda
   // EN: Debt card
-  editar: { es: "Editar", en: "Edit" },
   editarAria: { es: "Editar deuda", en: "Edit debt" },
-  eliminar: { es: "Eliminar", en: "Delete" },
   eliminarAria: { es: "Eliminar deuda", en: "Delete debt" },
   pagadoDe: { es: "Pagado", en: "Paid" },
   de: { es: "de", en: "of" },
@@ -316,16 +314,16 @@ function borrar(deuda: Deuda) {
           <div class="flex gap-1">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
-              :title="t('editar')"
-              :aria-label="t('editarAria')"
+              :title="`${t('editarAria')}: ${estado.deuda.concepto}`"
+              :aria-label="`${t('editarAria')}: ${estado.deuda.concepto}`"
               @click="abrirEditar(estado.deuda)"
             >
               ✏️
             </button>
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-              :title="t('eliminar')"
-              :aria-label="t('eliminarAria')"
+              :title="`${t('eliminarAria')}: ${estado.deuda.concepto}`"
+              :aria-label="`${t('eliminarAria')}: ${estado.deuda.concepto}`"
               @click="borrar(estado.deuda)"
             >
               🗑️

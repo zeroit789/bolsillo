@@ -75,9 +75,7 @@ const t = crearT({
   // ES: Tarjeta de plan
   // EN: Plan card
   conseguido: { es: "✓ Conseguido", en: "✓ Achieved" },
-  editar: { es: "Editar", en: "Edit" },
   editarPlan: { es: "Editar plan", en: "Edit plan" },
-  eliminar: { es: "Eliminar", en: "Delete" },
   eliminarPlan: { es: "Eliminar plan", en: "Delete plan" },
   aportadoDe: { es: "Aportado", en: "Saved" },
   de: { es: "de", en: "of" },
@@ -354,16 +352,16 @@ function borrar(plan: Plan) {
           <div class="flex gap-1 shrink-0">
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-ink hover:border-brand"
-              :title="t('editar')"
-              :aria-label="t('editarPlan')"
+              :title="`${t('editarPlan')}: ${plan.nombre}`"
+              :aria-label="`${t('editarPlan')}: ${plan.nombre}`"
               @click="abrirEditar(plan)"
             >
               ✏️
             </button>
             <button
               class="rounded-lg bg-surface-2 border border-border px-2 py-1 text-sm text-muted hover:text-danger hover:border-danger"
-              :title="t('eliminar')"
-              :aria-label="t('eliminarPlan')"
+              :title="`${t('eliminarPlan')}: ${plan.nombre}`"
+              :aria-label="`${t('eliminarPlan')}: ${plan.nombre}`"
               @click="borrar(plan)"
             >
               🗑️

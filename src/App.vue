@@ -410,17 +410,18 @@ onMounted(async () => {
       <h1 class="font-display text-2xl font-extrabold px-3 mb-6">
         Bolsillo<span class="text-brand">.</span>
       </h1>
-      <nav class="flex flex-col gap-1">
+      <nav class="flex flex-col gap-1" :aria-label="t('navegacion')">
         <button
           v-for="n in NAV"
           :key="n.id"
+          :aria-current="vista === n.id ? 'page' : undefined"
           class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
           :class="
             vista === n.id ? 'bg-brand text-white' : 'text-muted hover:text-ink hover:bg-surface-2'
           "
           @click="vista = n.id"
         >
-          <span class="text-lg">{{ n.icono }}</span>
+          <span class="text-lg" aria-hidden="true">{{ n.icono }}</span>
           <span class="font-medium">{{ t(n.id) }}</span>
         </button>
       </nav>
