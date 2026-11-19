@@ -242,3 +242,11 @@ describe("descompresión real / real decompression", () => {
     expect(tamanoDescomprimido(zip)).toBeNull();
   });
 });
+
+describe("centinelas ZIP64 / ZIP64 sentinels", () => {
+  it.each([4, 6, 8])("0xFFFF en el campo %i del registro de fin lo rechaza / 0xFFFF in that field of the end record rejects it", async (campo) => {
+    const zip = await zipDeflate(new Uint8Array(1000), 1000);
+    new DataView(zip.buffer).setUint16(zip.length - 22 + campo, 0xffff, true);
+    expect(tamanoDescomprimido(zip)).toBeNull();
+  }); // prettier-ignore
+});

@@ -99,13 +99,19 @@ function entradasZip(datos: Uint8Array): { entradas: EntradaZip[]; inicioDir: nu
   }
   if (fin < 0 || fin + 22 > datos.length) return null;
   if (fin + 22 + v.getUint16(fin + 20, true) !== datos.length) return null;
-  // ES: Un localizador ZIP64 delante del registro: JSZip leería el directorio
-  //     ZIP64, que aquí no se admite. / EN: A ZIP64 locator before the record:
-  //     JSZip would read the ZIP64 directory, which is not supported here.
-  if (fin >= 20 && v.getUint32(fin - 20, true) === 0x07064b50) return null;
+  // ES: JSZip pasa a ZIP64 (que aquí no se admite) si CUALQUIER campo del
+  //     registro de fin vale su centinela: disco, disco del directorio,
+  //     entradas de este disco y totales (0xFFFF), tamaño y posición del
+  //     directorio (0xFFFFFFFF). Se rechazan los seis, igual que JSZip los mira.
+  // EN: JSZip switches to ZIP64 (not supported here) if ANY end record field
+  //     holds its sentinel: disk, directory disk, entries on this disk and
+  //     totals (0xFFFF), directory size and offset (0xFFFFFFFF). All six are
+  //     rejected, the same way JSZip checks them.
   const total = v.getUint16(fin + 10, true);
   const tamDir = v.getUint32(fin + 12, true);
   const inicioDir = v.getUint32(fin + 16, true);
+  const centinela16 = [4, 6, 8, 10].some((o) => v.getUint16(fin + o, true) === 0xffff);
+  if (centinela16 || tamDir === 0xffffffff || inicioDir === 0xffffffff) return null;
   // ES: El directorio va justo antes del registro de fin, sin hueco: así no
   //     puede haber cabeceras centrales de más que otro lector (JSZip recorre
   //     mientras encuentra firmas) leería y esta cuenta no.
