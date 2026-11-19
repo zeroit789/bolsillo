@@ -61,8 +61,8 @@ function v2(cambios: Record<string, unknown> = {}) {
 }
 
 describe("v3: calendario estricto / strict calendar", () => {
-  it("la versión actual es la 3 / current version is 3", () => {
-    expect(VERSION_DATOS).toBe(3);
+  it("la versión actual es la 4 / current version is 4", () => {
+    expect(VERSION_DATOS).toBe(4);
   });
 
   it.each([
@@ -110,7 +110,7 @@ describe("v3: calendario estricto / strict calendar", () => {
 describe("migración v2 → v3 / v2 → v3 migration", () => {
   it("datos v2 válidos pasan sin cambios salvo la versión / valid v2 data passes unchanged except the version", () => {
     const d = prepararDatos(v2());
-    expect(d.version).toBe(3);
+    expect(d.version).toBe(VERSION_DATOS);
     expect(d.puntuales[0].fecha).toBe("2026-02-10");
     expect(d.puntuales[0].tags).toBeUndefined();
   });
@@ -188,10 +188,10 @@ describe("migración v2 → v3 / v2 → v3 migration", () => {
     expect(d.deudas[0].inicioMes).toBe("2026-12");
   });
 
-  it("una v1 llega hasta la v3 en cadena / a v1 reaches v3 through the chain", () => {
+  it("una v1 llega hasta la versión actual en cadena / a v1 reaches the current version through the chain", () => {
     const v1 = { recurrentes: [], puntuales: v2().puntuales, deudas: [] };
     const d = prepararDatos(v1);
-    expect(d.version).toBe(3);
+    expect(d.version).toBe(VERSION_DATOS);
     expect(d.planes).toEqual([]);
   });
 

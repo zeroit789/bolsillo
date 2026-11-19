@@ -28,6 +28,8 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { VERSION_DATOS } from "../types";
 import type {
+  AjusteSaldo,
+  Correccion,
   Cuenta,
   DatosBolsillo,
   Deuda,
@@ -36,8 +38,11 @@ import type {
   Plan,
   Plantilla,
   Presupuesto,
+  PerfilBanco,
   Puntual,
   Recurrente,
+  ReglaCategoria,
+  Transferencia,
 } from "../types";
 import { mesActual, diffMeses, sumarMeses } from "../utils/format";
 import { estadoDeuda } from "../utils/deuda";
@@ -66,6 +71,17 @@ export const useFinanzas = defineStore("finanzas", () => {
   const presupuestos = ref<Presupuesto[]>([]);
   const plantillas = ref<Plantilla[]>([]);
   const cuentas = ref<Cuenta[]>([]);
+  // ES: Colecciones de la v4: reglas de categoría, perfiles de banco para
+  //     importar extractos, transferencias entre cuentas, ajustes de saldo y
+  //     correcciones de categoría (alimentan las sugerencias de reglas).
+  // EN: v4 collections: category rules, bank profiles to import statements,
+  //     transfers between accounts, balance adjustments and category
+  //     corrections (they feed the rule suggestions).
+  const reglas = ref<ReglaCategoria[]>([]);
+  const perfilesBanco = ref<PerfilBanco[]>([]);
+  const transferencias = ref<Transferencia[]>([]);
+  const ajustesSaldo = ref<AjusteSaldo[]>([]);
+  const correcciones = ref<Correccion[]>([]);
 
   // ES: El mes visto se recuerda entre sesiones; no es dato sensible, así que
   //     va en claro. Si el usuario eligió un mes concreto, al reabrir sigue ahí.
@@ -96,6 +112,11 @@ export const useFinanzas = defineStore("finanzas", () => {
     presupuestos.value = datos.presupuestos ?? [];
     plantillas.value = datos.plantillas ?? [];
     cuentas.value = datos.cuentas ?? [];
+    reglas.value = datos.reglas ?? [];
+    perfilesBanco.value = datos.perfilesBanco ?? [];
+    transferencias.value = datos.transferencias ?? [];
+    ajustesSaldo.value = datos.ajustesSaldo ?? [];
+    correcciones.value = datos.correcciones ?? [];
   }
 
   // ES: Snapshot serializable de todos los datos (para guardar / exportar). Lleva
@@ -112,6 +133,11 @@ export const useFinanzas = defineStore("finanzas", () => {
       presupuestos: presupuestos.value,
       plantillas: plantillas.value,
       cuentas: cuentas.value,
+      reglas: reglas.value,
+      perfilesBanco: perfilesBanco.value,
+      transferencias: transferencias.value,
+      ajustesSaldo: ajustesSaldo.value,
+      correcciones: correcciones.value,
     };
   }
 
@@ -579,6 +605,11 @@ export const useFinanzas = defineStore("finanzas", () => {
     presupuestos,
     plantillas,
     cuentas,
+    reglas,
+    perfilesBanco,
+    transferencias,
+    ajustesSaldo,
+    correcciones,
     mesSeleccionado,
     // ES: hidratación / persistencia — EN: hydration / persistence
     hidratar,

@@ -2584,4 +2584,36 @@ mod tests {
             Some(ErrorAlmacen::SinCopia)
         );
     }
+
+    // ES: Los datos son texto opaco para Rust: unos datos v4 (reglas,
+    //     perfiles, transferencias, ajustes y campos nuevos) salen idénticos
+    //     del almacén, de una copia automática y de una copia cifrada.
+    // EN: Data is opaque text for Rust: v4 data (rules, profiles, transfers,
+    //     adjustments and new fields) comes back identical from the store, an
+    //     automatic backup and an encrypted backup.
+    #[test]
+    fn datos_v4_ida_y_vuelta_sin_tocar() {
+        let datos = concat!(
+            "{\"version\":4,\"recurrentes\":[{\"id\":\"r\",\"frecuencia\":\"semanal\",",
+            "\"fechaInicio\":\"2026-02-03\",\"cuotas\":10}],",
+            "\"puntuales\":[{\"id\":\"p\",\"origen\":\"importado\",\"importId\":\"a|b\"}],",
+            "\"reglas\":[{\"id\":\"g\",\"contiene\":\"super\"}],",
+            "\"perfilesBanco\":[{\"id\":\"b\",\"firma\":[\"fecha\"]}],",
+            "\"transferencias\":[{\"id\":\"t\",\"importe\":5}],",
+            "\"ajustesSaldo\":[{\"id\":\"a\",\"importe\":-1.5}],",
+            "\"correcciones\":[{\"concepto\":\"x\",\"categoria\":\"y\"}]}"
+        );
+        let (_t, mut b) = boveda();
+        b.crear(datos, &[], Bloqueo::Pin, Some("2468"), false, "t")
+            .unwrap();
+        b.guardar(datos, &[]).unwrap();
+        b.bloquear();
+        assert_eq!(b.abrir(Some("2468")).unwrap(), datos);
+        let copia = b.listar_copias()[0].nombre.clone();
+        assert_eq!(b.probar_copia(&copia, Some("2468")).unwrap(), datos);
+        let bytes = b.bytes_copia(datos, "contraseña-copia").unwrap();
+        let (_t2, mut otra) = boveda();
+        otra.elegir_copia(bytes).unwrap();
+        assert_eq!(otra.descifrar_copia("contraseña-copia").unwrap(), datos);
+    }
 }

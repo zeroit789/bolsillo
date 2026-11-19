@@ -130,6 +130,11 @@ describe("resumenDe del store / store resumenDe", () => {
       presupuestos: [],
       plantillas: [],
       cuentas: [],
+      reglas: [],
+      perfilesBanco: [],
+      transferencias: [],
+      ajustesSaldo: [],
+      correcciones: [],
     });
 
     expect(f.resumenDe("2026-02")).toEqual({

@@ -36,6 +36,11 @@ const datos: DatosBolsillo = {
   presupuestos: [],
   plantillas: [],
   cuentas: [],
+  reglas: [],
+  perfilesBanco: [],
+  transferencias: [],
+  ajustesSaldo: [],
+  correcciones: [],
 };
 
 describe("cifrar / descifrar", () => {

@@ -182,6 +182,15 @@ export function datosDemo(): DatosBolsillo {
       { id: nuevoId(), nombre: "Efectivo", saldoInicial: 200 },
       { id: nuevoId(), nombre: "Banco", saldoInicial: 1500 },
     ],
+    // ES: Colecciones de la v4 vacías: el ejemplo no trae reglas, perfiles de
+    //     banco, transferencias, ajustes ni correcciones.
+    // EN: Empty v4 collections: the sample has no rules, bank profiles,
+    //     transfers, adjustments or corrections.
+    reglas: [],
+    perfilesBanco: [],
+    transferencias: [],
+    ajustesSaldo: [],
+    correcciones: [],
   };
 }
 
@@ -198,5 +207,10 @@ export function datosVacios(): DatosBolsillo {
     presupuestos: [],
     plantillas: [],
     cuentas: [],
+    reglas: [],
+    perfilesBanco: [],
+    transferencias: [],
+    ajustesSaldo: [],
+    correcciones: [],
   };
 }

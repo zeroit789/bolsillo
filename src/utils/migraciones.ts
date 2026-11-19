@@ -17,8 +17,9 @@
  *   2. Versión de unos datos / Version of some data
  *   3. Migración v1 → v2 / Migration v1 → v2
  *   4. Migración v2 → v3 / Migration v2 → v3
- *   5. Cadena de migraciones / Migration chain
- *   6. Preparar datos (migrar + validar) / Prepare data (migrate + validate)
+ *   5. Migración v3 → v4 / Migration v3 → v4
+ *   6. Cadena de migraciones / Migration chain
+ *   7. Preparar datos (migrar + validar) / Prepare data (migrate + validate)
  * ===========================================================================*/
 
 // ── 1. Importaciones y errores / Imports & errors ────────────────────────────
@@ -220,7 +221,38 @@ function v2aV3(d: Obj): Obj {
   return o;
 }
 
-// ── 5. Cadena de migraciones / Migration chain ────────────────────────────────
+// ── 5. Migración v3 → v4 / Migration v3 → v4 ──────────────────────────────────
+// ES: Colecciones que aparecen en la v4 (1.2.0, uso real).
+// EN: Collections that appear in v4 (1.2.0, real use).
+const COLECCIONES_V4 = [
+  "reglas",
+  "perfilesBanco",
+  "transferencias",
+  "ajustesSaldo",
+  "correcciones",
+];
+
+// ES: v3 → v4. La v4 añade colecciones (reglas, perfiles de banco,
+//     transferencias, ajustes de saldo y correcciones) y campos OPCIONALES en
+//     recurrentes (frecuencia, fechaInicio, fechaFin, cuotas) y puntuales
+//     (origen, importId). Unos datos v3 no tienen nada de eso: se rellenan las
+//     colecciones con [] y ningún apunte cambia, así que un recurrente v3
+//     sigue tocando una vez al mes y los saldos no se mueven.
+// EN: v3 → v4. v4 adds collections (rules, bank profiles, transfers, balance
+//     adjustments and corrections) and OPTIONAL fields on recurring entries
+//     (frecuencia, fechaInicio, fechaFin, cuotas) and one-off entries (origen,
+//     importId). v3 data has none of that: the collections are filled with []
+//     and no entry changes, so a v3 recurring entry still falls once a month
+//     and balances do not move.
+function v3aV4(d: Obj): Obj {
+  const o: Obj = { ...d };
+  for (const k of COLECCIONES_V4)
+    o[k] = o[k] === undefined || o[k] === null ? [] : copiarLista(o[k]);
+  o.version = 4;
+  return o;
+}
+
+// ── 6. Cadena de migraciones / Migration chain ────────────────────────────────
 // ES: Migración que lleva de la versión `clave` a `clave + 1`. Para un cambio de
 //     esquema nuevo: sube VERSION_DATOS y añade aquí la migración de la anterior.
 // EN: Migration that takes version `key` to `key + 1`. For a new schema change:
@@ -228,6 +260,7 @@ function v2aV3(d: Obj): Obj {
 const MIGRACIONES: Record<number, (d: Obj) => Obj> = {
   1: v1aV2,
   2: v2aV3,
+  3: v3aV4,
 };
 
 // ES: Lleva unos datos a VERSION_DATOS aplicando las migraciones en orden. No
@@ -251,7 +284,7 @@ export function migrar(datos: unknown): Obj {
   return o;
 }
 
-// ── 6. Preparar datos (migrar + validar) / Prepare data (migrate + validate) ──
+// ── 7. Preparar datos (migrar + validar) / Prepare data (migrate + validate) ──
 // ES: Migra y valida. Devuelve DatosBolsillo listo para hidratar o lanza
 //     ErrorDatos con el motivo.
 // EN: Migrates and validates. Returns DatosBolsillo ready to hydrate or throws

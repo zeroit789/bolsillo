@@ -65,7 +65,27 @@ function copia(): DatosBolsillo {
     planes: [{ id: "pl1", nombre: "Vacaciones", objetivo: 900, aportado: 150 }],
     presupuestos: [{ categoria: "Comida", limite: 300 }],
     plantillas: [],
-    cuentas: [{ id: "c1", nombre: "Banco", saldoInicial: 500 }],
+    cuentas: [
+      { id: "c1", nombre: "Banco", saldoInicial: 500 },
+      { id: "c2", nombre: "Hucha", saldoInicial: 0 },
+    ],
+    // ES: Colecciones de la v4 con un elemento cada una, para que las idas y
+    //     vueltas (guardar, exportar, importar) las cubran.
+    // EN: v4 collections with one item each, so the round trips (save,
+    //     export, import) cover them.
+    reglas: [{ id: "g1", contiene: "super", categoria: "Comida", prioridad: 1 }],
+    perfilesBanco: [
+      {
+        id: "b1",
+        nombre: "Banco de prueba",
+        formatoFecha: "dma",
+        formatoDecimal: "coma",
+        columnas: { fecha: "Fecha", concepto: "Concepto", cargo: "Cargo", abono: "Abono" },
+      },
+    ],
+    transferencias: [{ id: "t1", origen: "c1", destino: "c2", importe: 40, fecha: "2026-02-11" }],
+    ajustesSaldo: [{ id: "a1", cuenta: "c1", importe: -2.5, fecha: "2026-02-12", nota: "Banco" }],
+    correcciones: [{ concepto: "COMPRA SUPER", categoria: "Comida", signo: "gasto" }],
   };
 }
 
@@ -272,6 +292,11 @@ describe("esDatosValidos", () => {
       presupuestos: [],
       plantillas: [],
       cuentas: [],
+      reglas: [],
+      perfilesBanco: [],
+      transferencias: [],
+      ajustesSaldo: [],
+      correcciones: [],
     });
   });
 

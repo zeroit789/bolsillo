@@ -32,6 +32,18 @@
  *   8. Raíz persistida y validación (VERSION_DATOS, DatosBolsillo, esDatosValidos) / Persisted root & validation
  * ===========================================================================*/
 
+// ES: Tipos de la v4 que viven junto a su lógica pura (importador, recurrencia
+//     y transferencias); aquí se reexportan para que el modelo esté completo.
+// EN: v4 types that live next to their pure logic (importer, recurrence and
+//     transfers); they are re-exported here so the model is complete.
+import type { Frecuencia } from "../utils/recurrencia";
+import type { AjusteSaldo, Transferencia } from "../utils/transferencias";
+import type { Correccion, ReglaCategoria } from "../utils/importador/reglas";
+import type { PerfilBanco } from "../utils/importador/perfil";
+import { esReglaCategoriaValida } from "../utils/importador/reglas";
+import { esPerfilBancoValido } from "../utils/importador/perfil";
+export type { AjusteSaldo, Correccion, Frecuencia, PerfilBanco, ReglaCategoria, Transferencia };
+
 // ── 1. Signo del apunte / Entry sign ─────────────────────────────────────────
 
 // ES: Un apunte suma (ingreso) o resta (gasto). El importe se guarda siempre en
@@ -58,7 +70,26 @@ export interface Recurrente {
   comercio?: string; // ES: dónde se hizo (Mercadona, Amazon…); opcional / EN: where it happened (Mercadona, Amazon…); optional
   tags?: string[]; // ES: etiquetas transversales (#vacaciones…); opcional / EN: cross-cutting tags (#holidays…); optional
   cuenta?: string; // ES: id de la cuenta a la que pertenece; opcional / EN: id of the owning account; optional
+  // ES: Recurrentes reales (v4). Sin ellos, toca una vez al mes como antes;
+  //     el cálculo está en utils/recurrencia.ts (ocurrenciasEnMes).
+  // EN: Real recurring entries (v4). Without them, it falls once a month as
+  //     before; the calculation lives in utils/recurrencia.ts (ocurrenciasEnMes).
+  frecuencia?: Frecuencia; // ES: semanal | mensual | trimestral | anual / EN: weekly | monthly | quarterly | yearly
+  fechaInicio?: string; // ES: "YYYY-MM-DD" primer día posible (su mes es `desde`) / EN: "YYYY-MM-DD" first possible day (its month is `desde`)
+  fechaFin?: string; // ES: "YYYY-MM-DD" último día incluido / EN: "YYYY-MM-DD" last day included
+  cuotas?: number; // ES: número total de cobros (entero > 0) / EN: total number of charges (integer > 0)
 }
+
+// ES: Tope de cuotas de un recurrente (100 años de cobros semanales).
+// EN: Cap on a recurring entry's instalments (100 years of weekly charges).
+export const CUOTAS_MAX = 5200;
+
+// ES: Frecuencias válidas de un recurrente. / EN: Valid frequencies of a recurring entry.
+export const FRECUENCIAS: Frecuencia[] = ["semanal", "mensual", "trimestral", "anual"];
+
+// ES: De dónde viene un puntual: escrito a mano o importado de un extracto.
+// EN: Where a one-off entry comes from: typed by hand or imported from a statement.
+export type OrigenPuntual = "manual" | "importado";
 
 // ── 3. Apuntes puntuales / One-off entries ───────────────────────────────────
 
@@ -79,7 +110,19 @@ export interface Puntual {
   reciboId?: string; // ES: id del recibo guardado aparte, cifrado (v3); opcional / EN: id of the receipt stored separately, encrypted (v3); optional
   cuenta?: string; // ES: id de la cuenta a la que pertenece; opcional / EN: id of the owning account; optional
   subdivisiones?: Subdivision[]; // ES: gasto dividido en varias categorías; opcional / EN: expense split into several categories; optional
+  origen?: OrigenPuntual; // ES: sin campo = manual (v4) / EN: no field = manual (v4)
+  // ES: Huella de la fila del extracto de la que salió (v4): "fecha|signo|
+  //     céntimos|concepto normalizado" del banco. Sirve para reconocer el
+  //     mismo movimiento al reimportar aunque luego se edite el concepto.
+  // EN: Fingerprint of the statement row it came from (v4): the bank's
+  //     "date|sign|cents|normalised concept". Used to recognise the same
+  //     movement when re-importing even if the concept is edited later.
+  importId?: string;
 }
+
+// ES: Tope de longitud de una huella de importación.
+// EN: Length cap of an import fingerprint.
+export const IMPORT_ID_MAX = 600;
 
 // ── 4. Deudas / Debts ─────────────────────────────────────────────────────────
 
@@ -215,13 +258,19 @@ export interface Plan {
 //     añade su migración) cada vez que cambie la forma de DatosBolsillo.
 //     v3 (1.2.0): `reciboId` (el recibo va cifrado en su propio fichero) y
 //     calendario estricto en meses y fechas.
+//     v4 (1.2.0): reglas, perfiles de banco, transferencias, ajustes de saldo,
+//     correcciones de categoría y los campos opcionales de recurrentes reales
+//     y de puntuales importados.
 // EN: CURRENT data schema version. Data saved without a `version` field
 //     (everything before 1.2.0) is version 1; utils/migraciones.ts upgrades it
 //     step by step to this version before validating it. Bump it (and add its
 //     migration) every time the shape of DatosBolsillo changes.
 //     v3 (1.2.0): `reciboId` (the receipt is encrypted in its own file) and a
 //     strict calendar for months and dates.
-export const VERSION_DATOS = 3;
+//     v4 (1.2.0): rules, bank profiles, transfers, balance adjustments,
+//     category corrections and the optional fields of real recurring entries
+//     and imported one-off entries.
+export const VERSION_DATOS = 4;
 
 // ES: ¿"AAAA-MM" con un mes real (01-12)? Exacto: nada de texto detrás.
 // EN: "YYYY-MM" with a real month (01-12)? Exact: no trailing text.
@@ -270,7 +319,16 @@ export interface DatosBolsillo {
   presupuestos: Presupuesto[];
   plantillas: Plantilla[];
   cuentas: Cuenta[];
+  reglas: ReglaCategoria[]; // ES: categorización automática (v4) / EN: automatic categorisation (v4)
+  perfilesBanco: PerfilBanco[]; // ES: cómo leer el extracto de cada banco (v4) / EN: how to read each bank's statement (v4)
+  transferencias: Transferencia[]; // ES: dinero movido entre cuentas (v4) / EN: money moved between accounts (v4)
+  ajustesSaldo: AjusteSaldo[]; // ES: conciliaciones con el banco (v4) / EN: reconciliations with the bank (v4)
+  correcciones: Correccion[]; // ES: categorías cambiadas a mano, para sugerir reglas (v4) / EN: categories changed by hand, to suggest rules (v4)
 }
+
+// ES: Tope de correcciones guardadas (las más recientes).
+// EN: Cap on stored corrections (the most recent ones).
+export const CORRECCIONES_MAX = 300;
 
 // ES: Valida que un objeto tenga EXACTAMENTE la forma de DatosBolsillo en la
 //     versión actual: todas las colecciones y todos los campos, incluidos los
@@ -307,6 +365,12 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const diaOk = (x: unknown) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 31;
   const tagsOk = (x: unknown) => Array.isArray(x) && x.every((t) => typeof t === "string");
   const tiposDeuda: string[] = TIPOS_DEUDA.map((t) => t.valor);
+  // ES: Cuotas: entero entre 1 y CUOTAS_MAX. / EN: Instalments: integer between 1 and CUOTAS_MAX.
+  const cuotasOk = (x: unknown) =>
+    Number.isInteger(x) && (x as number) >= 1 && (x as number) <= CUOTAS_MAX;
+  // ES: Huella de importación: texto no vacío con tope. / EN: Import fingerprint: non-empty capped text.
+  const huellaOk = (x: unknown) =>
+    typeof x === "string" && x.length > 0 && x.length <= IMPORT_ID_MAX;
   // ES: Una colección obligatoria: array cuyos elementos (objetos) pasan `ok`.
   // EN: A mandatory collection: an array whose items (objects) all pass `ok`.
   const lista = (x: unknown, ok: (e: Record<string, unknown>) => boolean) =>
@@ -329,7 +393,11 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
       opt(r.diaPago, diaOk) &&
       opt(r.comercio, str) &&
       opt(r.tags, tagsOk) &&
-      opt(r.cuenta, str)
+      opt(r.cuenta, str) &&
+      opt(r.frecuencia, (x) => FRECUENCIAS.includes(x as Frecuencia)) &&
+      opt(r.fechaInicio, fechaOk) &&
+      opt(r.fechaFin, fechaOk) &&
+      opt(r.cuotas, cuotasOk)
   );
   // ES: Las subdivisiones (gasto dividido) son opcionales, pero si vienen deben
   //     ser { categoria:string, importe:number finito } o el reparto daría NaN.
@@ -355,7 +423,9 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
       opt(p.recibo, str) &&
       opt(p.reciboId, esIdReciboValido) &&
       opt(p.cuenta, str) &&
-      opt(p.subdivisiones, subOk)
+      opt(p.subdivisiones, subOk) &&
+      opt(p.origen, (x) => x === "manual" || x === "importado") &&
+      opt(p.importId, huellaOk)
   );
   // ES: Deudas: id, concepto, tipo conocido, importes finitos, mes de inicio
   //     válido y día de pago opcional.
@@ -387,7 +457,36 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
     (x) => str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)
   );
   const cue = lista(o.cuentas, (x) => str(x.id) && str(x.nombre) && num(x.saldoInicial));
+  // ES: Colecciones de la v4. Reglas y perfiles usan el validador de su
+  //     módulo; transferencias con importe > 0 y fecha real; ajustes con
+  //     importe finito (con signo) y fecha real; correcciones con concepto,
+  //     categoría y signo opcional.
+  // EN: v4 collections. Rules and profiles use their module's validator;
+  //     transfers with amount > 0 and a real date; adjustments with a finite
+  //     (signed) amount and a real date; corrections with concept, category
+  //     and optional sign.
+  const reg = lista(o.reglas, esReglaCategoriaValida);
+  const per = lista(o.perfilesBanco, esPerfilBancoValido);
+  const tra = lista(
+    o.transferencias,
+    (x) =>
+      str(x.id) &&
+      str(x.origen) &&
+      str(x.destino) &&
+      num(x.importe) &&
+      (x.importe as number) > 0 &&
+      fechaOk(x.fecha) &&
+      opt(x.concepto, str)
+  );
+  const aju = lista(
+    o.ajustesSaldo,
+    (x) => str(x.id) && str(x.cuenta) && num(x.importe) && fechaOk(x.fecha) && opt(x.nota, str)
+  );
+  const cor = lista(
+    o.correcciones,
+    (x) => str(x.concepto) && str(x.categoria) && opt(x.signo, signo)
+  );
   // ES: Válido solo si todas las colecciones pasan su comprobación.
   // EN: Valid only if every collection passes its check.
-  return rec && pun && deu && pla && pre && pll && cue;
+  return rec && pun && deu && pla && pre && pll && cue && reg && per && tra && aju && cor;
 }
