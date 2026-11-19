@@ -17,6 +17,7 @@ En Windows, el directorio de datos es `%APPDATA%\com.zeroit.bolsillo\` (con el p
 |---|---|
 | `datos.bolsillo` | Los datos, cifrados. JSON con una cabecera en claro (versión de formato, tipo de bloqueo, parámetros y sal de Argon2id, clave de datos envuelta) y el contenido cifrado con AES-256-GCM. |
 | `almacen.marca` | Marca de que aquí ya hay un almacén. Si falta `datos.bolsillo` pero existe la marca (o hay copias o rescates), la app **no** vuelve a migrar ni enseña la bienvenida: muestra la pantalla de error. |
+| `pendientes.json` | Copias que no se pudieron pasar a la protección nueva (por ejemplo, sin espacio). Se reintentan al entrar con el PIN y la app lo avisa mientras queden. |
 | `recibos\<id de clave>\<id>.rec` | Cada foto de recibo, cifrada en su propio fichero. No se borran nunca (las copias viejas los siguen necesitando). |
 | `copias\reciente-*.bolsillo` | Las 10 últimas versiones, como mucho una cada 10 minutos. |
 | `copias\diaria-AAAA-MM-DD.bolsillo` | Una por día (UTC), las 30 últimas. |
@@ -31,7 +32,7 @@ El `localStorage` de la 1.1.0 sigue en el perfil del WebView, `%LOCALAPPDATA%\co
 1. Se leen los datos de `localStorage` como siempre (con tu PIN o contraseña si tenías bloqueo).
 2. Rust escribe `datos.bolsillo.migrando` y lo verifica: lo vuelve a leer, deriva otra vez la clave desde tu credencial, lo descifra y compara los bytes; también comprueba los recibos y que la clave de recuperación abre.
 3. La app lo relee por el camino normal (descifrar, migrar, validar) y lo compara en profundidad con los datos de origen, recibos incluidos.
-4. Solo si todo coincide se renombra a `datos.bolsillo` y se escribe `almacen.marca`. La cabecera guarda la huella SHA-256 del bloque de `localStorage` migrado.
+4. Solo si todo coincide, y si no hay ya un `datos.bolsillo`, ni marca, ni copias, ni rescates, se publica como `datos.bolsillo` sin poder pisar nada (enlace duro: falla si el nombre ya existe) y se escribe `almacen.marca` (si falla, se vuelve a escribir al abrir). La cabecera guarda la huella SHA-256 del bloque de `localStorage` migrado.
 
 Si algo falla, `datos.bolsillo.migrando` se aparta a `rescate\migracion-*.bolsillo`, la app sigue usando `localStorage` como hasta ahora (con un aviso) y lo vuelve a intentar en el siguiente arranque.
 
@@ -71,6 +72,7 @@ On Windows, the data directory is `%APPDATA%\com.zeroit.bolsillo\` (with the dev
 |---|---|
 | `datos.bolsillo` | The data, encrypted. JSON with a plaintext header (format version, lock type, Argon2id parameters and salt, wrapped data key) and the content encrypted with AES-256-GCM. |
 | `almacen.marca` | Marker that a store already lives here. If `datos.bolsillo` is missing but the marker exists (or there are backups or rescues), the app does **not** migrate again nor show the welcome: it shows the error screen. |
+| `pendientes.json` | Backups that could not be moved to the new protection (for example, no space left). Retried when you get in with the PIN; the app warns while any remain. |
 | `recibos\<key id>\<id>.rec` | Each receipt photo, encrypted in its own file. They are never deleted (old backups still need them). |
 | `copias\reciente-*.bolsillo` | The last 10 versions, at most one every 10 minutes. |
 | `copias\diaria-YYYY-MM-DD.bolsillo` | One per day (UTC), the last 30. |
@@ -85,7 +87,7 @@ The 1.1.0 `localStorage` stays in the WebView profile, `%LOCALAPPDATA%\com.zeroi
 1. The data is read from `localStorage` as always (with your PIN or password if you had a lock).
 2. Rust writes `datos.bolsillo.migrando` and verifies it: reads it back, derives the key again from your credential, decrypts it and compares the bytes; it also checks the receipts and that the recovery key opens it.
 3. The app reads it back through the normal path (decrypt, migrate, validate) and deep-compares it with the source data, receipts included.
-4. Only if everything matches is it renamed to `datos.bolsillo` and `almacen.marca` written. The header keeps the SHA-256 fingerprint of the migrated `localStorage` block.
+4. Only if everything matches, and if there is no `datos.bolsillo`, marker, backups or rescues yet, is it published as `datos.bolsillo` without being able to overwrite anything (hard link: it fails if the name already exists) and `almacen.marca` written (if that fails, it is written again on open). The header keeps the SHA-256 fingerprint of the migrated `localStorage` block.
 
 If anything fails, `datos.bolsillo.migrando` is moved to `rescate\migracion-*.bolsillo`, the app keeps using `localStorage` as before (with a warning) and tries again on the next start.
 
