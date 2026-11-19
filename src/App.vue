@@ -235,17 +235,19 @@ function revisarPagosProximos() {
   } catch {
     avisados = { mes, ids: [] };
   }
-  // ES: Mes nuevo: se reinician los avisos de cuotas, pero los de fijos (clave
-  //     "r" + id + fecha) se conservan mientras su fecha no haya pasado, para
-  //     no repetir un cobro del día 1 avisado a finales del mes anterior.
-  // EN: New month: installment reminders are reset, but fixed-item ones (key
-  //     "r" + id + date) are kept while their date has not passed, so a charge
-  //     on the 1st reminded at the end of the previous month is not repeated.
+  // ES: Mes nuevo: las claves (fijos "r" + id + fecha y cuotas "d" + id +
+  //     fecha) se conservan mientras su fecha no haya pasado, para no repetir
+  //     un cobro del día 1 avisado a finales del mes anterior. Las claves
+  //     antiguas sin fecha se descartan.
+  // EN: New month: keys (fixed items "r" + id + date and installments "d" +
+  //     id + date) are kept while their date has not passed, so a charge on
+  //     the 1st reminded at the end of the previous month is not repeated.
+  //     Old keys without a date are dropped.
   if (avisados.mes !== mes) {
     const hoyClave = mesActual() + "-" + String(ahora.getDate()).padStart(2, "0");
     avisados = {
       mes,
-      ids: avisados.ids.filter((k) => k.startsWith("r") && k.slice(-10) >= hoyClave),
+      ids: avisados.ids.filter((k) => /\d{4}-\d{2}-\d{2}$/.test(k) && k.slice(-10) >= hoyClave),
     };
   }
   const set = new Set<string>(avisados.ids);
@@ -255,8 +257,10 @@ function revisarPagosProximos() {
   // EN: Days until the next occurrence of a payment day, crossing month-end
   //     correctly (e.g. today is the 30th and payment is on the 1st → 1-2 days,
   //     not a negative number). In range = due within the next 3 days.
-  const enRango = (dia?: number) => {
-    if (typeof dia !== "number" || dia < 1 || dia > 31) return false;
+  //     Devuelve la fecha "AAAA-MM-DD" del vencimiento o null si no está en rango.
+  // EN: Returns the "YYYY-MM-DD" due date or null if it is not in range.
+  const enRango = (dia?: number): string | null => {
+    if (typeof dia !== "number" || dia < 1 || dia > 31) return null;
     const hoy0 = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     // ES: Acota el día de pago al último día real del mes objetivo, para que un
     //     día como 31 en un mes de 30 no se desborde al día 1 del siguiente.
@@ -268,7 +272,9 @@ function revisarPagosProximos() {
     let objetivo = new Date(y, m, Math.min(dia, ultimoDia(y, m)));
     if (objetivo < hoy0) objetivo = new Date(y, m + 1, Math.min(dia, ultimoDia(y, m + 1)));
     const dias = Math.round((objetivo.getTime() - hoy0.getTime()) / 86_400_000);
-    return dias >= 0 && dias <= 3;
+    if (dias < 0 || dias > 3) return null;
+    const dd = (n: number) => String(n).padStart(2, "0");
+    return `${objetivo.getFullYear()}-${dd(objetivo.getMonth() + 1)}-${dd(objetivo.getDate())}`;
   };
 
   // ES: Gastos fijos con fecha conocida (día de pago o fecha de inicio): sus
@@ -299,14 +305,15 @@ function revisarPagosProximos() {
       );
     }
   }
-  // ES: Cuotas de deudas activas (omite deudas sin cuota este mes). Id con prefijo
-  //     "d" para mantenerlo distinto de los ids de recurrentes.
-  // EN: Installments of active debts (skip debts with no installment this month).
-  //     Id prefixed "d" to keep it distinct from recurrent ids.
+  // ES: Cuotas de deudas activas (omite deudas sin cuota este mes). Clave "d" +
+  //     id + fecha de vencimiento, distinta de las de los fijos.
+  // EN: Installments of active debts (skip debts with no installment this
+  //     month). Key "d" + id + due date, distinct from fixed-item keys.
   for (const d of f.deudas) {
     if (estadoDeuda(d, mes).cuotaDelMes <= 0) continue;
-    if (enRango(d.diaPago) && !set.has("d" + d.id)) {
-      set.add("d" + d.id);
+    const vence = enRango(d.diaPago);
+    if (vence && !set.has("d" + d.id + vence)) {
+      set.add("d" + d.id + vence);
       void notificar(
         t("notifCuotaTitulo"),
         t("notifPagoCuerpo")

@@ -334,3 +334,15 @@ describe("revisión: validación antes de guardar / review: validation before sa
     expect(f.cuentaConMovimientosEntreCuentas(banco)).toBe(true);
   });
 });
+
+describe("revisión 2 / review 2", () => {
+  it("el store no borra una cuenta con transferencias o ajustes / the store does not delete an account with transfers or adjustments", () => {
+    const { f, banco, hucha } = conCuentas();
+    f.addTransferencia({ origen: banco, destino: hucha, importe: 5, fecha: "2026-02-01" });
+    expect(f.eliminarCuenta(hucha)).toBe(false);
+    expect(f.cuentas).toHaveLength(2);
+    f.eliminarTransferencia(f.transferencias[0].id);
+    expect(f.eliminarCuenta(hucha)).toBe(true);
+    expect(f.cuentas).toHaveLength(1);
+  });
+});

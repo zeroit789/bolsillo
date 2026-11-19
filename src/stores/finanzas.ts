@@ -613,10 +613,16 @@ export const useFinanzas = defineStore("finanzas", () => {
     const i = cuentas.value.findIndex((c) => c.id === id);
     if (i !== -1) cuentas.value[i] = { ...cuentas.value[i], ...cambios };
   }
-  // ES: Elimina una cuenta por id.
-  // EN: Remove an account by id.
-  function eliminarCuenta(id: string) {
+  // ES: Elimina una cuenta por id. false (sin borrar) si tiene transferencias
+  //     o ajustes: seguirían moviendo la otra cuenta y descuadrarían el
+  //     patrimonio (ver cuentaConMovimientosEntreCuentas).
+  // EN: Remove an account by id. false (nothing deleted) if it has transfers
+  //     or adjustments: they would keep moving the other account and
+  //     unbalance net worth (see cuentaConMovimientosEntreCuentas).
+  function eliminarCuenta(id: string): boolean {
+    if (cuentaConMovimientosEntreCuentas(id)) return false;
     cuentas.value = cuentas.value.filter((c) => c.id !== id);
+    return true;
   }
   // ES: Saldo de cada cuenta = saldo inicial + neto de sus movimientos
   //     puntuales + transferencias (salen de una, entran en otra) + ajustes de

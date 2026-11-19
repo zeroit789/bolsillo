@@ -263,9 +263,11 @@ function borrar(cuenta: Cuenta) {
     return;
   }
   // ES: Confirmación bilingüe: el nombre de la cuenta es dato del usuario y no se traduce.
+  //     El store vuelve a comprobarlo y avisa si no la borra.
   // EN: Bilingual confirmation: the account name is user data and is not translated.
+  //     The store checks again and the view warns if it is not deleted.
   if (confirm(`${t("confirmEliminar")} "${cuenta.nombre}"?`)) {
-    finanzas.eliminarCuenta(cuenta.id);
+    if (!finanzas.eliminarCuenta(cuenta.id)) alert(t("errCuentaConMovimientos"));
   }
 }
 
