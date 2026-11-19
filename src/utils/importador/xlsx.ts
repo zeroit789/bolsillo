@@ -37,11 +37,12 @@ export type Celda = string | number | Date | null;
 //     allocating millions of cells.
 export const MAX_COLUMNAS = 64;
 export const MAX_FILAS = 50_000;
+export const MAX_BYTES = 20 * 1024 * 1024; // ES: 20 MB / EN: 20 MB
 
 // ES: Error de hoja demasiado grande (por columnas o por filas).
 // EN: Too-large sheet error (by columns or by rows).
 export class ErrorXLSX extends Error {
-  constructor(public readonly motivo: "columnas" | "filas") {
+  constructor(public readonly motivo: "columnas" | "filas" | "bytes") {
     super(`Hoja demasiado grande (${motivo}) / Sheet too large (${motivo})`);
     this.name = "ErrorXLSX";
   }
@@ -102,6 +103,9 @@ export async function leerXLSX(
   datos: ArrayBuffer | Uint8Array,
   opciones: OpcionesXLSX = {}
 ): Promise<Celda[][]> {
+  // ES: Un fichero enorme ni se abre: cargarlo ya bloquearía la app.
+  // EN: A huge file is not even opened: loading it would already freeze the app.
+  if (datos.byteLength > MAX_BYTES) throw new ErrorXLSX("bytes");
   const ExcelJS = await cargarExcelJS();
   const libro = new ExcelJS.Workbook();
   const bytes = datos instanceof Uint8Array ? datos : new Uint8Array(datos);
@@ -126,16 +130,17 @@ export async function leerXLSX(
     fila.eachCell((celda, columna) => {
       const v = valorCelda(celda.value);
       if (v === null) return;
+      // ES: Se corta en cuanto se pasa un tope, sin seguir acumulando.
+      // EN: Stop as soon as a cap is exceeded, without accumulating further.
+      if (columna > MAX_COLUMNAS) throw new ErrorXLSX("columnas");
       celdas.set(columna, v);
       ancho = Math.max(ancho, columna);
     });
     // ES: Filas sin nada útil, fuera (como las líneas vacías del CSV).
     // EN: Rows with nothing useful dropped (like empty CSV lines).
     if (celdas.size) dispersas.push(celdas);
+    if (dispersas.length > MAX_FILAS) throw new ErrorXLSX("filas");
   });
-  if (ancho > MAX_COLUMNAS || dispersas.length > MAX_FILAS) {
-    throw new ErrorXLSX(ancho > MAX_COLUMNAS ? "columnas" : "filas");
-  }
   return dispersas.map((celdas) =>
     Array.from({ length: ancho }, (_, i) => celdas.get(i + 1) ?? null)
   );

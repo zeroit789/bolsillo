@@ -12,7 +12,7 @@
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { ErrorXLSX, leerXLSX, valorCelda } from "./xlsx";
+import { ErrorXLSX, leerXLSX, MAX_BYTES, valorCelda } from "./xlsx";
 
 // ES: Crea un libro con una hoja de extracto inventada y lo devuelve en bytes.
 // EN: Creates a workbook with a made-up statement sheet and returns its bytes.
@@ -81,6 +81,10 @@ describe("leerXLSX con hojas dispersas o enormes / with sparse or huge sheets", 
       ["01/02/2026", "PAN", -1.2],
       ["suelta", null, null],
     ]);
+  });
+
+  it("un fichero demasiado grande se rechaza sin abrirlo / a too-large file is rejected without opening it", async () => {
+    await expect(leerXLSX(new Uint8Array(MAX_BYTES + 1))).rejects.toBeInstanceOf(ErrorXLSX);
   });
 
   it("una hoja demasiado ancha se rechaza / a too-wide sheet is rejected", async () => {
