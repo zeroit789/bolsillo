@@ -152,10 +152,12 @@ jobs:
           $carpeta = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP 'sumas')
           $lineas = @()
           $anterior = $null
-          $resto = $null
+          $restos = @()
           foreach ($f in ($ficheros | Sort-Object name)) {
+            # ES: Sumas de intentos anteriores (definitivas o temporales): no se hashean.
+            # EN: Sums from earlier runs (final or temporary): not hashed.
             if ($f.name -eq 'SHA256SUMS') { $anterior = $f; continue }
-            if ($f.name -eq 'SHA256SUMS.nuevo') { $resto = $f; continue }
+            if ($f.name -like 'SHA256SUMS.nuevo-*') { $restos += $f; continue }
             # ES: Solo ficheros terminados de subir. / EN: Only fully uploaded files.
             if ($f.state -ne 'uploaded') { throw "Fichero a medio subir / Incomplete upload: $($f.name)" }
             $destino = Join-Path $carpeta $f.name
@@ -177,17 +179,21 @@ jobs:
           if ($lineas.Count -eq 0) { throw "El release no tiene ficheros / The release has no files" }
           $sumas = Join-Path $carpeta 'SHA256SUMS'
           [IO.File]::WriteAllText($sumas, (($lineas -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
-          # ES: El nuevo se sube con nombre temporal y se comprueba; solo entonces
-          #     se retira el de un intento anterior y se renombra. Si algo falla a
-          #     mitad, el release nunca se queda sin ninguno.
-          # EN: The new one is uploaded under a temporary name and checked; only
-          #     then is a previous run's file removed and the new one renamed. If
-          #     something fails halfway, the release is never left with none.
-          if ($resto) { Invoke-RestMethod -Method Delete -Headers $cabeceras -Uri "$api/assets/$($resto.id)" }
-          $subida = "https://uploads.github.com/repos/$env:REPO/releases/$env:RELEASE_ID/assets?name=SHA256SUMS.nuevo"
+          # ES: El nuevo se sube con un nombre temporal ÚNICO de este intento y se
+          #     comprueba; solo entonces se retiran el definitivo y los temporales
+          #     de intentos anteriores, y se renombra. Si algo falla a mitad, en el
+          #     release siempre queda al menos una copia.
+          # EN: The new one is uploaded under a temporary name UNIQUE to this run
+          #     and checked; only then are the final one and earlier runs'
+          #     temporary ones removed, and it is renamed. If something fails
+          #     halfway, at least one copy always stays on the release.
+          $temporal = "SHA256SUMS.nuevo-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $subida = "https://uploads.github.com/repos/$env:REPO/releases/$env:RELEASE_ID/assets?name=$temporal"
           $nuevo = Invoke-RestMethod -Method Post -Headers $cabeceras -ContentType 'text/plain' -InFile $sumas -Uri $subida
           if ($nuevo.size -ne (Get-Item $sumas).Length) { throw "SHA256SUMS subido incompleto / SHA256SUMS upload incomplete" }
-          if ($anterior) { Invoke-RestMethod -Method Delete -Headers $cabeceras -Uri "$api/assets/$($anterior.id)" }
+          foreach ($viejo in @($anterior) + $restos) {
+            if ($viejo) { Invoke-RestMethod -Method Delete -Headers $cabeceras -Uri "$api/assets/$($viejo.id)" }
+          }
           $nombre = @{ name = 'SHA256SUMS' } | ConvertTo-Json
           Invoke-RestMethod -Method Patch -Headers $cabeceras -ContentType 'application/json' -Body $nombre -Uri "$api/assets/$($nuevo.id)" | Out-Null
           # ES: Copia en el resumen del job. / EN: Copy in the job summary.
