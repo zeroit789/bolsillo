@@ -151,11 +151,11 @@ jobs:
           $ficheros = Invoke-RestMethod -Headers $cabeceras -Uri "$api/$env:RELEASE_ID/assets?per_page=100"
           $carpeta = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP 'sumas')
           $lineas = @()
+          $anterior = $null
           foreach ($f in ($ficheros | Sort-Object name)) {
-            if ($f.name -eq 'SHA256SUMS') {
-              Invoke-RestMethod -Method Delete -Headers $cabeceras -Uri "$api/assets/$($f.id)"
-              continue
-            }
+            if ($f.name -eq 'SHA256SUMS') { $anterior = $f; continue }
+            # ES: Solo ficheros terminados de subir. / EN: Only fully uploaded files.
+            if ($f.state -ne 'uploaded') { throw "Fichero a medio subir / Incomplete upload: $($f.name)" }
             $destino = Join-Path $carpeta $f.name
             $descarga = $cabeceras.Clone()
             $descarga.Accept = 'application/octet-stream'
@@ -164,12 +164,22 @@ jobs:
             # EN: PowerShell 7 drops Authorization when following the redirect
             #     to GitHub's storage, which is what it expects.
             Invoke-WebRequest -Headers $descarga -Uri "$api/assets/$($f.id)" -OutFile $destino
+            # ES: Si no llegó el fichero entero (p. ej. JSON en vez del binario), fuera.
+            # EN: If the whole file did not arrive (e.g. JSON instead of the binary), stop.
+            if ((Get-Item $destino).Length -ne $f.size) {
+              throw "Tamaño distinto al descargar / Size mismatch on download: $($f.name)"
+            }
             $hash = (Get-FileHash -Algorithm SHA256 -Path $destino).Hash.ToLowerInvariant()
             $lineas += "$hash  $($f.name)"
           }
           if ($lineas.Count -eq 0) { throw "El release no tiene ficheros / The release has no files" }
           $sumas = Join-Path $carpeta 'SHA256SUMS'
           [IO.File]::WriteAllText($sumas, (($lineas -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
+          # ES: Solo con el nuevo listo se retira el SHA256SUMS de un intento anterior.
+          # EN: Only once the new one is ready is a previous run's SHA256SUMS removed.
+          if ($anterior) {
+            Invoke-RestMethod -Method Delete -Headers $cabeceras -Uri "$api/assets/$($anterior.id)"
+          }
           $subida = "https://uploads.github.com/repos/$env:REPO/releases/$env:RELEASE_ID/assets?name=SHA256SUMS"
           Invoke-RestMethod -Method Post -Headers $cabeceras -ContentType 'text/plain' -InFile $sumas -Uri $subida | Out-Null
           # ES: Copia en el resumen del job. / EN: Copy in the job summary.
