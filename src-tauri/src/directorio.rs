@@ -100,6 +100,29 @@ pub fn id_recibo_valido(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+// ES: ¿La ruta existe y NO es una redirección? Se mira sin seguir enlaces
+//     (symlink_metadata) y, en Windows, el atributo de punto de reanálisis
+//     (FILE_ATTRIBUTE_REPARSE_POINT = 0x400), que cubre también las uniones.
+// EN: Does the path exist and is it NOT a redirection? It is checked without
+//     following links (symlink_metadata) and, on Windows, the reparse point
+//     attribute (FILE_ATTRIBUTE_REPARSE_POINT = 0x400), which also covers junctions.
+pub fn sin_redireccion(p: &Path) -> bool {
+    let Ok(m) = fs::symlink_metadata(p) else {
+        return false;
+    };
+    if m.file_type().is_symlink() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if m.file_attributes() & 0x400 != 0 {
+            return false;
+        }
+    }
+    true
+}
+
 // ES: Información de una copia automática para la lista del frontend.
 // EN: Information about an automatic backup for the frontend list.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -389,9 +412,13 @@ impl Directorio {
         let origen = if mover {
             self.ruta(nombre)
         } else {
+            // ES: Sin aleatoriedad no hay nombre único: se falla en vez de
+            //     arriesgarse a compartir el temporal.
+            // EN: Without randomness there is no unique name: it fails instead
+            //     of risking a shared temporary.
             let unico: u64 = crate::cripto::aleatorio::<8>()
                 .map(u64::from_le_bytes)
-                .unwrap_or(0);
+                .map_err(|_| io::Error::other("sin aleatoriedad"))?;
             let tmp = dir.join(format!(".{prefijo}-{ahora:012}-{unico:016x}.tmp"));
             escribir_atomico(&tmp, &fs::read(self.ruta(nombre))?)?;
             tmp
@@ -470,9 +497,16 @@ impl Directorio {
 
     // ES: Rutas de todos los .bolsillo de copias/ y rescate/ (para reenvolverlos).
     // EN: Paths of every .bolsillo in copias/ and rescate/ (to rewrap them).
+    //     Ni la carpeta ni el fichero pueden ser una redirección (enlace
+    //     simbólico, unión de directorio u otro punto de reanálisis): así una
+    //     reenvoltura nunca escribe fuera del almacén.
+    // EN: Neither the folder nor the file may be a redirection (symbolic link,
+    //     directory junction or other reparse point): so a rewrap never writes
+    //     outside the store.
     pub fn ficheros_con_dek(&self) -> Vec<PathBuf> {
         [COPIAS, RESCATE]
             .iter()
+            .filter(|d| sin_redireccion(&self.raiz.join(d)))
             .flat_map(|d| {
                 fs::read_dir(self.raiz.join(d))
                     .into_iter()
@@ -481,6 +515,7 @@ impl Directorio {
             })
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|x| x == "bolsillo"))
+            .filter(|p| sin_redireccion(p))
             .collect()
     }
 
@@ -616,6 +651,25 @@ mod tests {
         assert_eq!(fs::read(t.path().join(&a)).unwrap(), b"roto1");
         assert_eq!(fs::read(t.path().join(&b)).unwrap(), b"roto2");
         assert!(d.hay_rescate());
+    }
+
+    #[test]
+    fn redirecciones_detectadas() {
+        let t = tempfile::tempdir().unwrap();
+        let f = t.path().join("a.bolsillo");
+        fs::write(&f, b"x").unwrap();
+        assert!(sin_redireccion(&f));
+        assert!(sin_redireccion(t.path()));
+        assert!(!sin_redireccion(&t.path().join("no-existe")));
+        // ES: Un enlace simbólico (si el sistema deja crearlo) se rechaza.
+        // EN: A symbolic link (if the system allows creating it) is rejected.
+        #[cfg(windows)]
+        let enlace = std::os::windows::fs::symlink_file(&f, t.path().join("l.bolsillo"));
+        #[cfg(unix)]
+        let enlace = std::os::unix::fs::symlink(&f, t.path().join("l.bolsillo"));
+        if enlace.is_ok() {
+            assert!(!sin_redireccion(&t.path().join("l.bolsillo")));
+        }
     }
 
     #[test]
