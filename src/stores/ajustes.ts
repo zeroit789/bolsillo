@@ -173,15 +173,19 @@ export const useAjustes = defineStore("ajustes", () => {
 
   // ── 9. Watchers de persistencia y efectos / Persistence & side-effect watchers ─
   // ES: Persiste todos los ajustes en localStorage y re-aplica el tema ante
-  //     CUALQUIER cambio. immediate: true lo ejecuta también una vez al
-  //     arrancar, así el tema persistido se aplica aunque nada cambie en esta
-  //     sesión.
+  //     CUALQUIER cambio. NO se escribe al arrancar (sin immediate): si la
+  //     cuota está llena, esa escritura podía cortar el arranque antes de leer
+  //     los datos y de llegar al rescate. El tema guardado se aplica aparte,
+  //     sin escribir. Si guardar falla (cuota llena), el cambio se queda en
+  //     memoria y la app sigue: los ajustes no son datos financieros.
   // EN: Persists all settings to localStorage and re-applies the theme on ANY
-  //     change. immediate: true also runs it once at startup, so the persisted
-  //     theme is applied even if nothing changes this session.
-  watch(
-    [tema, bloqueoActivo, bloqueoTipo, nombre, moneda, idioma, configurado],
-    () => {
+  //     change. It does NOT write at boot (no immediate): with a full quota
+  //     that write could cut the boot short before reading the data and
+  //     reaching the rescue. The saved theme is applied separately, without
+  //     writing. If saving fails (full quota), the change stays in memory and
+  //     the app goes on: settings are not financial data.
+  watch([tema, bloqueoActivo, bloqueoTipo, nombre, moneda, idioma, configurado], () => {
+    try {
       localStorage.setItem(
         CLAVE,
         JSON.stringify({
@@ -194,10 +198,14 @@ export const useAjustes = defineStore("ajustes", () => {
           configurado: configurado.value,
         })
       );
-      aplicarTema();
-    },
-    { immediate: true }
-  );
+    } catch {
+      /* ES: cuota llena: se queda en memoria / EN: full quota: kept in memory */
+    }
+    aplicarTema();
+  });
+  // ES: Tema guardado aplicado al arrancar, sin escribir nada.
+  // EN: Saved theme applied at boot, without writing anything.
+  aplicarTema();
 
   // ES: Sincroniza el formateador de importes con la moneda guardada.
   //     immediate: true -> al arrancar aplica la moneda persistida, no solo al cambiarla.
