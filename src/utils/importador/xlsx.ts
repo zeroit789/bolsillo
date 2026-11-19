@@ -38,6 +38,9 @@ export type Celda = string | number | Date | null;
 export const MAX_COLUMNAS = 64;
 export const MAX_FILAS = 50_000;
 export const MAX_BYTES = 20 * 1024 * 1024; // ES: 20 MB / EN: 20 MB
+// ES: Tope de lo que DECLARA el ZIP descomprimido (ver tamanoDescomprimido).
+// EN: Cap on what the ZIP DECLARES uncompressed (see tamanoDescomprimido).
+export const MAX_DESCOMPRIMIDO = 150 * 1024 * 1024;
 
 // ES: Error de hoja demasiado grande (por columnas o por filas).
 // EN: Too-large sheet error (by columns or by rows).
@@ -52,6 +55,43 @@ export class ErrorXLSX extends Error {
 // EN: Options: sheet by name or by index (0 = the first one, by default).
 export interface OpcionesXLSX {
   hoja?: string | number;
+}
+
+// ES: Suma de los tamaños descomprimidos que declara el directorio central
+//     del ZIP (un .xlsx es un ZIP), o null si no se encuentra o es ZIP64.
+//     Así un libro pequeño que se descomprimiría en cientos de MB se rechaza
+//     ANTES de que ExcelJS lo descomprima en memoria. Es una defensa parcial:
+//     se fía de lo que declara el fichero.
+// EN: Sum of the uncompressed sizes the ZIP central directory declares (an
+//     .xlsx is a ZIP), or null if it cannot be found or is ZIP64. So a small
+//     workbook that would decompress into hundreds of MB is rejected BEFORE
+//     ExcelJS decompresses it in memory. It is a partial defence: it trusts
+//     what the file declares.
+export function tamanoDescomprimido(datos: Uint8Array): number | null {
+  const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
+  // ES: Fin del directorio central: firma 0x06054b50 en los últimos 64 KB + 22.
+  // EN: End of central directory: signature 0x06054b50 in the last 64 KB + 22.
+  let fin = -1;
+  for (let i = datos.length - 22; i >= Math.max(0, datos.length - 65557); i--) {
+    if (v.getUint32(i, true) === 0x06054b50) {
+      fin = i;
+      break;
+    }
+  }
+  if (fin < 0) return null;
+  const entradas = v.getUint16(fin + 10, true);
+  let pos = v.getUint32(fin + 16, true);
+  if (entradas === 0xffff || pos === 0xffffffff) return null;
+  let total = 0;
+  for (let n = 0; n < entradas; n++) {
+    if (pos + 46 > datos.length || v.getUint32(pos, true) !== 0x02014b50) return null;
+    const tam = v.getUint32(pos + 24, true);
+    if (tam === 0xffffffff) return null;
+    total += tam;
+    pos +=
+      46 + v.getUint16(pos + 28, true) + v.getUint16(pos + 30, true) + v.getUint16(pos + 32, true);
+  }
+  return total;
 }
 
 // ES: Carga ExcelJS bajo demanda (ver cabecera).
@@ -106,9 +146,17 @@ export async function leerXLSX(
   // ES: Un fichero enorme ni se abre: cargarlo ya bloquearía la app.
   // EN: A huge file is not even opened: loading it would already freeze the app.
   if (datos.byteLength > MAX_BYTES) throw new ErrorXLSX("bytes");
+  const bytes = datos instanceof Uint8Array ? datos : new Uint8Array(datos);
+  // ES: Ni se descomprime un libro que declara más de MAX_DESCOMPRIMIDO; si
+  //     su tamaño no se puede leer (ZIP64 o directorio roto), no es válido.
+  // EN: A workbook declaring more than MAX_DESCOMPRIMIDO is not even
+  //     decompressed; if its size cannot be read (ZIP64 or a broken
+  //     directory), it is not valid.
+  const descomprimido = tamanoDescomprimido(bytes);
+  if (descomprimido === null) throw new Error("ZIP no válido / Invalid ZIP");
+  if (descomprimido > MAX_DESCOMPRIMIDO) throw new ErrorXLSX("bytes");
   const ExcelJS = await cargarExcelJS();
   const libro = new ExcelJS.Workbook();
-  const bytes = datos instanceof Uint8Array ? datos : new Uint8Array(datos);
   await libro.xlsx.load(bytes as unknown as ArrayBuffer);
 
   // ES: Hoja por nombre o por posición en el libro (no por su id interno).

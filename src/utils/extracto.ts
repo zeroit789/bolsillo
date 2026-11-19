@@ -74,6 +74,7 @@ export async function elegirExtractoNativo(): Promise<Uint8Array | null> {
     return bytes.byteLength ? bytes : null;
   } catch (e) {
     if (e === "extracto-grande") throw new ErrorExtracto("grande");
+    if (e === "extracto-vacio") throw new ErrorExtracto("vacio");
     throw e;
   }
 }
@@ -98,7 +99,10 @@ export async function abrirExtracto(bytes: Uint8Array): Promise<FicheroExtracto>
     try {
       return { tipo: "xlsx", matriz: await leerXLSX(bytes) };
     } catch (e) {
-      throw new ErrorExtracto(e instanceof ErrorXLSX ? "hoja" : "xlsx");
+      // ES: "bytes" = se descomprimiría demasiado grande; el resto, filas o columnas de más.
+      // EN: "bytes" = it would decompress too large; the rest, too many rows or columns.
+      if (e instanceof ErrorXLSX) throw new ErrorExtracto(e.motivo === "bytes" ? "grande" : "hoja");
+      throw new ErrorExtracto("xlsx");
     }
   }
   const texto = decodificarBytes(bytes);

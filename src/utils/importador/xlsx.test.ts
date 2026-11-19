@@ -12,7 +12,14 @@
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { ErrorXLSX, leerXLSX, MAX_BYTES, valorCelda } from "./xlsx";
+import {
+  ErrorXLSX,
+  leerXLSX,
+  MAX_BYTES,
+  MAX_DESCOMPRIMIDO,
+  tamanoDescomprimido,
+  valorCelda,
+} from "./xlsx";
 
 // ES: Crea un libro con una hoja de extracto inventada y lo devuelve en bytes.
 // EN: Creates a workbook with a made-up statement sheet and returns its bytes.
@@ -109,4 +116,44 @@ describe("valorCelda", () => {
     const fecha = new Date(Date.UTC(2026, 0, 31));
     expect(valorCelda(fecha)).toEqual(fecha);
   });
+});
+
+// ES: ZIP mínimo a mano: una entrada del directorio central que DECLARA
+//     `tam` bytes descomprimidos, y el registro de fin de directorio.
+// EN: Hand-made minimal ZIP: one central directory entry that DECLARES `tam`
+//     uncompressed bytes, and the end-of-directory record.
+function zipFalso(tam: number): Uint8Array {
+  const cd = new Uint8Array(46 + 1);
+  const v = new DataView(cd.buffer);
+  v.setUint32(0, 0x02014b50, true);
+  v.setUint32(24, tam, true);
+  v.setUint16(28, 1, true);
+  cd[46] = 0x61;
+  const fin = new Uint8Array(22);
+  const w = new DataView(fin.buffer);
+  w.setUint32(0, 0x06054b50, true);
+  w.setUint16(8, 1, true);
+  w.setUint16(10, 1, true);
+  w.setUint32(12, cd.length, true);
+  w.setUint32(16, 4, true);
+  const cabecera = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+  return new Uint8Array([...cabecera, ...cd, ...fin]);
+}
+
+describe("tamaño descomprimido / uncompressed size", () => {
+  it("suma lo que declara un libro real / adds up what a real workbook declares", async () => {
+    const t = tamanoDescomprimido(new Uint8Array(await libroDePrueba()));
+    expect(t).toBeGreaterThan(0);
+    expect(t).toBeLessThan(MAX_DESCOMPRIMIDO);
+  });
+
+  it("lee el directorio central de un ZIP hecho a mano / reads the central directory of a hand-made ZIP", () => {
+    expect(tamanoDescomprimido(zipFalso(1234))).toBe(1234);
+    expect(tamanoDescomprimido(new Uint8Array([1, 2, 3]))).toBeNull();
+  });
+
+  it("rechaza antes de abrir un libro que se descomprimiría enorme / rejects before opening a workbook that would decompress huge", async () => {
+    await expect(leerXLSX(zipFalso(MAX_DESCOMPRIMIDO + 1))).rejects.toEqual(new ErrorXLSX("bytes"));
+    await expect(leerXLSX(zipFalso(0xffffffff))).rejects.toThrow("ZIP");
+  }); // prettier-ignore
 });

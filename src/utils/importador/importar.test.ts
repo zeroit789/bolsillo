@@ -19,6 +19,7 @@ import {
   filasAImportar,
   huellaFila,
   leerHuella,
+  marcarDuplicados,
 } from "./importar";
 import type { ReglaCategoria } from "./reglas";
 import type { FilaImportada } from "./vistaPrevia";
@@ -129,5 +130,49 @@ describe("crearPuntualesImportados / crearPuntualesImportados", () => {
     });
     expect(p.cuenta).toBeUndefined();
     expect(p.categoria).toBe("Compras");
+  });
+});
+
+describe("marcarDuplicados / marcarDuplicados", () => {
+  // ES: Puntual de prueba. / EN: Test one-off entry.
+  const p = (id: string, concepto: string, importe: number, extra: Partial<Puntual> = {}): Puntual => ({
+    id, concepto, importe, signo: "gasto", categoria: "Otros", fecha: "2026-02-03", ...extra,
+  }); // prettier-ignore
+
+  it("con cuenta destino solo mira esa cuenta y lo que no tiene cuenta / with a destination account it only looks at that account and unassigned items", () => {
+    const filas = [fila(1, "CUOTA", 500), fila(2, "CUOTA", 500)];
+    const otra = p("a", "CUOTA", 5, { cuenta: "otra" });
+    const sinCuenta = p("b", "CUOTA", 5);
+    const marcas = marcarDuplicados(filas, [otra, sinCuenta], { cuenta: "banco" });
+    expect(marcas.filter((m) => m.tipo === "apuntado")).toEqual([
+      { linea: 1, tipo: "apuntado", id: "b", dias: 0 },
+    ]);
+    // ES: Sin cuenta destino se mira todo. / EN: Without a destination account everything is checked.
+    expect(marcarDuplicados(filas, [otra, sinCuenta], {}).filter((m) => m.tipo === "apuntado")).toHaveLength(2);
+  }); // prettier-ignore
+
+  it("la búsqueda tolerante no reutiliza un apunte ya emparejado / the tolerant pass does not reuse an already paired entry", () => {
+    const filas = [fila(1, "CAFE CENTRAL", 250), fila(2, "OTRO TEXTO", 250, "gasto", "2026-02-04")];
+    const manual = p("m", "cafe central", 2.5);
+    const marcas = marcarDuplicados(filas, [manual], { manuales: true });
+    expect(marcas).toEqual([{ linea: 1, tipo: "apuntado", id: "m", dias: 0 }]);
+  });
+
+  it("la búsqueda tolerante encuentra lo apuntado a mano con otro texto y otro día / the tolerant pass finds hand-entered items with other text and day", () => {
+    const filas = [fila(1, "COMPRA TARJ 1234 PANADERIA", 180, "gasto", "2026-02-05")];
+    const manual = p("m", "Pan", 1.8);
+    expect(marcarDuplicados(filas, [manual], {})).toEqual([]);
+    expect(marcarDuplicados(filas, [manual], { manuales: true })).toEqual([
+      { linea: 1, tipo: "apuntado", id: "m", dias: 2 },
+    ]);
+  });
+
+  it("un concepto larguísimo se reconoce al reimportar / a very long concept is recognised on re-import", () => {
+    const largo = "COMPRA ".repeat(150);
+    const f = fila(1, largo, 999);
+    const importado = p("i", largo, 9.99, { origen: "importado", importId: huellaFila(f) });
+    expect(marcarDuplicados([f], [importado], {})).toEqual([
+      { linea: 1, tipo: "apuntado", id: "i", dias: 0 },
+    ]);
   });
 });

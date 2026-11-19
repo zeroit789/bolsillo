@@ -419,11 +419,12 @@ const MAX_EXTRACTO: u64 = 20 * 1024 * 1024;
 
 // ES: Abre el diálogo para elegir un extracto (CSV, TXT o XLSX) y devuelve
 //     sus bytes en crudo (ArrayBuffer en JS, sin pasar por JSON). Cancelar
-//     devuelve 0 bytes. La ruta nunca sale de Rust y el fichero no se guarda:
+//     devuelve 0 bytes; un fichero vacío da el error "extracto-vacio". La ruta nunca sale de Rust y el fichero no se guarda:
 //     el frontend lo lee, enseña la vista previa y crea los apuntes.
 // EN: Opens the dialog to pick a statement (CSV, TXT or XLSX) and returns its
 //     raw bytes (an ArrayBuffer in JS, without going through JSON).
-//     Cancelling returns 0 bytes. The path never leaves Rust and the file is
+//     Cancelling returns 0 bytes; an empty file gives the "extracto-vacio"
+//     error. The path never leaves Rust and the file is
 //     not stored: the frontend reads it, shows the preview and creates the
 //     entries.
 #[tauri::command]
@@ -444,6 +445,9 @@ async fn elegir_extracto(app: AppHandle) -> Res<tauri::ipc::Response> {
             .map_err(|e| format!("io:{e}"))?;
         if b.len() as u64 > MAX_EXTRACTO {
             return Err("extracto-grande".into());
+        }
+        if b.is_empty() {
+            return Err("extracto-vacio".into());
         }
         Ok(b)
     })

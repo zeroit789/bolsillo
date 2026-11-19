@@ -74,8 +74,8 @@ import {
   type ErrorFila,
   type FilaImportada,
 } from "../utils/importador/vistaPrevia";
-import { detectarDuplicados, type MarcaDuplicado } from "../utils/importador/duplicados";
-import { comparablesDe, filasAImportar } from "../utils/importador/importar";
+import type { MarcaDuplicado } from "../utils/importador/duplicados";
+import { filasAImportar, marcarDuplicados } from "../utils/importador/importar";
 import { categorizar } from "../utils/importador/reglas";
 import { normalizarTexto } from "../utils/importador/texto";
 import type { Celda } from "../utils/importador/xlsx";
@@ -143,9 +143,10 @@ const t = crearT({
   thCategoria: { es: "Categoría", en: "Category" },
   thAviso: { es: "Aviso", en: "Notice" },
   masFilas: {
-    es: "Se muestran @v de @t filas (primero las marcadas). El resto se importa igual.",
-    en: "Showing @v of @t rows (flagged ones first). The rest are imported as well.",
+    es: "Se muestran @v de @t filas (primero las marcadas). Las que no ves se importan igual.",
+    en: "Showing @v of @t rows (flagged ones first). The ones you do not see are imported as well.",
   },
+  verMas: { es: "Ver más", en: "Show more" },
   errores: { es: "Filas con errores (no se importan)", en: "Rows with errors (not imported)" },
   errorFila: { es: "Fila @n · @c: @m «@v»", en: "Row @n · @c: @m “@v”" },
   campofecha: { es: "fecha", en: "date" },
@@ -174,7 +175,10 @@ const t = crearT({
   elige: { es: "Elige las columnas de fecha, concepto e importe.", en: "Choose the date, description and amount columns." },
   // ES: Errores al abrir (ErrorExtracto). / EN: Opening errors (ErrorExtracto).
   "err-vacio": { es: "El fichero está vacío.", en: "The file is empty." },
-  "err-grande": { es: "El fichero pasa de 20 MB.", en: "The file is larger than 20 MB." },
+  "err-grande": {
+    es: "El fichero es demasiado grande (pasa de 20 MB, o es un Excel que ocupa demasiado al abrirlo).",
+    en: "The file is too large (over 20 MB, or an Excel file that takes up too much once opened).",
+  },
   "err-xls": {
     es: "Es un Excel antiguo (.xls). Ábrelo y guárdalo como .xlsx o CSV.",
     en: "It is an old Excel file (.xls). Open it and save it as .xlsx or CSV.",
@@ -402,26 +406,19 @@ const vista = computed(() =>
     : null
 );
 
-// ES: Marcas de duplicado: contra todo lo apuntado con el texto del banco y,
-//     si se pide, contra lo apuntado a mano con margen de días y sin concepto.
-// EN: Duplicate flags: against everything entered with the bank text and, if
-//     asked, against hand-entered items with a day margin and no concept.
+// ES: Marcas de duplicado (utils/importador/importar.ts, marcarDuplicados):
+//     con la cuenta destino elegida solo se mira esa cuenta y lo que no tiene
+//     cuenta; si se pide, también lo apuntado a mano con margen de días.
+// EN: Duplicate flags (utils/importador/importar.ts, marcarDuplicados): with
+//     the chosen destination account only that account and unassigned items
+//     are checked; if asked, also hand-entered items with a day margin.
 const marcas = computed<MarcaDuplicado[]>(() => {
   const filas = vista.value?.filas ?? [];
   if (!filas.length) return [];
-  const base = detectarDuplicados(filas, comparablesDe(f.puntuales));
-  if (!conf.manuales) return base;
-  const manuales = f.puntuales.filter((p) => p.origen !== "importado");
-  const extra = detectarDuplicados(filas, comparablesDe(manuales), {
-    toleranciaDias: 3,
-    compararConcepto: false,
+  return marcarDuplicados(filas, f.puntuales, {
+    cuenta: conf.cuenta || undefined,
+    manuales: conf.manuales,
   });
-  const porLinea = new Map(base.map((m) => [m.linea, m]));
-  for (const m of extra) {
-    if (m.tipo === "apuntado" && porLinea.get(m.linea)?.tipo !== "apuntado")
-      porLinea.set(m.linea, m);
-  }
-  return [...porLinea.values()].sort((a, b) => a.linea - b.linea);
 });
 const marcaDe = computed(() => new Map(marcas.value.map((m) => [m.linea, m])));
 
@@ -440,16 +437,25 @@ function cambiarFila(linea: number, incluir: boolean) {
   decision.value = m;
 }
 
-// ES: Filas a pintar: primero las marcadas; como mucho 300 (el resto se
-//     importa igual, solo no se pinta para no congelar la ventana).
-// EN: Rows to render: flagged first; at most 300 (the rest are imported as
-//     well, they are just not rendered so the window does not freeze).
-const MAX_VISIBLES = 300;
+// ES: Filas a pintar: primero las marcadas, de 300 en 300 ("Ver más"), para
+//     no congelar la ventana con miles de filas pero poder revisarlas todas.
+//     Lo mismo con los errores, de 200 en 200.
+// EN: Rows to render: flagged first, 300 at a time ("Show more"), so
+//     thousands of rows do not freeze the window but all can be reviewed.
+//     The same with errors, 200 at a time.
+const PASO_FILAS = 300;
+const PASO_ERRORES = 200;
+const limiteFilas = ref(PASO_FILAS);
+const limiteErrores = ref(PASO_ERRORES);
+watch(vista, () => {
+  limiteFilas.value = PASO_FILAS;
+  limiteErrores.value = PASO_ERRORES;
+});
 const visibles = computed<FilaImportada[]>(() => {
   const filas = vista.value?.filas ?? [];
   const marcadas = filas.filter((x) => marcaDe.value.has(x.linea));
   const resto = filas.filter((x) => !marcaDe.value.has(x.linea));
-  return [...marcadas, ...resto].slice(0, MAX_VISIBLES);
+  return [...marcadas, ...resto].slice(0, limiteFilas.value);
 });
 
 // ES: Categoría que pondrán las reglas a una fila. / EN: Category the rules will give a row.
@@ -752,12 +758,22 @@ function importar() {
                 </tbody>
               </table>
             </div>
-            <p v-if="vista.filas.length > visibles.length" class="mt-1 text-xs text-faint">
+            <p
+              v-if="vista.filas.length > visibles.length"
+              class="mt-1 flex flex-wrap items-center gap-2 text-xs text-faint"
+            >
               {{
                 t("masFilas")
                   .replace("@v", String(visibles.length))
                   .replace("@t", String(vista.filas.length))
               }}
+              <button
+                type="button"
+                class="rounded border border-border px-2 py-0.5 text-ink hover:border-brand"
+                @click="limiteFilas += PASO_FILAS"
+              >
+                {{ t("verMas") }}
+              </button>
             </p>
 
             <!-- ES: Filas con errores. / EN: Rows with errors. -->
@@ -766,10 +782,18 @@ function importar() {
                 {{ t("errores") }} ({{ vista.errores.length }})
               </summary>
               <ul class="mt-2 space-y-1 text-xs text-muted">
-                <li v-for="(e, i) in vista.errores.slice(0, 200)" :key="i">
+                <li v-for="(e, i) in vista.errores.slice(0, limiteErrores)" :key="i">
                   {{ textoErrorFila(e) }}
                 </li>
               </ul>
+              <button
+                v-if="vista.errores.length > limiteErrores"
+                type="button"
+                class="mt-1 rounded border border-border px-2 py-0.5 text-xs text-ink hover:border-brand"
+                @click="limiteErrores += PASO_ERRORES"
+              >
+                {{ t("verMas") }}
+              </button>
             </details>
 
             <!-- ES: Cuenta destino y perfil. / EN: Destination account and profile. -->
