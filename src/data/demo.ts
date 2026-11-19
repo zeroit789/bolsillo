@@ -22,15 +22,11 @@
 //     month arithmetic) used to anchor the demo data to "today".
 import { VERSION_DATOS, type DatosBolsillo } from "../types";
 import { mesActual, sumarMeses } from "../utils/format";
+import { nuevoId } from "../utils/id";
 
 // ── 2. Generador de IDs / ID generator ────────────────────────────────────────
-// ES: ID único barato: timestamp en base36 + sufijo aleatorio corto. Suficiente
-//     para distinguir registros demo (no es un identificador criptográfico).
-// EN: Cheap unique-ish ID: base36 timestamp + a short random suffix. Good enough
-//     to distinguish demo records (not a cryptographic identifier).
-function nuevoId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
+// ES: Los ids demo salen del generador común (utils/id.ts, crypto.randomUUID).
+// EN: Demo ids come from the shared generator (utils/id.ts, crypto.randomUUID).
 
 // ── 3. Constructor de datos demo / Demo data builder ──────────────────────────
 // ES: Construye el conjunto demo completo. Las fechas se calculan en relación al

@@ -41,12 +41,7 @@ import type {
 } from "../types";
 import { mesActual, diffMeses, sumarMeses } from "../utils/format";
 import { estadoDeuda } from "../utils/deuda";
-
-// ES: Genera un id corto resistente a colisiones (timestamp + sufijo aleatorio).
-// EN: Generates a short collision-resistant id (timestamp + random suffix).
-function nuevoId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
+import { nuevoId } from "../utils/id";
 
 // ES: Resumen de KPIs de un solo mes (la forma que usan el dashboard y el historial).
 // EN: KPI summary of a single month (the shape the dashboard and history use).
