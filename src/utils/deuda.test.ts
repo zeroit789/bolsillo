@@ -128,3 +128,12 @@ describe("céntimos enteros / whole cents", () => {
     expect(estadoDeuda(deuda({ total: 0.3, cuotaMensual: 0.1, pagadoInicial: 0 }), "2025-12").mesesRestantes).toBe(3);
   }); // prettier-ignore
 });
+
+describe("cuota por debajo de medio céntimo / installment below half a cent", () => {
+  it("cuenta como 1 céntimo y la deuda se salda / counts as 1 cent and the debt gets settled", () => {
+    const d = deuda({ total: 0.01, cuotaMensual: 0.004, pagadoInicial: 0, inicioMes: "2026-01" });
+    const e = estadoDeuda(d, "2026-01");
+    expect(e.cuotaDelMes).toBe(0.01);
+    expect(e.terminada).toBe(true);
+  });
+});

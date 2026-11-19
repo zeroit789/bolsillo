@@ -38,7 +38,11 @@ export function estadoDeuda(deuda: Deuda, mes: string): EstadoDeuda {
   // ES: Pagado = lo que ya llevaba + las cuotas aplicadas, tope en el total.
   // EN: Paid = what it already carried + the applied installments, capped at total.
   const total = aCentimos(deuda.total);
-  const cuota = aCentimos(deuda.cuotaMensual);
+  // ES: Una cuota positiva por debajo de medio céntimo cuenta como 1 céntimo:
+  //     si redondeara a 0, la deuda no se saldaría nunca.
+  // EN: A positive installment below half a cent counts as 1 cent: if it
+  //     rounded to 0, the debt would never be settled.
+  const cuota = deuda.cuotaMensual > 0 ? Math.max(1, aCentimos(deuda.cuotaMensual)) : 0;
   const inicial = aCentimos(deuda.pagadoInicial);
   const pagadoC = Math.min(total, inicial + cuota * transcurridos);
   const pendienteC = Math.max(0, total - pagadoC);
