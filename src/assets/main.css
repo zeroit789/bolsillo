@@ -32,6 +32,12 @@
   --color-muted: #9aa0ac; /* ES: texto secundario / EN: secondary text */
   --color-faint: #5b606b; /* ES: texto tenue / EN: faint text */
 
+  /* ES: Anillo de foco del teclado. Contraste con los fondos del tema oscuro:
+         9,38:1 con base, 8,86:1 con surface y 8,21:1 con surface-2 (mínimo 3:1).
+     EN: Keyboard focus ring. Contrast with the dark theme backgrounds:
+         9.38:1 on base, 8.86:1 on surface and 8.21:1 on surface-2 (minimum 3:1). */
+  --color-foco: #b4a9fb;
+
   /* ES: Tipografía / EN: Typography */
   --font-display: "Syne", system-ui, sans-serif; /* ES: titulares / EN: headings */
   --font-sans: "DM Sans", system-ui, sans-serif; /* ES: cuerpo / EN: body */
@@ -98,4 +104,48 @@ html.tema-claro {
   --color-ink: #13151b; /* ES: texto principal más oscuro / EN: darker main text */
   --color-muted: #474c57; /* ES: secundario más oscuro / EN: darker secondary text */
   --color-faint: #767c88;
+  /* ES: Foco en tema claro: 7,71:1 con base, 8,89:1 con surface y 7,14:1 con surface-2.
+     EN: Focus in light theme: 7.71:1 on base, 8.89:1 on surface and 7.14:1 on surface-2. */
+  --color-foco: #3d22c4;
+}
+
+/* ── FOCO VISIBLE / VISIBLE FOCUS ─────────────────────────────────────────
+   ES: Contorno de 2 px con separación de 2 px en todo lo que recibe el foco
+       con el teclado. Va fuera de las capas de Tailwind a propósito: el CSS
+       sin capa gana a las utilidades, así que también se ve en los campos con
+       `outline-none`. La separación deja una franja del fondo entre el control
+       y el anillo, de modo que el contraste que cuenta es con el fondo (ver los
+       ratios de --color-foco), también en los botones rellenos de color.
+   EN: 2 px outline with a 2 px offset on everything that gets keyboard focus.
+       It sits outside Tailwind's layers on purpose: unlayered CSS beats the
+       utilities, so it also shows on fields with `outline-none`. The offset
+       leaves a strip of background between the control and the ring, so the
+       contrast that counts is against the background (see the --color-foco
+       ratios), also on colour-filled buttons. */
+:focus-visible {
+  outline: 2px solid var(--color-foco);
+  outline-offset: 2px;
+}
+
+/* ── MOVIMIENTO REDUCIDO / REDUCED MOTION ─────────────────────────────────
+   ES: Si el sistema pide reducir el movimiento, se anulan animaciones,
+       transiciones y el desplazamiento suave. Se dejan en 0,01 ms (no en 0)
+       para que los eventos transitionend/animationend sigan llegando.
+   EN: If the system asks for reduced motion, animations, transitions and
+       smooth scrolling are cancelled. They are set to 0.01 ms (not 0) so the
+       transitionend/animationend events still fire. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }
