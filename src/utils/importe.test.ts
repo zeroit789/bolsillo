@@ -5,17 +5,23 @@
  *     sitio donde se redondean importes a céntimos: errores de coma flotante,
  *     empates (x,xx5) en positivos y negativos, -0, NaN e Infinity, y que en
  *     todo lo que no es un empate da lo mismo que la fórmula antigua
- *     Math.round(x * 100) / 100.
+ *     Math.round(x * 100) / 100. También analizarImporte, que clasifica lo
+ *     que llega de los formularios (vacío, válido, inválido, por encima del
+ *     tope) antes de redondear.
  * EN: Checks redondear2 and importeDesdeTexto (utils/importe.ts), the single
  *     place where amounts are rounded to cents: floating-point errors, ties
  *     (x.xx5) for positives and negatives, -0, NaN and Infinity, and that for
  *     everything that is not a tie it matches the old formula
- *     Math.round(x * 100) / 100.
+ *     Math.round(x * 100) / 100. Also analizarImporte, which classifies what
+ *     comes from the forms (empty, valid, invalid, above the cap) before
+ *     rounding.
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
 import {
   IMPORTE_MAX,
+  MENSAJE_IMPORTE_INVALIDO,
   MENSAJE_IMPORTE_MAX,
+  analizarImporte,
   importeDentroDeRango,
   importeDesdeTexto,
   redondear2,
@@ -196,5 +202,64 @@ describe("redondear2 cerca del tope y casos límite de toPrecision(15) / redonde
           throw new Error(`${a}/100 × ${p}/100: ${obtenido} != ${esperado}`);
       }
     }
+  });
+});
+
+// ES: analizarImporte separa vacío, válido, inválido y por encima del tope ANTES
+//     de redondear. Antes, "1e307" o "abc" acababan en 0 y se guardaban como un
+//     0 válido (podían pisar un saldo inicial o lo pagado de una deuda).
+// EN: analizarImporte tells apart empty, valid, invalid and above the cap
+//     BEFORE rounding. Before, "1e307" or "abc" ended up as 0 and were saved
+//     as a valid 0 (they could overwrite a starting balance or a debt's paid amount).
+describe("analizarImporte", () => {
+  it("vacío: cadena vacía, solo espacios, null y undefined / empty: empty string, blanks, null and undefined", () => {
+    expect(analizarImporte("")).toEqual({ tipo: "vacio", valor: 0 });
+    expect(analizarImporte("   ")).toEqual({ tipo: "vacio", valor: 0 });
+    expect(analizarImporte(null)).toEqual({ tipo: "vacio", valor: 0 });
+    expect(analizarImporte(undefined)).toEqual({ tipo: "vacio", valor: 0 });
+  });
+
+  it("válido: texto con coma o punto y números, redondeado a céntimos / valid: text with comma or dot and numbers, rounded to cents", () => {
+    expect(analizarImporte("12,50")).toEqual({ tipo: "valido", valor: 12.5 });
+    expect(analizarImporte(" 12.505 ")).toEqual({ tipo: "valido", valor: 12.51 });
+    expect(analizarImporte("-3,2")).toEqual({ tipo: "valido", valor: -3.2 });
+    expect(analizarImporte(7.125)).toEqual({ tipo: "valido", valor: 7.13 });
+    expect(analizarImporte("1e3")).toEqual({ tipo: "valido", valor: 1000 });
+  });
+
+  it("el cero es un valor válido, no un vacío / zero is a valid value, not an empty one", () => {
+    expect(analizarImporte("0")).toEqual({ tipo: "valido", valor: 0 });
+    expect(analizarImporte(0)).toEqual({ tipo: "valido", valor: 0 });
+    // ES: -0 y lo que redondea a 0 dan 0, nunca -0. / EN: -0 and what rounds to 0 give 0, never -0.
+    expect(analizarImporte("-0,001")).toEqual({ tipo: "valido", valor: 0 });
+    expect(Object.is(analizarImporte(-0).valor, 0)).toBe(true);
+  });
+
+  it("inválido: texto que no es un número o no finito / invalid: non-numeric or non-finite text", () => {
+    for (const x of ["abc", "12abc", "1,2,3", "0x10", "Infinity", "-Infinity", "NaN", "1e400"]) {
+      expect(analizarImporte(x), x).toEqual({ tipo: "invalido", valor: 0 });
+    }
+    expect(analizarImporte(Number.NaN)).toEqual({ tipo: "invalido", valor: 0 });
+    expect(analizarImporte(Number.POSITIVE_INFINITY)).toEqual({ tipo: "invalido", valor: 0 });
+  });
+
+  it("excede: por encima del tope, también si ×100 desborda / exceeds: above the cap, also when ×100 overflows", () => {
+    // ES: 1e307 es finito, pero redondear2 lo convertía en 0. / EN: 1e307 is finite, but redondear2 turned it into 0.
+    expect(analizarImporte("1e307")).toEqual({ tipo: "excede", valor: 0 });
+    expect(analizarImporte(1e307)).toEqual({ tipo: "excede", valor: 0 });
+    expect(analizarImporte(-1e307)).toEqual({ tipo: "excede", valor: 0 });
+    expect(analizarImporte("1000000000")).toEqual({ tipo: "excede", valor: 0 });
+    // ES: 999.999.999,995 redondea a 1e9 y no cabe. / EN: 999,999,999.995 rounds to 1e9 and does not fit.
+    expect(analizarImporte("999999999,995")).toEqual({ tipo: "excede", valor: 0 });
+  });
+
+  it("el tope exacto cabe, en los dos signos / the exact cap fits, for both signs", () => {
+    expect(analizarImporte("999999999,99")).toEqual({ tipo: "valido", valor: IMPORTE_MAX });
+    expect(analizarImporte(-IMPORTE_MAX)).toEqual({ tipo: "valido", valor: -IMPORTE_MAX });
+  });
+
+  it("el mensaje de importe inválido existe en los dos idiomas / the invalid-amount message exists in both languages", () => {
+    expect(MENSAJE_IMPORTE_INVALIDO.es.length).toBeGreaterThan(0);
+    expect(MENSAJE_IMPORTE_INVALIDO.en.length).toBeGreaterThan(0);
   });
 });

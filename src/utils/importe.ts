@@ -28,6 +28,9 @@
  *     céntimo; así hasta los totales de mil importes al tope (≈ 1e12) se
  *     siguen redondeando bien. Un tope de 1e12 por importe dejaba los totales
  *     sin margen (perdían céntimos a partir de unos 1e13).
+ *     Formularios: usan analizarImporte, que separa vacío, válido, inválido y
+ *     por encima del tope ANTES de redondear (redondear2 daría 0 con "abc" o
+ *     1e307, y ese 0 podía pisar un saldo o lo pagado).
  * EN: The single place where euro amounts are rounded to 2 decimals. There
  *     used to be a Math.round(x * 100) / 100 scattered across stores, utils
  *     and views, with three flaws: 1.005 gave 1 (in binary 1.005 is
@@ -53,6 +56,9 @@
  *     so toPrecision(15) keeps the half cent; so even totals of a thousand
  *     capped amounts (≈ 1e12) still round correctly. A per-amount cap of
  *     1e12 left totals with no margin (they lost cents from about 1e13).
+ *     Forms: they use analizarImporte, which tells apart empty, valid,
+ *     invalid and above-cap values BEFORE rounding (redondear2 would give 0
+ *     for "abc" or 1e307, and that 0 could overwrite a balance or a paid amount).
  * ===========================================================================*/
 
 // ES: Redondea un importe a céntimos con las reglas de la cabecera.
@@ -128,4 +134,89 @@ export function importeDentroDeRango(n: number): boolean {
 export function importeDesdeTexto(valor: string | number): number {
   const n = typeof valor === "string" ? Number(valor.replace(",", ".")) : Number(valor);
   return redondear2(n);
+}
+
+// ES: Texto de error ES/EN para los formularios cuando lo escrito no es un
+//     importe (letras, "Infinity", un número que no cabe en un double…).
+// EN: ES/EN error text for the forms when what was typed is not an amount
+//     (letters, "Infinity", a number that does not fit in a double…).
+export const MENSAJE_IMPORTE_INVALIDO = {
+  es: "Escribe un importe válido, por ejemplo 12,50.",
+  en: "Enter a valid amount, for example 12.50.",
+};
+
+// ES: Resultado de analizarImporte. `valor` solo tiene sentido con "valido"
+//     (importe ya redondeado a céntimos); en los demás casos es 0 para que
+//     nunca circule un NaN ni un número enorme por error.
+// EN: Result of analizarImporte. `valor` only makes sense with "valido"
+//     (amount already rounded to cents); in every other case it is 0 so a NaN
+//     or a huge number never travels around by mistake.
+export type AnalisisImporte =
+  { tipo: "valido"; valor: number } | { tipo: "vacio" | "invalido" | "excede"; valor: 0 };
+
+// ES: Número decimal en texto, ya con la coma cambiada por punto: signo
+//     opcional, cifras con o sin decimales (o solo decimales) y exponente
+//     opcional. Deja fuera "0x10", "Infinity", "NaN" o "1.2.3", que Number()
+//     aceptaría o convertiría en algo que nadie quiso escribir.
+// EN: Decimal number as text, with the comma already turned into a dot:
+//     optional sign, digits with or without decimals (or decimals only) and an
+//     optional exponent. Rules out "0x10", "Infinity", "NaN" or "1.2.3", which
+//     Number() would accept or turn into something nobody meant to type.
+const NUMERO_DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+
+// ES: Clasifica lo que llega de un formulario ANTES de redondear, para que un
+//     valor enorme o mal escrito no se convierta en un 0 válido (redondear2
+//     da 0 con NaN, Infinity o 1e307):
+//       - "vacio": "", solo espacios, null o undefined. Cada formulario decide
+//         si vale 0 (campos opcionales) o es un error (campos obligatorios).
+//       - "invalido": texto que no es un número decimal, o no finito.
+//       - "excede": en valor absoluto pasa de IMPORTE_MAX una vez redondeado
+//         (999.999.999,995 sube a 1e9 y no cabe).
+//       - "valido": el importe redondeado a céntimos (0 y negativos incluidos;
+//         el signo lo comprueba cada formulario).
+//     Admite texto con coma o punto (solo cambia la primera coma, como
+//     importeDesdeTexto) y números (v-model.number entrega número o "").
+// EN: Classifies what comes from a form BEFORE rounding, so a huge or
+//     mistyped value never becomes a valid 0 (redondear2 gives 0 for NaN,
+//     Infinity or 1e307):
+//       - "vacio": "", blanks only, null or undefined. Each form decides
+//         whether it means 0 (optional fields) or an error (required fields).
+//       - "invalido": text that is not a decimal number, or not finite.
+//       - "excede": in absolute value it exceeds IMPORTE_MAX once rounded
+//         (999,999,999.995 goes up to 1e9 and does not fit).
+//       - "valido": the amount rounded to cents (0 and negatives included;
+//         each form checks the sign).
+//     Accepts text with a comma or a dot (only the first comma changes, like
+//     importeDesdeTexto) and numbers (v-model.number yields a number or "").
+export function analizarImporte(entrada: string | number | null | undefined): AnalisisImporte {
+  // ES: Vacío: nada escrito. / EN: Empty: nothing typed.
+  if (entrada === null || entrada === undefined) return { tipo: "vacio", valor: 0 };
+
+  // ES: Paso a número: los textos se validan con la expresión de arriba.
+  // EN: Conversion to a number: texts are checked with the pattern above.
+  let n: number;
+  if (typeof entrada === "string") {
+    const texto = entrada.trim().replace(",", ".");
+    if (texto === "") return { tipo: "vacio", valor: 0 };
+    if (!NUMERO_DECIMAL.test(texto)) return { tipo: "invalido", valor: 0 };
+    n = Number(texto);
+  } else {
+    n = entrada;
+  }
+
+  // ES: NaN o infinito (también "1e400", que Number lleva a Infinity).
+  // EN: NaN or infinity (also "1e400", which Number turns into Infinity).
+  if (!Number.isFinite(n)) return { tipo: "invalido", valor: 0 };
+
+  // ES: Muy por encima del tope: se descarta antes de redondear, porque con
+  //     valores enormes el ×100 de redondear2 desborda y daría 0.
+  // EN: Far above the cap: rejected before rounding, because with huge values
+  //     redondear2's ×100 overflows and would give 0.
+  if (Math.abs(n) > IMPORTE_MAX + 1) return { tipo: "excede", valor: 0 };
+
+  // ES: Cerca del tope decide el valor ya redondeado.
+  // EN: Near the cap, the already rounded value decides.
+  const valor = redondear2(n);
+  if (!importeDentroDeRango(valor)) return { tipo: "excede", valor: 0 };
+  return { tipo: "valido", valor };
 }
