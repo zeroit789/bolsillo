@@ -19,7 +19,8 @@
  *   6. Recordatorio mensual / Monthly reminder
  *   7. Pagos próximos / Upcoming payments
  *   8. Watchers y re-chequeo horario / Watchers & hourly re-check
- *   9. Plantilla / Template
+ *   9. Guardar antes de cerrar / Save before closing
+ *  10. Plantilla / Template
  * ===========================================================================*/
 
 // ── 1. Imports y stores / Imports & stores ────────────────────────────────────
@@ -34,6 +35,8 @@ import { crearT } from "./i18n";
 import PantallaBloqueo from "./components/PantallaBloqueo.vue";
 import Onboarding from "./components/Onboarding.vue";
 import PantallaErrorDatos from "./components/PantallaErrorDatos.vue";
+import AvisoGuardado from "./components/AvisoGuardado.vue";
+import { isTauri } from "@tauri-apps/api/core";
 import DashboardView from "./views/DashboardView.vue";
 import MovimientosView from "./views/MovimientosView.vue";
 import DeudasView from "./views/DeudasView.vue";
@@ -55,6 +58,10 @@ const f = useFinanzas();
 // ES: Traducciones del shell (etiquetas del menú, saludo y carga).
 // EN: Shell translations (menu labels, greeting and loading text).
 const t = crearT({
+  cerrarSinGuardar: {
+    es: "No se han podido guardar los últimos cambios. Si cierras, se perderán. ¿Cerrar igualmente?",
+    en: "The latest changes could not be saved. If you close, they will be lost. Close anyway?",
+  },
   resumen: { es: "Resumen", en: "Summary" },
   movimientos: { es: "Movimientos", en: "Transactions" },
   calendario: { es: "Calendario", en: "Calendar" },
@@ -321,11 +328,68 @@ watch(
 //     intervals on HMR during development and is correct teardown either way).
 onUnmounted(() => {
   if (timerNotif !== undefined) clearInterval(timerNotif);
+  quitarCierre?.();
+  window.removeEventListener("beforeunload", avisarAntesDeSalir);
+});
+
+// ── 9. Guardar antes de cerrar / Save before closing ─────────────────────────
+// ES: Al cerrar la ventana se vacía el guardado pendiente (debounce o
+//     reintento) con el secreto activo. En Tauri se usa onCloseRequested, que
+//     espera al manejador y luego destruye la ventana (necesita el permiso
+//     core:window:allow-destroy); si el guardado falla o tarda más de 5 s, se
+//     pregunta antes de cerrar. En el navegador (pnpm dev) no se puede esperar
+//     a un cifrado al salir: se lanza el guardado y se pide confirmación si
+//     quedan cambios.
+// EN: On window close the pending save (debounce or retry) is flushed with the
+//     active secret. In Tauri, onCloseRequested is used: it awaits the handler
+//     and then destroys the window (needs the core:window:allow-destroy
+//     permission); if the save fails or takes longer than 5 s, the user is
+//     asked before closing. In the browser (pnpm dev) an encryption cannot be
+//     awaited on exit: the save is started and confirmation is requested if
+//     changes remain.
+let quitarCierre: (() => void) | undefined;
+const ESPERA_CIERRE_MS = 5000;
+
+// ES: Vacía el guardado con un tope de tiempo; false si falla o no llega a tiempo.
+// EN: Flushes the save with a time limit; false if it fails or does not make it.
+function vaciarConTope(): Promise<boolean> {
+  return Promise.race([
+    sesion.vaciarGuardado(),
+    new Promise<boolean>((r) => setTimeout(() => r(false), ESPERA_CIERRE_MS)),
+  ]);
+}
+
+// ES: Navegador: aviso nativo de salida si quedan cambios sin guardar.
+// EN: Browser: native leave prompt if there are unsaved changes.
+function avisarAntesDeSalir(e: BeforeUnloadEvent) {
+  if (sesion.estadoGuardado === "ok") return;
+  void sesion.vaciarGuardado();
+  e.preventDefault();
+}
+
+onMounted(async () => {
+  if (!isTauri()) {
+    window.addEventListener("beforeunload", avisarAntesDeSalir);
+    return;
+  }
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  quitarCierre = await getCurrentWindow().onCloseRequested(async (evento) => {
+    try {
+      if (!(await vaciarConTope()) && !confirm(t("cerrarSinGuardar"))) evento.preventDefault();
+    } catch {
+      // ES: Ante un error inesperado no se bloquea el cierre sin preguntar.
+      // EN: On an unexpected error, closing is not blocked without asking.
+      if (!confirm(t("cerrarSinGuardar"))) evento.preventDefault();
+    }
+  });
 });
 </script>
 
-<!-- ── 9. Template / Plantilla ─────────────────────────────────────────────── -->
+<!-- ── 10. Template / Plantilla ─────────────────────────────────────────────── -->
 <template>
+  <!-- ES: Aviso persistente si el último guardado falló / EN: Persistent warning if the last save failed -->
+  <AvisoGuardado />
+
   <!-- ES: Bienvenida / onboarding (primer arranque) / EN: Welcome / onboarding (first run) -->
   <Onboarding v-if="sesion.necesitaOnboarding" />
 

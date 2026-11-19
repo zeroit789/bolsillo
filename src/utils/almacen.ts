@@ -32,7 +32,7 @@ const CLAVE_DATOS = "bolsillo.datos.cif";
 //     fuerte (está en el binario), pero evita que los datos se vean en claro.
 // EN: Secret used when the user has NOT set a credential. It gives no strong
 //     security (it lives in the binary), but keeps data from being plaintext.
-const SECRETO_OFUSCACION = "bolsillo::ofuscacion::v1::Z3r0";
+export const SECRETO_OFUSCACION = "bolsillo::ofuscacion::v1::Z3r0";
 
 // ES: Secreto activo en memoria (nunca se persiste en disco).
 // EN: Active secret held in memory (never persisted to disk).
