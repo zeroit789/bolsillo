@@ -410,6 +410,46 @@ describe("copias / backups", () => {
     simulador.estado.fallarGuardado = false;
   });
 
+  it("restaurar una copia con PIN pide su PIN y no toca nada si falla / restoring a PIN backup asks for its PIN", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({
+      nombre: "",
+      bloqueo: { tipo: "pin", credencial: "4831" },
+      datosIniciales: "vacio",
+    });
+    s.olvidarClaveRecuperacion();
+    const vieja = (await s.listarCopias()).find((c) => c.nombre.startsWith("reciente-"))!;
+    expect(vieja.bloqueo).toBe("pin");
+    useFinanzas().addPlan({ nombre: "Después", objetivo: 10, aportado: 0 });
+    await s.vaciarGuardado();
+    const antes = simulador.estado.principal!.datos;
+    await expect(s.restaurarCopia(vieja.nombre, "0000")).rejects.toThrow("copia-credencial");
+    expect(simulador.estado.principal!.datos).toBe(antes);
+    expect(s.trabajando).toBe(false);
+    await s.restaurarCopia(vieja.nombre, "4831");
+    expect(s.desbloqueado).toBe(true);
+    expect(useFinanzas().planes).toEqual([]);
+  });
+
+  it("un reciboId sin recibo de una copia importada no se pierde al guardar / a dangling reciboId from an import is kept", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    const d = datosV2();
+    const { recibo: _r, ...sinRecibo } = d.puntuales[0];
+    void _r;
+    await s.importarDatos({
+      ...d,
+      version: 3,
+      puntuales: [{ ...sinRecibo, reciboId: "0f8c3a2e-1b2c-4d5e-8f90-123456789abc" }],
+    });
+    expect(enDisco().puntuales[0].reciboId).toBe("0f8c3a2e-1b2c-4d5e-8f90-123456789abc");
+    useFinanzas().addPlan({ nombre: "Otro cambio", objetivo: 10, aportado: 0 });
+    await s.vaciarGuardado();
+    expect(enDisco().puntuales[0].reciboId).toBe("0f8c3a2e-1b2c-4d5e-8f90-123456789abc");
+  });
+
   it("copia cifrada de ida y vuelta en una instalación limpia / encrypted backup round trip on a clean install", async () => {
     const s = useSesion();
     await s.arrancar();

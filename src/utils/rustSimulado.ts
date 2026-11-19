@@ -8,8 +8,8 @@
  *     memoria. Solo se usa:
  *       - en los tests (Vitest), y
  *       - con `pnpm dev` en un navegador normal (modo desarrollo), donde no
- *         hay Tauri. En ese caso guarda en el localStorage del navegador de
- *         desarrollo, nunca en el de la app.
+ *         hay Tauri. Solo en memoria: al recargar se pierde (la app avisa de
+ *         que es un modo de desarrollo sin cifrado).
  *     La app empaquetada nunca lo carga: boveda.ts falla cerrado sin Tauri.
  * EN: Mimics in TypeScript the Rust vault commands (src-tauri/src/boveda.rs)
  *     with the same rules: never overwrites an existing file, asks for the
@@ -18,8 +18,8 @@
  *     things in memory. It is only used:
  *       - in tests (Vitest), and
  *       - with `pnpm dev` in a plain browser (development mode), where there
- *         is no Tauri. There it saves to the development browser's
- *         localStorage, never the app's.
+ *         is no Tauri. Memory only: it is lost on reload (the app warns that it
+ *         is an unencrypted development mode).
  *     The packaged app never loads it: boveda.ts fails closed without Tauri.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
@@ -67,6 +67,8 @@ interface EstadoSim {
   // ES: cabecera legible pero contenido que no autentica (Rust: "danado")
   // EN: readable header but content that does not authenticate (Rust: "danado")
   cifradoAlterado: boolean;
+  // ES: Rust no consigue bloquear / EN: Rust fails to lock
+  fallarBloqueo: boolean;
   proximoArchivo: string | null;
   cancelarDialogo: boolean;
 }
@@ -90,16 +92,13 @@ function vacio(): EstadoSim {
     fallarGuardado: false,
     fallarVerificacion: false,
     cifradoAlterado: false,
+    fallarBloqueo: false,
     proximoArchivo: null,
     cancelarDialogo: false,
   };
 }
 
-// ES: Clave del localStorage del navegador de DESARROLLO (nunca el de la app).
-// EN: Key in the DEVELOPMENT browser's localStorage (never the app's).
-const CLAVE_DEV = "bolsillo.dev.simulador";
 let st: EstadoSim = vacio();
-let persistir = false;
 
 // ── 2. Ayudantes / Helpers ───────────────────────────────────────────────────
 // ES: Error con el mismo código de texto que devuelve Rust.
@@ -151,19 +150,6 @@ function rotar(f: FicheroSim) {
   while (recientes.length > 10) delete st.copias[recientes.shift()!];
 }
 
-function guardarPersistente() {
-  if (!persistir) return;
-  try {
-    const { abierta: _a, pendiente: _p, elegida: _e, ...resto } = st;
-    void _a;
-    void _p;
-    void _e;
-    localStorage.setItem(CLAVE_DEV, JSON.stringify(resto));
-  } catch {
-    /* ES: solo desarrollo / EN: development only */
-  }
-}
-
 function abierta() {
   if (!st.abierta || !st.principal) err("bloqueado");
   return st.abierta!;
@@ -208,6 +194,14 @@ function rotarDek(f: FicheroSim): FicheroSim {
   return { ...f, dekId: nuevo };
 }
 
+// ES: Abre una copia automática con su credencial (si la tiene).
+// EN: Opens an automatic backup with its credential (if it has one).
+function abrirCopia(a: Record<string, unknown>): FicheroSim {
+  const c = st.copias[String(a.nombre)] ?? err("sin-copia");
+  if (c.bloqueo !== "ninguno" && a.credencial !== c.credencial) err("credencial");
+  return c;
+}
+
 // ── 3. Comandos / Commands ───────────────────────────────────────────────────
 type Args = Record<string, unknown>;
 const comandos: Record<string, (a: Args) => unknown> = {
@@ -223,6 +217,7 @@ const comandos: Record<string, (a: Args) => unknown> = {
     hay_rescate: st.rescate.some((n) => n.startsWith("rescate/datos-")),
     abierta: st.abierta !== null,
     por_recuperacion: !!st.abierta?.porRecuperacion,
+    copias_pendientes: 0,
   }),
 
   abrir_almacen: (a) => {
@@ -331,6 +326,7 @@ const comandos: Record<string, (a: Args) => unknown> = {
   },
 
   bloquear_almacen: () => {
+    if (st.fallarBloqueo) err("interno");
     st.abierta = null;
     st.pendiente = false;
   },
@@ -367,7 +363,15 @@ const comandos: Record<string, (a: Args) => unknown> = {
   quitar_bloqueo: () => {
     abierta();
     if (st.fallarGuardado) err("io:disco lleno");
-    st.principal = { ...st.principal!, bloqueo: "ninguno", credencial: null, recuperacion: null };
+    // ES: Como en Rust: quitar el bloqueo cambia la clave de datos.
+    // EN: As in Rust: removing the lock changes the data key.
+    st.principal = {
+      ...rotarDek(st.principal!),
+      bloqueo: "ninguno",
+      credencial: null,
+      recuperacion: null,
+    };
+    st.abierta = { dekId: st.principal.dekId, porRecuperacion: false };
     rotar(st.principal);
   },
 
@@ -416,16 +420,26 @@ const comandos: Record<string, (a: Args) => unknown> = {
     Object.keys(st.copias)
       .sort()
       .reverse()
-      .map((nombre) => ({ nombre, bytes: st.copias[nombre].datos.length, segundos: 0 })),
+      .map((nombre) => ({
+        nombre,
+        bytes: st.copias[nombre].datos.length,
+        segundos: 0,
+        bloqueo: st.copias[nombre].bloqueo,
+      })),
+
+  // ES: Como en Rust: se abre y descifra con su credencial ANTES de publicar.
+  // EN: As in Rust: it is opened and decrypted with its credential BEFORE publishing.
+  probar_copia: (a) => abrirCopia(a).datos,
 
   restaurar_copia: (a) => {
-    const c = st.copias[String(a.nombre)] ?? err("sin-copia");
+    const c = abrirCopia(a);
     if (st.principal)
       st.copias[`antes-${String(ahora()).padStart(12, "0")}.bolsillo`] = st.principal;
     st.principal = copiar(c);
     st.principalRoto = null;
     st.marca = true;
-    st.abierta = null;
+    st.abierta = { dekId: c.dekId, porRecuperacion: false };
+    return c.datos;
   },
 
   exportar_copia_cifrada: (a) => {
@@ -483,7 +497,6 @@ export async function simularInvoke<T>(cmd: string, args?: unknown): Promise<T> 
   const fn = comandos[cmd];
   if (!fn) throw `comando-desconocido:${cmd}`;
   const r = fn((args ?? {}) as Args);
-  guardarPersistente();
   return (r === undefined ? undefined : JSON.parse(JSON.stringify(r))) as T;
 }
 
@@ -504,16 +517,5 @@ export const simulador = {
   },
   get estado() {
     return st;
-  },
-  // ES: Navegador de desarrollo: carga y guarda en su propio localStorage.
-  // EN: Development browser: loads and saves to its own localStorage.
-  activarPersistencia() {
-    persistir = true;
-    try {
-      const g = localStorage.getItem(CLAVE_DEV);
-      if (g) st = { ...vacio(), ...JSON.parse(g) };
-    } catch {
-      /* ES: se empieza vacío / EN: start empty */
-    }
   },
 };

@@ -12,8 +12,9 @@
  *       - Cola: todas las escrituras van de una en una y en orden; el estado
  *         se serializa AL ENCOLAR (lo escrito es exactamente ese instante).
  *       - Sin Tauri: en tests y en `pnpm dev` (desarrollo) se usa el simulador
- *         (rustSimulado.ts); en la app empaquetada sin Tauri falla cerrado
- *         ("sin-tauri") y nunca escribe en localStorage.
+ *         (rustSimulado.ts, solo en memoria y sin cifrar); en la app
+ *         empaquetada sin Tauri falla cerrado ("sin-tauri") y nunca escribe en
+ *         localStorage.
  * EN: Frontend bridge to the Rust vault (src-tauri/src/boveda.rs). Rust
  *     encrypts, decrypts and writes to disk; here the data is prepared:
  *       - Receipts: in memory each entry carries its receipt as a data URL
@@ -25,8 +26,9 @@
  *       - Queue: every write runs one at a time and in order; the state is
  *         serialized AT ENQUEUE time (what is written is exactly that instant).
  *       - Without Tauri: tests and `pnpm dev` (development) use the simulator
- *         (rustSimulado.ts); the packaged app without Tauri fails closed
- *         ("sin-tauri") and never writes to localStorage.
+ *         (rustSimulado.ts, memory only and unencrypted); the packaged app
+ *         without Tauri fails closed ("sin-tauri") and never writes to
+ *         localStorage.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
  *   1. Tipos y errores / Types & errors
@@ -60,6 +62,14 @@ export interface EstadoAlmacen {
   hayRescate: boolean;
   abierta: boolean;
   porRecuperacion: boolean;
+  // ES: copias que aún tienen la protección anterior / EN: backups that still have the previous protection
+  copiasPendientes: number;
+}
+
+// ES: ¿Se está usando el simulador (desarrollo en navegador, sin cifrado)?
+// EN: Is the simulator in use (browser development, unencrypted)?
+export function esSimulado(): boolean {
+  return !isTauri() && import.meta.env.DEV && import.meta.env.MODE !== "test";
 }
 
 // ES: Copia automática listada. / EN: Listed automatic backup.
@@ -67,6 +77,8 @@ export interface InfoCopia {
   nombre: string;
   bytes: number;
   segundos: number;
+  // ES: "ninguno" | "pin" | "password" (null si no se pudo leer) / EN: lock type (null if unreadable)
+  bloqueo: string | null;
 }
 
 // ES: Error con el código de texto que devuelve Rust ("credencial", "danado",
@@ -81,8 +93,6 @@ export class ErrorBoveda extends Error {
 }
 
 // ── 2. Llamar a Rust / Calling Rust ──────────────────────────────────────────
-let simuladorPersistente = false;
-
 // ES: Llama a un comando de Rust; sin Tauri, al simulador (solo en desarrollo
 //     y tests). Los errores de Rust llegan como texto y se envuelven.
 // EN: Calls a Rust command; without Tauri, the simulator (development and
@@ -91,15 +101,7 @@ async function invocar<T>(cmd: string, args?: Record<string, unknown>): Promise<
   try {
     if (isTauri()) return await invoke<T>(cmd, args);
     if (import.meta.env.DEV || import.meta.env.MODE === "test") {
-      const { simularInvoke, simulador } = await import("./rustSimulado");
-      // ES: En `pnpm dev` (no en tests) el simulador guarda en el localStorage
-      //     del navegador de desarrollo para sobrevivir a una recarga.
-      // EN: In `pnpm dev` (not in tests) the simulator saves to the development
-      //     browser's localStorage to survive a reload.
-      if (!simuladorPersistente && import.meta.env.MODE !== "test") {
-        simulador.activarPersistencia();
-        simuladorPersistente = true;
-      }
+      const { simularInvoke } = await import("./rustSimulado");
       return await simularInvoke<T>(cmd, args);
     }
   } catch (e) {
@@ -123,6 +125,7 @@ function aEstado(r: Record<string, unknown>): EstadoAlmacen {
     hayRescate: !!r.hay_rescate,
     abierta: !!r.abierta,
     porRecuperacion: !!r.por_recuperacion,
+    copiasPendientes: Number(r.copias_pendientes ?? 0),
   };
 }
 
@@ -142,13 +145,15 @@ interface ReciboEntrada {
 }
 
 // ES: Forma de disco: cada recibo en memoria pasa a `reciboId` y se apunta
-//     para enviarlo si aún no está en disco. Un `reciboId` sin recibo solo se
-//     conserva si su fichero faltaba al abrir (si el usuario quitó el recibo,
-//     la referencia se va con él).
+//     para enviarlo si aún no está en disco. Un `reciboId` sin recibo se
+//     conserva siempre: en memoria solo lo llevan los recibos cuyo fichero
+//     falta (al cargar uno, su `reciboId` se quita) o los que vienen así en una
+//     copia importada; nunca se pierde la referencia.
 // EN: Disk shape: each in-memory receipt becomes `reciboId` and is noted to be
-//     sent if it is not on disk yet. A `reciboId` without a receipt is only
-//     kept if its file was missing on open (if the user removed the receipt,
-//     the reference goes with it).
+//     sent if it is not on disk yet. A `reciboId` without a receipt is always
+//     kept: in memory only receipts whose file is missing carry it (loading
+//     one removes its `reciboId`) or the ones coming like that in an imported
+//     backup; the reference is never lost.
 export function separarRecibos(datos: DatosBolsillo): {
   disco: DatosBolsillo;
   nuevos: ReciboEntrada[];
@@ -169,8 +174,7 @@ export function separarRecibos(datos: DatosBolsillo): {
       }
       return { ...resto, reciboId: id };
     }
-    if (reciboId && faltantes.has(reciboId)) return { ...resto, reciboId };
-    return resto;
+    return reciboId ? { ...resto, reciboId } : resto;
   });
   return { disco: { ...datos, puntuales }, nuevos };
 }
@@ -430,12 +434,23 @@ export function listarCopias() {
   return invocar<InfoCopia[]>("listar_copias");
 }
 
-// ES: Restaura una copia automática (el almacén queda bloqueado).
-// EN: Restores an automatic backup (the store is left locked).
-export function restaurarCopia(nombre: string) {
+// ES: Abre y descifra una copia automática SIN publicarla y valida su
+//     contenido (migrar + validar). Lanza si no abre o no es válida.
+// EN: Opens and decrypts an automatic backup WITHOUT publishing it and
+//     validates its content (migrate + validate). Throws if it does not open
+//     or is not valid.
+export async function probarCopia(nombre: string, credencial: string | null): Promise<void> {
+  prepararDatos(JSON.parse(await invocar<string>("probar_copia", { nombre, credencial })));
+}
+
+// ES: Restaura una copia automática ya probada: queda abierta con ella y
+//     devuelve sus datos en forma de memoria (con sus recibos).
+// EN: Restores an already tested automatic backup: it is left open with it
+//     and returns its data in memory shape (with its receipts).
+export function restaurarCopia(nombre: string, credencial: string | null) {
   return enCola(async () => {
-    await invocar("restaurar_copia", { nombre });
     olvidarRecibos();
+    return aMemoria(await invocar<string>("restaurar_copia", { nombre, credencial }));
   });
 }
 

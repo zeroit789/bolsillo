@@ -109,6 +109,29 @@ export const useSesion = defineStore("sesion", () => {
   // ES: Código de error si la migración no se pudo verificar (sigue en legado).
   // EN: Error code if the migration could not be verified (stays in legado).
   const avisoMigracion = ref<string | null>(null);
+  // ES: Se bloqueó o restauró antes de confirmar la clave de recuperación
+  //     recién creada: ya no se enseña (estaba sobre la pantalla bloqueada) y
+  //     se avisa para generar otra.
+  // EN: It was locked or restored before confirming the newly created
+  //     recovery key: it is no longer shown (it was over the locked screen)
+  //     and a warning asks to generate another one.
+  const claveNoConfirmada = ref(false);
+  // ES: El autobloqueo no pudo bloquear (no se pudo guardar): se bloqueará en
+  //     cuanto un guardado salga bien.
+  // EN: Auto-lock could not lock (saving failed): it will lock as soon as a
+  //     save succeeds.
+  const bloqueoPendiente = ref(false);
+  // ES: Copias que aún conservan la protección anterior (lo dice Rust).
+  // EN: Backups that still keep the previous protection (Rust says so).
+  const copiasPendientes = ref(0);
+  // ES: El fichero cambió en disco desde que se abrió: no se pisa.
+  // EN: The file changed on disk since it was opened: it is not overwritten.
+  const conflicto = ref(false);
+  // ES: Sustitución de datos en curso (importar, restaurar, reemplazar): la
+  //     interfaz se cubre y no se puede editar nada hasta que acabe.
+  // EN: Data replacement in progress (import, restore, replace): the UI is
+  //     covered and nothing can be edited until it ends.
+  const trabajando = ref(false);
   let guardadoActivo = false;
   // ES: Al crear el almacén desde la pantalla de error, el fichero anterior se
   //     aparta a rescate/ (nunca se pisa).
@@ -162,6 +185,11 @@ export const useSesion = defineStore("sesion", () => {
     if (hasta > guardados) guardados = hasta;
     intentos = 0;
     estadoGuardado.value = cambios === guardados ? "ok" : "pendiente";
+    // ES: Un autobloqueo que no pudo hacerse se retoma tras un guardado bueno.
+    // EN: An auto-lock that could not be done is resumed after a good save.
+    if (bloqueoPendiente.value && cambios === guardados && !operando) {
+      setTimeout(() => void solicitarBloqueo(), 0);
+    }
   }
 
   function marcarFallo() {
@@ -199,7 +227,8 @@ export const useSesion = defineStore("sesion", () => {
       await persistir(useFinanzas().snapshot());
       marcarGuardado(hasta);
       return true;
-    } catch {
+    } catch (e) {
+      if (codigo(e) === "conflicto") conflicto.value = true;
       marcarFallo();
       return false;
     }
@@ -268,8 +297,34 @@ export const useSesion = defineStore("sesion", () => {
   // EN: Inactivity auto-lock (minutes in settings; only with a lock).
   const autobloqueo = crearAutobloqueo({
     minutos: () => useAjustes().minutosAutobloqueo,
-    alExpirar: () => void bloquearAhora(),
+    alExpirar: () => void solicitarBloqueo(),
   });
+
+  // ES: Petición de bloqueo que no se pierde: si ahora no se puede (no se
+  //     pudo guardar), queda pendiente (con aviso) y se reintenta tras el
+  //     siguiente guardado bueno.
+  // EN: Lock request that is not lost: if it cannot be done now (saving
+  //     failed), it stays pending (with a warning) and is retried after the
+  //     next good save.
+  async function solicitarBloqueo() {
+    if (!desbloqueado.value) {
+      bloqueoPendiente.value = false;
+      return;
+    }
+    const ok = await bloquearAhora();
+    bloqueoPendiente.value = !ok && desbloqueado.value && useAjustes().bloqueoActivo;
+  }
+
+  // ES: La clave de recuperación sin confirmar nunca queda en pantalla ni en
+  //     memoria al bloquear o restaurar: se avisa para generar otra.
+  // EN: The unconfirmed recovery key never stays on screen nor in memory when
+  //     locking or restoring: a warning asks to generate another one.
+  function retirarClaveRecuperacion() {
+    if (claveRecuperacion.value) {
+      claveRecuperacion.value = null;
+      claveNoConfirmada.value = true;
+    }
+  }
 
   // ES: Ajustes ← cabecera del fichero (la cabecera manda).
   // EN: Settings ← file header (the header rules).
@@ -290,6 +345,9 @@ export const useSesion = defineStore("sesion", () => {
   function entrar(datos: DatosBolsillo) {
     const ajustes = useAjustes();
     activarGuardado();
+    cerrandoSesion = false;
+    bloqueoPendiente.value = false;
+    conflicto.value = false;
     bloqueando = true;
     useFinanzas().hidratar(datos);
     bloqueando = false;
@@ -335,11 +393,26 @@ export const useSesion = defineStore("sesion", () => {
       bloqueando = true;
       cancelarTemporizadores();
       autobloqueo.parar();
-      await boveda.bloquear();
+      try {
+        await boveda.bloquear();
+      } catch {
+        // ES: Rust no pudo olvidar la clave: no se finge un bloqueo; se vuelve
+        //     a la app con todo como estaba y se puede reintentar.
+        // EN: Rust could not forget the key: no fake lock; back to the app
+        //     with everything as it was, and it can be retried.
+        bloqueando = false;
+        cerrandoSesion = false;
+        desbloqueado.value = true;
+        autobloqueo.iniciar();
+        return false;
+      }
+      retirarClaveRecuperacion();
+      almacen.usarOfuscacion();
       useFinanzas().hidratar(datosVacios());
       guardados = cambios;
       estadoGuardado.value = "ok";
       porRecuperacion.value = false;
+      bloqueando = false;
       cerrandoSesion = false;
       return true;
     });
@@ -425,6 +498,9 @@ export const useSesion = defineStore("sesion", () => {
       );
       modo.value = "fichero";
       avisoMigracion.value = null;
+      // ES: El almacén heredado ya no necesita la credencial en memoria.
+      // EN: The legacy store no longer needs the credential in memory.
+      almacen.usarOfuscacion();
       claveRecuperacion.value = clave;
       tieneRecuperacion.value = !!clave;
       sincronizarAjustes(tipo ?? "ninguno");
@@ -477,6 +553,7 @@ export const useSesion = defineStore("sesion", () => {
       return;
     }
     tieneRecuperacion.value = e.tieneRecuperacion;
+    copiasPendientes.value = e.copiasPendientes;
     if (e.hayFichero) {
       modo.value = "fichero";
       if (!e.legible) {
@@ -603,6 +680,7 @@ export const useSesion = defineStore("sesion", () => {
   //     credential must be set with restablecerCredencial().
   async function desbloquearConRecuperacion(clave: string): Promise<boolean> {
     error.value = "";
+    if (cerrandoSesion) return false;
     if (modo.value !== "fichero") {
       error.value = "sinRecuperacion";
       return false;
@@ -670,6 +748,7 @@ export const useSesion = defineStore("sesion", () => {
     return conGuardadoEnPausa(async () => {
       const clave = await boveda.configurarBloqueo(tipo, credencial);
       useAjustes().setBloqueo(true, tipo);
+      copiasPendientes.value = (await boveda.estado()).copiasPendientes;
       claveRecuperacion.value = clave;
       tieneRecuperacion.value = true;
       autobloqueo.iniciar();
@@ -733,6 +812,8 @@ export const useSesion = defineStore("sesion", () => {
     return conGuardadoEnPausa(async () => {
       const clave = await boveda.regenerarRecuperacion(credencial);
       claveRecuperacion.value = clave;
+      claveNoConfirmada.value = false;
+      copiasPendientes.value = (await boveda.estado()).copiasPendientes;
       tieneRecuperacion.value = true;
       return clave;
     });
@@ -807,15 +888,16 @@ export const useSesion = defineStore("sesion", () => {
     await hidratarYGuardar(datos);
   }
 
-  // ES: Importa una copia con sus categorías propias de forma atómica: si la
-  //     copia trae `categoriasCustom` y no es una lista de textos, se rechaza
-  //     entera ("copia-invalida"); las categorías se ponen antes de importar
-  //     los datos y, si la importación falla, se devuelven las de antes.
-  // EN: Imports a backup with its custom categories atomically: if the backup
-  //     carries `categoriasCustom` and it is not a list of strings, the whole
-  //     backup is rejected ("copia-invalida"); the categories are set before
-  //     importing the data and, if the import fails, the previous ones are
-  //     put back.
+  // ES: Importa una copia con sus categorías propias: si la copia trae
+  //     `categoriasCustom` y no es una lista de textos, se rechaza entera
+  //     ("copia-invalida"). Las categorías se escriben SOLO después de que los
+  //     datos estén publicados; si esa escritura falla, se lanza
+  //     "categorias-no-guardadas" (los datos ya están importados).
+  // EN: Imports a backup with its custom categories: if the backup carries
+  //     `categoriasCustom` and it is not a list of strings, the whole backup is
+  //     rejected ("copia-invalida"). The categories are written ONLY after the
+  //     data is published; if that write fails, "categorias-no-guardadas" is
+  //     thrown (the data is already imported).
   async function importarCopiaCompleta(crudo: unknown, forzar = false) {
     const cats =
       crudo && typeof crudo === "object"
@@ -824,19 +906,12 @@ export const useSesion = defineStore("sesion", () => {
     if (cats !== undefined && !(Array.isArray(cats) && cats.every((c) => typeof c === "string"))) {
       throw new Error("copia-invalida");
     }
-    const antes = categoriasCustom();
-    if (cats) setCategoriasCustom(cats as string[]);
+    await importarDatos(crudo, forzar);
+    if (!cats) return;
     try {
-      await importarDatos(crudo, forzar);
-    } catch (e) {
-      if (cats) {
-        try {
-          setCategoriasCustom(antes);
-        } catch {
-          /* ES: sin espacio: quedan las nuevas / EN: no space: the new ones stay */
-        }
-      }
-      throw e;
+      setCategoriasCustom(cats as string[]);
+    } catch {
+      throw new Error("categorias-no-guardadas");
     }
   }
 
@@ -846,13 +921,29 @@ export const useSesion = defineStore("sesion", () => {
   // EN: Replaces all the data: FIRST it is saved and ONLY if that works is it
   //     put on screen. If it fails, the screen and what was pending stay as
   //     they were and it throws so the view does not treat it as done.
+  //     Durante la operación la interfaz está cubierta (`trabajando`): nada se
+  //     edita entre guardar y publicar. Antes se guarda lo pendiente del
+  //     estado anterior (si no se puede, no se sustituye nada) y al final solo
+  //     se da por guardada la revisión que se escribió de verdad.
+  // EN: During the operation the UI is covered (`trabajando`): nothing is
+  //     edited between saving and publishing. What was pending in the
+  //     previous state is saved first (if it cannot be, nothing is replaced)
+  //     and at the end only the revision really written counts as saved.
   async function hidratarYGuardar(datos: DatosBolsillo) {
-    await conGuardadoEnPausa(async () => {
-      await persistir(datos);
-      const f = useFinanzas();
-      f.hidratar(datos);
-      marcarGuardado(cambios);
-    });
+    trabajando.value = true;
+    try {
+      if (!(await vaciarGuardado())) throw new Error("guardado-pendiente");
+      await conGuardadoEnPausa(async () => {
+        if (!(await guardarFinalEnPausa())) throw new Error("guardado-pendiente");
+        await persistir(datos);
+        useFinanzas().hidratar(datos);
+        // ES: El vaciado de antes y lo hidratado coinciden con el disco.
+        // EN: The previous flush and what was hydrated match the disk.
+        marcarGuardado(cambios);
+      });
+    } finally {
+      trabajando.value = false;
+    }
   }
 
   // ES: "Empezar de cero" y "Cargar ejemplo" de Ajustes. / EN: Settings "Start from scratch" and "Load samples".
@@ -873,39 +964,49 @@ export const useSesion = defineStore("sesion", () => {
   // EN: Restores an automatic backup: first saves what is pending, Rust keeps
   //     the current main file as "antes-…" and the store is left locked; then
   //     it boots again (asks for the credential that backup had).
-  async function restaurarCopia(nombre: string) {
-    // ES: Si lo pendiente no se puede guardar, no se restaura: "antes-…" sale
-    //     del disco y esos cambios se perderían.
-    // EN: If what is pending cannot be saved, nothing is restored: "antes-…"
-    //     comes from disk and those changes would be lost.
-    if (desbloqueado.value && !(await vaciarGuardado())) throw new Error("guardado-pendiente");
-    await conGuardadoEnPausa(async () => {
-      // ES: App oculta antes del último guardado: nada se edita mientras tanto.
-      // EN: App hidden before the last save: nothing is edited meanwhile.
-      const estaba = desbloqueado.value;
-      cerrandoSesion = true;
-      desbloqueado.value = false;
-      if (estaba && !(await guardarFinalEnPausa())) {
-        desbloqueado.value = true;
-        cerrandoSesion = false;
-        throw new Error("guardado-pendiente");
-      }
+  async function restaurarCopia(nombre: string, credencial: string | null = null) {
+    trabajando.value = true;
+    try {
+      // ES: 1. Se abre, descifra y valida la copia SIN publicarla: una copia
+      //        dañada o con otra credencial no toca nada.
+      // EN: 1. The backup is opened, decrypted and validated WITHOUT
+      //        publishing it: a damaged backup or one with another credential
+      //        touches nothing.
       try {
-        await boveda.restaurarCopia(nombre);
+        await boveda.probarCopia(nombre, credencial);
       } catch (e) {
-        desbloqueado.value = estaba;
-        cerrandoSesion = false;
-        throw e;
+        const c = codigo(e);
+        throw new Error(
+          c === "credencial"
+            ? "copia-credencial"
+            : c === "version"
+              ? "copia-version"
+              : "copia-invalida"
+        );
       }
-      bloqueando = true;
-      autobloqueo.parar();
-      useFinanzas().hidratar(datosVacios());
-      guardados = cambios;
-      bloqueando = false;
-      cerrandoSesion = false;
-      fallo.value = null;
-    });
-    await arrancar();
+      // ES: 2. Lo pendiente se guarda antes (si no se puede, no se restaura).
+      // EN: 2. What is pending is saved first (if it cannot be, nothing is restored).
+      if (desbloqueado.value && !(await vaciarGuardado())) throw new Error("guardado-pendiente");
+      await conGuardadoEnPausa(async () => {
+        if (desbloqueado.value && !(await guardarFinalEnPausa())) {
+          throw new Error("guardado-pendiente");
+        }
+        // ES: 3. Rust publica (el actual queda como "antes-…") y la deja abierta.
+        // EN: 3. Rust publishes (the current one stays as "antes-…") and leaves it open.
+        const datos = await boveda.restaurarCopia(nombre, credencial);
+        retirarClaveRecuperacion();
+        porRecuperacion.value = false;
+        const e = await boveda.estado();
+        sincronizarAjustes(e.bloqueo);
+        tieneRecuperacion.value = e.tieneRecuperacion;
+        copiasPendientes.value = e.copiasPendientes;
+        modo.value = "fichero";
+        necesitaOnboarding.value = false;
+        entrar(datos);
+      });
+    } finally {
+      trabajando.value = false;
+    }
   }
 
   // ES: Exporta una copia cifrada con contraseña propia (mín. 8), con los
@@ -970,6 +1071,11 @@ export const useSesion = defineStore("sesion", () => {
     porRecuperacion,
     avisoLegadoNuevo,
     avisoMigracion,
+    claveNoConfirmada,
+    bloqueoPendiente,
+    copiasPendientes,
+    conflicto,
+    trabajando,
     arrancar,
     desbloquear,
     desbloquearConRecuperacion,

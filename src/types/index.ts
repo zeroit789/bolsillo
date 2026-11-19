@@ -231,8 +231,13 @@ export function esMesValido(x: unknown): x is string {
 
 // ES: Días que tiene un mes (mes 1-12), bisiestos incluidos.
 // EN: Days in a month (month 1-12), leap years included.
+//     Regla gregoriana sobre el año escrito (Date.UTC convertiría los años
+//     0-99 en 1900-1999).
+// EN: Gregorian rule on the written year (Date.UTC would turn years 0-99 into
+//     1900-1999).
 export function diasDelMes(año: number, mes: number): number {
-  return new Date(Date.UTC(año, mes, 0)).getUTCDate();
+  if (mes === 2) return (año % 4 === 0 && año % 100 !== 0) || año % 400 === 0 ? 29 : 28;
+  return [4, 6, 9, 11].includes(mes) ? 30 : 31;
 }
 
 // ES: ¿"AAAA-MM-DD" con un día que existe en ese mes? Exacto.
@@ -246,8 +251,10 @@ export function esFechaValida(x: unknown): x is string {
 
 // ES: Id de recibo seguro (también es nombre de fichero en Rust).
 // EN: Safe receipt id (it is also a file name in Rust).
+//     Solo minúsculas (en Windows los nombres de fichero no distinguen mayúsculas).
+// EN: Lowercase only (on Windows file names are case-insensitive).
 export function esIdReciboValido(x: unknown): x is string {
-  return typeof x === "string" && /^[A-Za-z0-9-]{1,64}$/.test(x);
+  return typeof x === "string" && /^[a-z0-9-]{1,64}$/.test(x);
 }
 
 // ES: Estructura completa que se persiste (y se cifra) en disco. Es el objeto

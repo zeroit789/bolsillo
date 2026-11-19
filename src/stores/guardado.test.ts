@@ -177,6 +177,42 @@ describe("bloquear ahora y autobloqueo / lock now and auto-lock", () => {
     expect(s.desbloqueado).toBe(true);
   });
 
+  it("al bloquear, la clave de recuperación sin confirmar se retira y se avisa / an unconfirmed recovery key is withdrawn on lock", async () => {
+    const s = await app();
+    await s.configurarBloqueo("pin", "4831");
+    expect(s.claveRecuperacion).not.toBeNull();
+    expect(await s.bloquearAhora()).toBe(true);
+    expect(s.claveRecuperacion).toBeNull();
+    expect(s.claveNoConfirmada).toBe(true);
+  });
+
+  it("si Rust no consigue bloquear, la sesión no queda atascada / if Rust fails to lock, the session is not stuck", async () => {
+    const s = await app("4831");
+    simulador.estado.fallarBloqueo = true;
+    expect(await s.bloquearAhora()).toBe(false);
+    expect(s.desbloqueado).toBe(true);
+    expect(useFinanzas().recurrentes.length).toBeGreaterThan(0);
+    simulador.estado.fallarBloqueo = false;
+    expect(await s.bloquearAhora()).toBe(true);
+    expect(await s.desbloquear("4831")).toBe(true);
+  });
+
+  it("un autobloqueo que no pudo guardar queda pendiente y se hace tras el siguiente guardado / a failed auto-lock is retried after the next save", async () => {
+    vi.useFakeTimers();
+    const s = await app("4831");
+    useAjustes().setMinutosAutobloqueo(1);
+    useFinanzas().addPlan({ nombre: "Sin guardar", objetivo: 10, aportado: 0 });
+    simulador.estado.fallarGuardado = true;
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect(s.desbloqueado).toBe(true);
+    expect(s.bloqueoPendiente).toBe(true);
+    simulador.estado.fallarGuardado = false;
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(s.desbloqueado).toBe(false);
+    expect(s.bloqueoPendiente).toBe(false);
+    expect(enDisco().planes.some((p) => p.nombre === "Sin guardar")).toBe(true);
+  });
+
   it("el autobloqueo actúa a los minutos configurados / auto-lock acts after the configured minutes", async () => {
     vi.useFakeTimers();
     const s = await app("4831");

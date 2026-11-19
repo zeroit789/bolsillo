@@ -13,7 +13,7 @@
  *     "fecha-original:…" tag visible to the user.
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
-import { esDatosValidos, VERSION_DATOS } from "../types";
+import { diasDelMes, esDatosValidos, VERSION_DATOS } from "../types";
 import { migrar, prepararDatos } from "./migraciones";
 
 // ES: Datos v2 mínimos con un apunte de cada tipo. / EN: Minimal v2 data with one entry of each kind.
@@ -84,6 +84,20 @@ describe("v3: calendario estricto / strict calendar", () => {
     const d = prepararDatos(v2()) as unknown as Record<string, unknown[]>;
     const p = { ...(d.puntuales[0] as object), fecha };
     expect(esDatosValidos({ ...d, puntuales: [p] })).toBe(false);
+  });
+
+  it("años de dos cifras con la regla gregoriana literal / two-digit years with the literal Gregorian rule", () => {
+    // ES: Date.UTC trataría 0000-0099 como 1900-1999; aquí manda el año escrito.
+    // EN: Date.UTC would treat 0000-0099 as 1900-1999; here the written year rules.
+    expect(diasDelMes(0, 2)).toBe(29);
+    expect(diasDelMes(4, 2)).toBe(29);
+    expect(diasDelMes(100, 2)).toBe(28);
+    expect(diasDelMes(2000, 2)).toBe(29);
+    expect(diasDelMes(2026, 2)).toBe(28);
+    expect(diasDelMes(2026, 4)).toBe(30);
+    const d = prepararDatos(v2()) as unknown as Record<string, unknown[]>;
+    const p = { ...(d.puntuales[0] as object), fecha: "0000-02-29" };
+    expect(esDatosValidos({ ...d, puntuales: [p] })).toBe(true);
   });
 
   it("acepta el 29 de febrero bisiesto / accepts 29 Feb on a leap year", () => {
