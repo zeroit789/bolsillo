@@ -195,6 +195,17 @@ describe("detectarDuplicados contra lo apuntado / against what is entered", () =
     }
   });
 
+  it("miles de movimientos iguales el mismo día no disparan memoria ni tiempo / thousands of equal movements on one day do not blow up memory or time", () => {
+    const filas = Array.from({ length: 2000 }, (_, i) => fila(i + 2, "2026-02-03", "CAFE", 250));
+    const apuntados = Array.from({ length: 2000 }, (_, i) =>
+      apunte(`p${i}`, "2026-02-03", "cafe", 2.5)
+    );
+    const inicio = Date.now();
+    const marcas = detectarDuplicados(filas, apuntados, { toleranciaDias: 3 });
+    expect(marcas.filter((m) => m.tipo === "apuntado")).toHaveLength(2000);
+    expect(Date.now() - inicio).toBeLessThan(2000);
+  });
+
   it("distinto signo, importe o concepto no casan / different sign, amount or concept do not match", () => {
     const filas = [fila(2, "2026-02-03", "BIZUM", 1500, "ingreso")];
     expect(detectarDuplicados(filas, [apunte("a", "2026-02-03", "Bizum", 15, "gasto")])).toEqual(

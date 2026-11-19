@@ -116,26 +116,67 @@ export function detectarDuplicados(
 
   // ES: En cada grupo, emparejamiento de coste mínimo entre los de tamaño
   //     máximo: el mayor número de parejas y, entre ellos, la menor suma de
-  //     días de diferencia.
+  //     días de diferencia. Dentro de un grupo, las filas (y los apuntes) del
+  //     mismo día son intercambiables, así que el grafo va por DÍAS con
+  //     capacidades: aunque haya miles de cafés iguales el mismo día, el
+  //     grafo tiene un nodo por día y no una arista por pareja posible.
   // EN: In each group, minimum-cost matching among the maximum-size ones: the
-  //     largest number of pairs and, among those, the smallest sum of days apart.
+  //     largest number of pairs and, among those, the smallest sum of days
+  //     apart. Within a group, rows (and entries) on the same day are
+  //     interchangeable, so the graph goes by DAYS with capacities: even with
+  //     thousands of equal coffees on one day, the graph has one node per day
+  //     and not one edge per possible pair.
   for (const [k, filasGrupo] of filasPorClave) {
-    const apuntesGrupo = grupos.get(k) ?? [];
-    const pares: { fila: number; apunte: number; coste: number }[] = [];
-    filasGrupo.forEach((posicion, f) => {
-      const dia = diaUTC(filas[posicion].fecha);
-      apuntesGrupo.forEach((c, a) => {
-        const dias = Math.abs(dia - c.dia);
-        if (dias <= tolerancia) pares.push({ fila: f, apunte: a, coste: dias });
-      });
-    });
-    for (const [f, a] of emparejarCosteMinimo(filasGrupo.length, apuntesGrupo.length, pares)) {
-      const posicion = filasGrupo[f];
-      const indice = apuntesGrupo[a].indice;
-      const linea = filas[posicion].linea;
-      const dias = Math.abs(diaUTC(filas[posicion].fecha) - apuntesGrupo[a].dia);
-      const id = apuntados[indice].id ?? String(indice);
-      marcas.set(linea, { linea, tipo: "apuntado", id, dias });
+    // ES: Por día, en orden: filas por línea y apuntes por posición.
+    // EN: Per day, in order: rows by line and entries by position.
+    const filasPorDia = new Map<number, number[]>();
+    for (const posicion of filasGrupo) {
+      const d = diaUTC(filas[posicion].fecha);
+      filasPorDia.set(d, [...(filasPorDia.get(d) ?? []), posicion]);
+    }
+    const apuntesPorDia = new Map<number, number[]>();
+    for (const c of grupos.get(k) ?? []) {
+      apuntesPorDia.set(c.dia, [...(apuntesPorDia.get(c.dia) ?? []), c.indice]);
+    }
+    const diasF = [...filasPorDia.keys()].sort((a, b) => a - b);
+    const diasA = [...apuntesPorDia.keys()].sort((a, b) => a - b);
+    for (const lista of filasPorDia.values()) lista.sort((a, b) => filas[a].linea - filas[b].linea);
+    for (const lista of apuntesPorDia.values()) lista.sort((a, b) => a - b);
+
+    const aristas: { izq: number; der: number; coste: number }[] = [];
+    diasF.forEach((dF, i) =>
+      diasA.forEach((dA, j) => {
+        const dias = Math.abs(dF - dA);
+        if (dias <= tolerancia) aristas.push({ izq: i, der: j, coste: dias });
+      })
+    );
+    const flujos = flujoCosteMinimo(
+      diasF.map((d) => filasPorDia.get(d)?.length ?? 0),
+      diasA.map((d) => apuntesPorDia.get(d)?.length ?? 0),
+      aristas
+    );
+
+    // ES: Se reparten los flujos por día entre filas y apuntes concretos: las
+    //     de antes (menor línea, menor posición) primero, y cada fila prueba
+    //     antes su día de apunte más cercano.
+    // EN: Day flows are handed out to concrete rows and entries: earlier ones
+    //     (lower line, lower position) first, and each row tries its closest
+    //     entry day first.
+    const orden = aristas
+      .map((a, n) => ({ ...a, flujo: flujos[n] }))
+      .filter((a) => a.flujo > 0)
+      .sort((a, b) => a.izq - b.izq || a.coste - b.coste || a.der - b.der);
+    for (const a of orden) {
+      const libresF = filasPorDia.get(diasF[a.izq]) ?? [];
+      const libresA = apuntesPorDia.get(diasA[a.der]) ?? [];
+      for (let n = 0; n < a.flujo; n++) {
+        const posicion = libresF.shift();
+        const indice = libresA.shift();
+        if (posicion === undefined || indice === undefined) break;
+        const linea = filas[posicion].linea;
+        const id = apuntados[indice].id ?? String(indice);
+        marcas.set(linea, { linea, tipo: "apuntado", id, dias: a.coste });
+      }
     }
   }
 
@@ -155,36 +196,43 @@ export function detectarDuplicados(
   return [...marcas.values()].sort((a, b) => a.linea - b.linea);
 }
 
-// ES: Emparejamiento bipartito de coste mínimo entre los de tamaño máximo,
-//     con caminos más cortos sucesivos (flujo de coste mínimo, capacidad 1):
-//     cada vuelta añade una pareja por el camino más barato del grafo
-//     residual (SPFA, admite los costes negativos de las aristas de vuelta).
-//     Devuelve pares [fila, apunte] con índices locales del grupo. Los grupos
-//     son pequeños (mismo signo, céntimos y concepto dentro de la tolerancia).
-// EN: Minimum-cost bipartite matching among the maximum-size ones, with
-//     successive shortest paths (min-cost flow, capacity 1): each round adds
-//     one pair through the cheapest path of the residual graph (SPFA, which
-//     handles the negative costs of the backward edges). Returns [row, entry]
-//     pairs with group-local indexes. Groups are small (same sign, cents and
-//     concept within tolerance).
-function emparejarCosteMinimo(
-  nFilas: number,
-  nApuntes: number,
-  pares: { fila: number; apunte: number; coste: number }[]
-): [number, number][] {
-  // ES: Nodos: filas, apuntes, origen y destino. / EN: Nodes: rows, entries, source and sink.
-  const total = nFilas + nApuntes + 2;
+// ES: Flujo de coste mínimo entre los de flujo máximo en un grafo bipartito
+//     con capacidades (caminos más cortos sucesivos): cada vuelta busca el
+//     camino más barato del grafo residual (SPFA, que admite los costes
+//     negativos de las aristas de vuelta) y empuja por él todo lo que cabe.
+//     `capIzq` y `capDer` son cuántas filas y apuntes hay en cada nodo (día);
+//     devuelve el flujo de cada arista de `aristas`, en el mismo orden.
+// EN: Minimum-cost flow among the maximum-flow ones on a bipartite graph with
+//     capacities (successive shortest paths): each round finds the cheapest
+//     path of the residual graph (SPFA, which handles the negative costs of
+//     the backward edges) and pushes as much as fits along it. `capIzq` and
+//     `capDer` are how many rows and entries each node (day) holds; returns
+//     the flow of every edge in `aristas`, in the same order.
+function flujoCosteMinimo(
+  capIzq: number[],
+  capDer: number[],
+  aristas: { izq: number; der: number; coste: number }[]
+): number[] {
+  // ES: Nodos: izquierda, derecha, origen y destino. / EN: Nodes: left, right, source and sink.
+  const nI = capIzq.length;
+  const total = nI + capDer.length + 2;
   const origen = total - 2;
   const destino = total - 1;
   type Arista = { a: number; capacidad: number; coste: number; inversa: number };
   const grafo: Arista[][] = Array.from({ length: total }, () => []);
-  const unir = (u: number, v: number, coste: number) => {
-    grafo[u].push({ a: v, capacidad: 1, coste, inversa: grafo[v].length });
+  // ES: Añade u -> v y su arista de vuelta; devuelve la posición de la de ida.
+  // EN: Adds u -> v and its backward edge; returns the forward edge position.
+  const unir = (u: number, v: number, capacidad: number, coste: number) => {
+    grafo[u].push({ a: v, capacidad, coste, inversa: grafo[v].length });
     grafo[v].push({ a: u, capacidad: 0, coste: -coste, inversa: grafo[u].length - 1 });
+    return grafo[u].length - 1;
   };
-  for (let f = 0; f < nFilas; f++) unir(origen, f, 0);
-  for (const p of pares) unir(p.fila, nFilas + p.apunte, p.coste);
-  for (let a = 0; a < nApuntes; a++) unir(nFilas + a, destino, 0);
+  capIzq.forEach((c, i) => unir(origen, i, c, 0));
+  const posiciones = aristas.map((a) =>
+    unir(a.izq, nI + a.der, Math.min(capIzq[a.izq], capDer[a.der]), a.coste)
+  );
+  capDer.forEach((c, j) => unir(nI + j, destino, c, 0));
+  const iniciales = aristas.map((a, n) => grafo[a.izq][posiciones[n]].capacidad);
 
   for (;;) {
     // ES: Camino más barato del origen al destino (SPFA).
@@ -212,23 +260,20 @@ function emparejarCosteMinimo(
       });
     }
     if (distancia[destino] === Number.POSITIVE_INFINITY) break;
-    // ES: Se empuja una unidad por el camino encontrado.
-    // EN: One unit is pushed along the path found.
+    // ES: Lo que cabe por el camino (su arista más estrecha) y se empuja.
+    // EN: What fits along the path (its narrowest edge) is pushed.
+    let cabe = Number.POSITIVE_INFINITY;
+    for (let v = destino; v !== origen; v = previo[v]) {
+      cabe = Math.min(cabe, grafo[previo[v]][aristaPrevia[v]].capacidad);
+    }
     for (let v = destino; v !== origen; v = previo[v]) {
       const e = grafo[previo[v]][aristaPrevia[v]];
-      e.capacidad -= 1;
-      grafo[v][e.inversa].capacidad += 1;
+      e.capacidad -= cabe;
+      grafo[v][e.inversa].capacidad += cabe;
     }
   }
 
-  // ES: Parejas = aristas fila -> apunte agotadas. / EN: Pairs = used row -> entry edges.
-  const resultado: [number, number][] = [];
-  for (let f = 0; f < nFilas; f++) {
-    for (const e of grafo[f]) {
-      if (e.a >= nFilas && e.a < nFilas + nApuntes && e.capacidad === 0) {
-        resultado.push([f, e.a - nFilas]);
-      }
-    }
-  }
-  return resultado;
+  // ES: Flujo de cada arista = capacidad inicial - capacidad que le queda.
+  // EN: Flow of each edge = initial capacity - remaining capacity.
+  return aristas.map((a, n) => iniciales[n] - grafo[a.izq][posiciones[n]].capacidad);
 }
