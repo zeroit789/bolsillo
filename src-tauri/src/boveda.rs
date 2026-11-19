@@ -1298,8 +1298,11 @@ impl Boveda {
         // EN: Backups of the previous DEK move to the new key; those of older
         //     generations that still have an (already replaced) recovery lose
         //     it: no revoked key keeps opening anything.
+        // ES: Las copias de la DEK recién publicada ya llevan la clave nueva.
+        // EN: Backups of the just-published DEK already carry the new key.
+        let nuevo_id = self.abierta()?.cabecera.dek_id.clone();
         let fallos = self.reenvolver_copias(None, |f| {
-            if f.envolturas.recuperacion.is_none() {
+            if f.envolturas.recuperacion.is_none() || f.dek_id == nuevo_id {
                 return Ok(());
             }
             if f.dek_id == viejo_id {
@@ -2020,6 +2023,29 @@ mod tests {
         b.quitar_bloqueo().unwrap();
         b.restaurar_copia(&copia, Some("4831")).unwrap();
         assert!(b.estado().tiene_recuperacion);
+    }
+
+    #[test]
+    fn regenerar_no_quita_la_clave_nueva_de_la_copia_recien_creada() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        // ES: El reloj de prueba avanza 700 s por lectura: publicar la
+        //     regeneración crea otra copia reciente (con la DEK nueva).
+        // EN: The test clock moves 700 s per read: publishing the
+        //     regeneration creates another recent backup (with the new DEK).
+        b.regenerar_recuperacion("4831").unwrap();
+        let nuevo = b.abierta().unwrap().cabecera.dek_id.clone();
+        let con_nueva: Vec<_> = b
+            .listar_copias()
+            .into_iter()
+            .map(|c| desde_bytes(&b.dir.leer_copia(&c.nombre).unwrap()).unwrap())
+            .filter(|f| f.dek_id == nuevo)
+            .collect();
+        assert!(!con_nueva.is_empty());
+        assert!(con_nueva
+            .iter()
+            .all(|f| f.envolturas.recuperacion.is_some()));
     }
 
     #[test]
