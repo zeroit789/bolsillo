@@ -109,7 +109,7 @@ async function guardar(
    EN: Saves a JSON text with the native dialog (e.g. the unreadable data that
        does not fit as a rescue copy, so it is not lost).
    --------------------------------------------------------------------------- */
-//     Devuelve false si el usuario cancela el diálogo.
+// ES: Devuelve false si el usuario cancela el diálogo.
 // EN: Returns false if the user cancels the dialog.
 export async function guardarJson(nombreSugerido: string, texto: string): Promise<boolean> {
   return guardar(nombreSugerido, "json", new TextEncoder().encode(texto));

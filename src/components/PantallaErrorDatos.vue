@@ -168,8 +168,8 @@ function empezar() {
   if (confirm(t("confirmSinRescate"))) sesion.empezarDeCero(true);
 }
 
-// ES: Descarga el blob ilegible tal cual (cifrado) cuando no cabe el rescate.
-// EN: Downloads the unreadable blob as is (encrypted) when the rescue does not fit.
+// ES: Descarga el blob ilegible tal cual (cifrado) a un fichero elegido por el usuario.
+// EN: Downloads the unreadable blob as is (encrypted) to a file the user picks.
 const descarga = ref("");
 async function descargar() {
   const blob = almacen.blobCrudo();
@@ -193,8 +193,12 @@ async function descargar() {
       <p v-if="sesion.rescate" class="text-muted text-xs break-all">
         {{ t("rescateOk") }} <code class="text-ink">{{ sesion.rescate }}</code>
       </p>
-      <div v-else-if="sesion.rescateFallido" class="space-y-2">
-        <p class="text-danger text-sm">{{ t("rescateFallido") }}</p>
+      <!-- ES: La descarga siempre está: es la única forma de sacar los datos ilegibles
+           de la app (y la única copia si el rescate no cupo).
+           EN: The download is always there: it is the only way to get the unreadable
+           data out of the app (and the only copy if the rescue did not fit). -->
+      <div class="space-y-2">
+        <p v-if="sesion.rescateFallido" class="text-danger text-sm">{{ t("rescateFallido") }}</p>
         <button
           type="button"
           class="rounded-lg bg-surface-2 border border-border px-3 py-2 text-sm text-ink hover:border-brand"

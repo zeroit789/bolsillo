@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { esDatosValidos, VERSION_DATOS, type DatosBolsillo } from "../types";
 import { prepararDatos } from "../utils/migraciones";
+import { datosVacios } from "../data/demo";
+import { mesActual } from "../utils/format";
 import * as almacen from "../utils/almacen";
 import { useAjustes } from "./ajustes";
 import { useFinanzas } from "./finanzas";
@@ -247,7 +249,10 @@ describe("esDatosValidos", () => {
       (d: DatosBolsillo) => ((d.puntuales[0] as { concepto: unknown }).concepto = 1),
     ],
     ["etiqueta no texto", (d: DatosBolsillo) => (d.puntuales[0].tags = [3 as never])],
-    ["recibo que no es imagen", (d: DatosBolsillo) => (d.puntuales[0].recibo = "javascript:x")],
+    [
+      "recibo que no es texto",
+      (d: DatosBolsillo) => ((d.puntuales[0] as { recibo: unknown }).recibo = 9),
+    ],
     [
       "cuenta no texto",
       (d: DatosBolsillo) => ((d.recurrentes[0] as { cuenta: unknown }).cuenta = 7),
@@ -301,5 +306,85 @@ describe("datos iniciales y reemplazo / initial data and replacement", () => {
     r = await almacen.leer();
     expect(r.estado === "ok" && r.datos.deudas.length > 0).toBe(true);
     expect(sesion.estadoGuardado).toBe("ok");
+  });
+});
+
+describe("lo que escribe la app pasa la validación / what the app writes passes validation", () => {
+  it("altas reales con y sin opcionales, tras JSON / real entries with and without optionals, after JSON", () => {
+    const f = useFinanzas();
+    f.hidratar(datosVacios());
+    f.addCuenta({ nombre: "Banco", saldoInicial: 100 });
+    const cuenta = f.snapshot().cuentas[0].id;
+    // ES: Sin opcionales y con todos (como los emite ModalMovimiento y DeudasView).
+    // EN: Without optionals and with all of them (as ModalMovimiento and DeudasView emit them).
+    const base = { concepto: "X", importe: 10, categoria: "Ocio" };
+    f.addRecurrente({ ...base, signo: "gasto", desde: "2026-01", hasta: null });
+    f.addRecurrente({
+      ...base,
+      signo: "ingreso",
+      desde: "2026-01",
+      hasta: "2026-12",
+      diaPago: undefined,
+      comercio: undefined,
+      tags: undefined,
+      cuenta: undefined,
+    });
+    f.addRecurrente({
+      ...base,
+      signo: "gasto",
+      desde: "2026-01",
+      hasta: null,
+      diaPago: 5,
+      comercio: "Tienda",
+      tags: ["casa"],
+      cuenta,
+    });
+    f.addPuntual({ ...base, signo: "gasto", fecha: "2026-02-03" });
+    f.addPuntual({
+      ...base,
+      signo: "gasto",
+      fecha: "2026-02-03",
+      comercio: "Súper",
+      tags: ["a", "b"],
+      recibo: "data:image/jpeg;base64,AAAA",
+      cuenta,
+      subdivisiones: [
+        { categoria: "Ocio", importe: 6 },
+        { categoria: "Hogar", importe: 4 },
+      ],
+    });
+    f.addDeuda({
+      concepto: "Moto",
+      tipo: "moto",
+      total: 1000,
+      cuotaMensual: 100,
+      pagadoInicial: 0,
+      inicioMes: "2026-01",
+    });
+    f.addDeuda({
+      concepto: "Tarjeta",
+      tipo: "tarjeta",
+      total: 500,
+      cuotaMensual: 50,
+      pagadoInicial: 10,
+      inicioMes: "2026-01",
+      diaPago: 28,
+    });
+    f.addPlan({ nombre: "Viaje", objetivo: 900, aportado: 0 });
+    f.addPlantilla({ concepto: "Café", importe: 1.5, signo: "gasto", categoria: "Ocio" });
+    f.setPresupuesto("Ocio", 200);
+
+    const enDisco = JSON.parse(JSON.stringify(f.snapshot()));
+    expect(esDatosValidos(enDisco)).toBe(true);
+    expect(esDatosValidos(f.snapshot())).toBe(true);
+  });
+
+  it("con datos vacíos el mes actual existe y los totales son números / with empty data the current month exists and totals are numbers", () => {
+    const f = useFinanzas();
+    f.hidratar(datosVacios());
+    expect(f.mesesDisponibles).toContain(mesActual());
+    const r = f.resumenDe(mesActual());
+    for (const v of [r.ingresos, r.gastosFijos, r.gastosVariables, r.totalGastos, r.disponible])
+      expect(Number.isFinite(v)).toBe(true);
   });
 });

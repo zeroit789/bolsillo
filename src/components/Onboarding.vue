@@ -165,7 +165,7 @@ async function empezar() {
   }
   // ES: Guardar nombre / EN: Persist name and lock (null = open directly, no lock).
   //     y bloqueo (null = abrir directamente, sin bloqueo).
-  //     Si el guardado falla, se queda en la bienvenida con el aviso.
+  // ES: Si el guardado falla, se queda en la bienvenida con el aviso.
   // EN: If saving fails, it stays on the welcome screen with the warning.
   try {
     await sesion.completarOnboarding({

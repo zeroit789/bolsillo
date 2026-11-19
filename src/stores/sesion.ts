@@ -354,12 +354,25 @@ export const useSesion = defineStore("sesion", () => {
     }
   }
 
-  // ES: Desde la pantalla de bloqueo: abre las opciones de recuperación (importar
-  //     copia o empezar de cero) sin tocar nada todavía.
-  // EN: From the lock screen: opens the recovery options (import a backup or
-  //     start from scratch) without touching anything yet.
-  function mostrarRecuperacion() {
-    entrarEnFallo("credencial");
+  // ES: Desde la pantalla de bloqueo: antes de abrir las opciones de recuperación
+  //     prueba el secreto de ofuscación. Si los ajustes dicen "bloqueo" pero los
+  //     datos están solo ofuscados (p. ej. un "quitar PIN" de la 1.1.0 que falló a
+  //     medias), abre y corrige los ajustes: esos datos no estaban protegidos por
+  //     ningún PIN. Si no, muestra la pantalla de error sin tocar nada.
+  // EN: From the lock screen: before opening the recovery options it tries the
+  //     obfuscation secret. If the settings say "lock" but the data is only
+  //     obfuscated (e.g. a 1.1.0 "remove PIN" that failed halfway), it opens and
+  //     fixes the settings: that data was not protected by any PIN. Otherwise it
+  //     shows the error screen without touching anything.
+  async function mostrarRecuperacion() {
+    const r = await almacen.leer(almacen.SECRETO_OFUSCACION);
+    if (r.estado === "ok") {
+      almacen.usarOfuscacion();
+      useAjustes().setBloqueo(false, null);
+      entrar(r.datos);
+      return;
+    }
+    entrarEnFallo(r.estado === "invalido" || r.estado === "version" ? r.estado : "credencial");
   }
 
   // ES: Opción "empezar de cero" de la pantalla de error: exige la copia de

@@ -1,14 +1,14 @@
 /* =============================================================================
- * recuperacion.test.ts — Datos ilegibles y guardados fallidos / Unreadable data & failed saves
+ * recuperacion.test.ts — Datos ilegibles / Unreadable data
  * -----------------------------------------------------------------------------
- * ES: Reproduce las dos vías de pérdida de datos del análisis: (H1) arrancar con
- *     un blob que no se puede leer y que la app sustituía en silencio por los
- *     datos de ejemplo, y (H2) un guardado que falla (almacenamiento lleno) sin
- *     que nadie se entere. Todos los datos son inventados.
- * EN: Reproduces the two data-loss paths from the analysis: (H1) booting with a
- *     blob that cannot be read, which the app silently replaced with the sample
- *     data, and (H2) a save that fails (storage full) without anyone noticing.
- *     All data is made up.
+ * ES: Reproduce H1 del análisis (arrancar con un blob que no se puede leer, que
+ *     la app sustituía en silencio por los datos de ejemplo) y prueba las salidas
+ *     de la pantalla de error. H2 (guardado que falla) está en guardado.test.ts.
+ *     Todos los datos son inventados.
+ * EN: Reproduces H1 from the analysis (booting with a blob that cannot be read,
+ *     which the app silently replaced with the sample data) and tests the ways
+ *     out of the error screen. H2 (failing save) lives in guardado.test.ts. All
+ *     data is made up.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
  *   1. Utilidades de prueba / Test helpers
@@ -50,7 +50,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  vi.restoreAllMocks();
+  // ES: vi.restoreAllMocks no restaura el espía de localStorage de happy-dom:
+  //     se restaura a mano para que un fallo no contamine la prueba siguiente.
+  // EN: vi.restoreAllMocks does not restore happy-dom's localStorage spy: it is
+  //     restored by hand so a failure does not leak into the next test.
+  if (vi.isMockFunction(localStorage.setItem)) vi.mocked(localStorage.setItem).mockRestore();
   await vaciarPendientes();
 });
 
@@ -200,5 +204,21 @@ describe("pantalla de error: salidas / error screen: ways out", () => {
     expect(sesion.fallo).toBeNull();
     expect(useAjustes().bloqueoActivo).toBe(true);
     expect(useAjustes().bloqueoTipo).toBe("pin");
+  });
+});
+
+describe("bloqueo en ajustes con datos solo ofuscados / lock in settings with only-obfuscated data", () => {
+  it("la recuperación abre y corrige los ajustes / recovery opens and fixes the settings", async () => {
+    await primerArranque(null);
+    // ES: Ajustes que dicen "PIN" sobre un blob solo ofuscado (estado de la 1.1.0).
+    // EN: Settings saying "PIN" over an only-obfuscated blob (1.1.0 state).
+    useAjustes().setBloqueo(true, "pin");
+    await reabrirApp();
+    const sesion = useSesion();
+    await sesion.arrancar();
+    expect(sesion.desbloqueado).toBe(false);
+    await sesion.mostrarRecuperacion();
+    expect(sesion.desbloqueado).toBe(true);
+    expect(useAjustes().bloqueoActivo).toBe(false);
   });
 });

@@ -94,14 +94,14 @@ function copiarLista(x: unknown): unknown {
 //     planes/presupuestos/plantillas/cuentas podían faltar y los opcionales no
 //     se validaban. Aquí: se rellenan las colecciones que falten con [], se
 //     limpian los opcionales con descuidos tolerables (null, "", día de pago
-//     como texto, etiquetas vacías, recibo que no es imagen) y se marca v2.
+//     como texto, etiquetas vacías, recibo que no es texto) y se marca v2.
 //     No inventa importes ni fechas: lo que rompa los cálculos lo rechaza luego
 //     la validación.
 // EN: v1 → v2. v1 (up to 1.1.0) had no `version`, the planes/presupuestos/
 //     plantillas/cuentas collections could be missing and the optionals were
 //     not validated. Here: missing collections are filled with [], optionals
 //     with tolerable slips (null, "", payment day as text, empty tags, receipt
-//     that is not an image) are cleaned and v2 is set. It never invents amounts
+//     that is not text) are cleaned and v2 is set. It never invents amounts
 //     or dates: whatever breaks the maths is rejected later by validation.
 function v1aV2(d: Obj): Obj {
   const o: Obj = { ...d };
@@ -120,11 +120,9 @@ function v1aV2(d: Obj): Obj {
         limpiarOpcional(e, c);
       limpiarDiaPago(e);
       limpiarTags(e);
-      if (
-        e.recibo !== undefined &&
-        !(typeof e.recibo === "string" && e.recibo.startsWith("data:image/"))
-      )
-        delete e.recibo;
+      // ES: Un recibo que no es texto no se puede pintar: se quita.
+      // EN: A receipt that is not text cannot be rendered: it is removed.
+      if (e.recibo !== undefined && typeof e.recibo !== "string") delete e.recibo;
     }
   }
   // ES: Día de pago de las deudas. / EN: Payment day of the debts.

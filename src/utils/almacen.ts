@@ -143,7 +143,7 @@ let cola: Promise<void> = Promise.resolve();
 //     reaches the encrypt step (snapshot returns live refs), the written blob
 //     matches exactly this instant. And the secret no longer depends on the
 //     resolution order versus secret changes.
-//     `secreto` permite cifrar con uno distinto del activo (al cambiar la
+// ES: `secreto` permite cifrar con uno distinto del activo (al cambiar la
 //     credencial: primero se guarda con la nueva y solo si va bien se activa).
 // EN: `secreto` allows encrypting with one other than the active one (when
 //     changing the credential: save with the new one first, activate it only

@@ -33,7 +33,12 @@ const t = crearT({
   introducePassword: { es: "Introduce tu contraseña", en: "Enter your password" },
   comprobando: { es: "Comprobando…", en: "Checking…" },
   desbloquear: { es: "Desbloquear", en: "Unlock" },
-  credIncorrecta: { es: "Credencial incorrecta", en: "Wrong credential" },
+  // ES: AES-GCM no distingue una credencial mala de unos datos alterados.
+  // EN: AES-GCM cannot tell a wrong credential from altered data.
+  credIncorrecta: {
+    es: "No abre los datos (credencial incorrecta o datos alterados).",
+    en: "It does not open the data (wrong credential or altered data).",
+  },
   lecturaFallida: { es: "No se pudieron leer los datos", en: "Could not read the data" },
   recuperar: {
     es: "¿No puedes entrar? Ver opciones de recuperación",
@@ -123,7 +128,7 @@ async function entrar() {
         v-if="fallos > 0"
         type="button"
         class="mt-3 text-xs text-muted underline hover:text-ink"
-        @click="sesion.mostrarRecuperacion()"
+        @click="void sesion.mostrarRecuperacion()"
       >
         {{ t("recuperar") }}
       </button>

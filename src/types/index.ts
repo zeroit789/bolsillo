@@ -267,9 +267,6 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const opt = (x: unknown, ok: (v: unknown) => boolean) => x === undefined || ok(x);
   const diaOk = (x: unknown) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 31;
   const tagsOk = (x: unknown) => Array.isArray(x) && x.every((t) => typeof t === "string");
-  // ES: El recibo es una imagen en data URL (es lo único que la app sabe pintar).
-  // EN: The receipt is an image data URL (the only thing the app can render).
-  const reciboOk = (x: unknown) => typeof x === "string" && x.startsWith("data:image/");
   const tiposDeuda: string[] = TIPOS_DEUDA.map((t) => t.valor);
   // ES: Una colección obligatoria: array cuyos elementos (objetos) pasan `ok`.
   // EN: A mandatory collection: an array whose items (objects) all pass `ok`.
@@ -316,7 +313,7 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
       fechaOk(p.fecha) &&
       opt(p.comercio, str) &&
       opt(p.tags, tagsOk) &&
-      opt(p.recibo, reciboOk) &&
+      opt(p.recibo, str) &&
       opt(p.cuenta, str) &&
       opt(p.subdivisiones, subOk)
   );

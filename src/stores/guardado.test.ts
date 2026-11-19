@@ -42,7 +42,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  vi.restoreAllMocks();
+  // ES: vi.restoreAllMocks no restaura el espía de localStorage de happy-dom:
+  //     se restaura a mano para que un fallo no contamine la prueba siguiente.
+  // EN: vi.restoreAllMocks does not restore happy-dom's localStorage spy: it is
+  //     restored by hand so a failure does not leak into the next test.
+  if (vi.isMockFunction(localStorage.setItem)) vi.mocked(localStorage.setItem).mockRestore();
   await vaciarPendientes();
 });
 
