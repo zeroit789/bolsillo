@@ -21,7 +21,7 @@
  *   2. Pruebas / Tests
  * ===========================================================================*/
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApp, defineComponent, h, nextTick, ref, type App } from "vue";
+import { createApp, defineComponent, h, nextTick, ref, type App, type VNode } from "vue";
 import { useFocoAtrapado, type OpcionesFoco } from "./useFocoAtrapado";
 
 // ── 1. Montaje de prueba / Test mounting ──────────────────────────────────────
@@ -48,26 +48,32 @@ function crearAbridor(): HTMLButtonElement {
   return b;
 }
 
-// ES: Monta un diálogo con tres controles (input, select y botón) que se
-//     muestra mientras `abierto` sea true. El nodo raíz va en document.body
-//     para que focus() mueva de verdad document.activeElement.
-// EN: Mounts a dialog with three controls (input, select and button) shown
-//     while `abierto` is true. The root node goes into document.body so
-//     focus() really moves document.activeElement.
-function montarDialogo(opciones: OpcionesFoco = {}, abiertoInicial = true) {
+// ES: Controles por defecto del diálogo: input, select y botón.
+// EN: Default dialog controls: input, select and button.
+const controlesBase = (): VNode[] => [
+  h("input", { id: "primero" }),
+  h("select", { id: "medio" }, [h("option", "a")]),
+  h("button", { id: "ultimo" }, "Guardar"),
+];
+
+// ES: Monta un diálogo con tres controles (input, select y botón), u otros si
+//     se pasan en `hijos`, que se muestra mientras `abierto` sea true. El nodo
+//     raíz va en document.body para que focus() mueva de verdad
+//     document.activeElement.
+// EN: Mounts a dialog with three controls (input, select and button), or
+//     others if given in `hijos`, shown while `abierto` is true. The root node
+//     goes into document.body so focus() really moves document.activeElement.
+function montarDialogo(
+  opciones: OpcionesFoco = {},
+  abiertoInicial = true,
+  hijos: () => VNode[] = controlesBase
+) {
   const abierto = ref(abiertoInicial);
   const Comp = defineComponent({
     setup() {
       const caja = ref<HTMLElement | null>(null);
       useFocoAtrapado(caja, opciones);
-      return () =>
-        abierto.value
-          ? h("div", { ref: caja, role: "dialog" }, [
-              h("input", { id: "primero" }),
-              h("select", { id: "medio" }, [h("option", "a")]),
-              h("button", { id: "ultimo" }, "Guardar"),
-            ])
-          : null;
+      return () => (abierto.value ? h("div", { ref: caja, role: "dialog" }, hijos()) : null);
     },
   });
   const raiz = document.createElement("div");
@@ -216,5 +222,62 @@ describe("useFocoAtrapado", () => {
     pulsar("Escape");
     expect(escArriba).toHaveBeenCalledTimes(1);
     expect(escAbajo).not.toHaveBeenCalled();
+  });
+
+  // ES: Controles que el selector encuentra pero que no son tabulables. Cada
+  //     uno se pone en un extremo del diálogo para comprobar que el salto de
+  //     Tab y Shift+Tab sigue funcionando (antes, uno de estos en un extremo
+  //     rompía el ciclo).
+  // EN: Controls the selector finds but which are not tabbable. Each one is
+  //     placed at an edge of the dialog to check that the Tab and Shift+Tab
+  //     wrap still works (before, one of these at an edge broke the cycle).
+  const excluidos: [string, () => VNode][] = [
+    ['tabindex="-1"', () => h("button", { tabindex: "-1" }, "x")],
+    ["atributo hidden / hidden attribute", () => h("div", { hidden: true }, [h("input")])],
+    ["inert", () => h("div", { inert: "" }, [h("button", "x")])],
+    ["fieldset disabled", () => h("fieldset", { disabled: true }, [h("button", "x")])],
+    ["display:none", () => h("button", { style: "display: none" }, "x")],
+    ["visibility:hidden", () => h("input", { style: "visibility: hidden" })],
+  ];
+
+  for (const [nombre, excluido] of excluidos) {
+    it(`Tab en el último tabulable vuelve al primero con ${nombre} al final`, async () => {
+      montarDialogo({}, true, () => [...controlesBase(), excluido()]);
+      await nextTick();
+      document.getElementById("ultimo")!.focus();
+      const ev = pulsar("Tab");
+      expect(ev.defaultPrevented).toBe(true);
+      expect(conFoco()).toBe("primero");
+    });
+
+    it(`Shift+Tab en el primer tabulable salta al último con ${nombre} al principio`, async () => {
+      montarDialogo({}, true, () => [excluido(), ...controlesBase()]);
+      await nextTick();
+      // ES: El foco inicial tampoco cae en el control excluido.
+      // EN: Initial focus does not land on the excluded control either.
+      expect(conFoco()).toBe("primero");
+      const ev = pulsar("Tab", true);
+      expect(ev.defaultPrevented).toBe(true);
+      expect(conFoco()).toBe("ultimo");
+    });
+  }
+
+  it("el botón de la leyenda de un fieldset desactivado sí es tabulable", async () => {
+    // ES: Excepción del HTML: lo que va dentro de la primera <legend> de un
+    //     fieldset desactivado sigue activo.
+    // EN: HTML exception: what is inside the first <legend> of a disabled
+    //     fieldset stays enabled.
+    montarDialogo({}, true, () => [
+      ...controlesBase(),
+      h("fieldset", { disabled: true }, [
+        h("legend", [h("button", { id: "enLeyenda" }, "x")]),
+        h("button", "y"),
+      ]),
+    ]);
+    await nextTick();
+    document.getElementById("enLeyenda")!.focus();
+    const ev = pulsar("Tab");
+    expect(ev.defaultPrevented).toBe(true);
+    expect(conFoco()).toBe("primero");
   });
 });

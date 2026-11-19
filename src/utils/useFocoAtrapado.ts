@@ -44,8 +44,10 @@ export interface OpcionesFoco {
   focoInicial?: () => HTMLElement | null | undefined;
 }
 
-// ES: Controles que pueden recibir el foco con el teclado.
-// EN: Controls that can receive focus from the keyboard.
+// ES: Candidatos a recibir el foco con el teclado. El selector es amplio;
+//     esTabulable descarta después los que en realidad no se alcanzan con Tab.
+// EN: Candidates to receive focus from the keyboard. The selector is broad;
+//     esTabulable then drops the ones Tab can't actually reach.
 const ENFOCABLES = [
   "a[href]",
   "button:not([disabled])",
@@ -55,10 +57,54 @@ const ENFOCABLES = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-// ES: Lista ordenada de los controles enfocables dentro del contenedor.
-// EN: Ordered list of the focusable controls inside the container.
+// ES: true si un control de formulario queda desactivado por un
+//     <fieldset disabled> antecesor. Excepción del HTML: lo que va dentro de
+//     la primera <legend> del fieldset sigue activo. Los enlaces no se ven
+//     afectados.
+// EN: true if a form control is disabled by an ancestor <fieldset disabled>.
+//     HTML exception: what is inside the fieldset's first <legend> stays
+//     enabled. Links are not affected.
+function desactivadoPorFieldset(el: HTMLElement): boolean {
+  if (!el.matches("button, input, select, textarea")) return false;
+  let fs = el.closest("fieldset[disabled]");
+  while (fs) {
+    const leyenda = Array.from(fs.children).find((c) => c.tagName === "LEGEND");
+    if (!leyenda || !leyenda.contains(el)) return true;
+    fs = fs.parentElement?.closest("fieldset[disabled]") ?? null;
+  }
+  return false;
+}
+
+// ES: true si el control se alcanza de verdad con Tab: sin tabindex negativo,
+//     fuera de [hidden]/[inert], no desactivado por un fieldset y visible
+//     (checkVisibility cubre display:none y visibility:hidden, también en un
+//     antecesor; funciona en WebView2 y en happy-dom; si no existiera, se da
+//     por visible). No se usa getClientRects ni offsetParent porque en
+//     happy-dom no distinguen nada.
+// EN: true if Tab can really reach the control: no negative tabindex, not
+//     inside [hidden]/[inert], not disabled by a fieldset and visible
+//     (checkVisibility covers display:none and visibility:hidden, also on an
+//     ancestor; it works in WebView2 and happy-dom; if missing, the control
+//     is assumed visible). getClientRects and offsetParent are not used
+//     because in happy-dom they tell nothing apart.
+function esTabulable(el: HTMLElement): boolean {
+  const tabindex = el.getAttribute("tabindex");
+  if (tabindex !== null && Number(tabindex) < 0) return false;
+  if (el.closest("[hidden], [inert]")) return false;
+  if (desactivadoPorFieldset(el)) return false;
+  if (
+    typeof el.checkVisibility === "function" &&
+    !el.checkVisibility({ checkVisibilityCSS: true, visibilityProperty: true })
+  ) {
+    return false;
+  }
+  return true;
+}
+
+// ES: Lista ordenada de los controles tabulables dentro del contenedor.
+// EN: Ordered list of the tabbable controls inside the container.
 function enfocables(caja: HTMLElement): HTMLElement[] {
-  return Array.from(caja.querySelectorAll<HTMLElement>(ENFOCABLES));
+  return Array.from(caja.querySelectorAll<HTMLElement>(ENFOCABLES)).filter(esTabulable);
 }
 
 // ── 2. Pila de diálogos abiertos / Stack of open dialogs ──────────────────────
