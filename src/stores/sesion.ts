@@ -115,6 +115,9 @@ export const useSesion = defineStore("sesion", () => {
   // EN: When creating the store from the error screen, the previous file is
   //     moved to rescate/ (never overwritten).
   let reemplazarAlCrear = false;
+  // ES: Se está bloqueando o restaurando: no se acepta desbloquear a la vez.
+  // EN: Locking or restoring is in progress: unlocking at the same time is refused.
+  let cerrandoSesion = false;
 
   // ── 3. Guardado automático que avisa / Autosave that warns ──────────────────
   // ES: Cada cambio en finanzas suma 1 a `cambios`; un guardado correcto sube
@@ -316,19 +319,18 @@ export const useSesion = defineStore("sesion", () => {
     }
     if (!(await vaciarGuardado())) return false;
     return conGuardadoEnPausa(async () => {
-      // ES: Lo que entrara entre el vaciado y este turno se guarda aquí; si
-      //     no se puede, no se bloquea.
-      // EN: Whatever came in between the flush and this turn is saved here;
-      //     if it cannot be, it does not lock.
-      if (cambios !== guardados) {
-        const hasta = cambios;
-        try {
-          await persistir(useFinanzas().snapshot());
-        } catch {
-          estadoGuardado.value = "error";
-          return false;
-        }
-        marcarGuardado(hasta);
+      // ES: Primero se oculta la app (ya no se puede editar nada) y después
+      //     se guarda lo que entrara entre el vaciado y este turno; si no se
+      //     puede, se vuelve a la app sin bloquear.
+      // EN: First the app is hidden (nothing can be edited any more) and then
+      //     whatever came in between the flush and this turn is saved; if it
+      //     cannot be, it goes back to the app without locking.
+      cerrandoSesion = true;
+      desbloqueado.value = false;
+      if (!(await guardarFinalEnPausa())) {
+        desbloqueado.value = true;
+        cerrandoSesion = false;
+        return false;
       }
       bloqueando = true;
       cancelarTemporizadores();
@@ -338,9 +340,26 @@ export const useSesion = defineStore("sesion", () => {
       guardados = cambios;
       estadoGuardado.value = "ok";
       porRecuperacion.value = false;
-      desbloqueado.value = false;
+      cerrandoSesion = false;
       return true;
     });
+  }
+
+  // ES: Guarda lo pendiente dentro de una operación (con la app ya oculta).
+  //     true si no queda nada sin guardar.
+  // EN: Saves what is pending inside an operation (with the app already
+  //     hidden). true if nothing is left unsaved.
+  async function guardarFinalEnPausa(): Promise<boolean> {
+    if (cambios === guardados) return true;
+    const hasta = cambios;
+    try {
+      await persistir(useFinanzas().snapshot());
+    } catch {
+      estadoGuardado.value = "error";
+      return false;
+    }
+    marcarGuardado(hasta);
+    return cambios === guardados;
   }
 
   // ES: Garantiza la copia de rescate antes de algo destructivo. En modo
@@ -551,6 +570,7 @@ export const useSesion = defineStore("sesion", () => {
   //     credential.
   async function desbloquear(credencial: string): Promise<boolean> {
     error.value = "";
+    if (cerrandoSesion) return false;
     if (modo.value === "fichero") return abrirFichero(credencial);
     try {
       const r = await almacen.leer(credencial);
@@ -827,13 +847,29 @@ export const useSesion = defineStore("sesion", () => {
     //     comes from disk and those changes would be lost.
     if (desbloqueado.value && !(await vaciarGuardado())) throw new Error("guardado-pendiente");
     await conGuardadoEnPausa(async () => {
-      await boveda.restaurarCopia(nombre);
+      // ES: App oculta antes del último guardado: nada se edita mientras tanto.
+      // EN: App hidden before the last save: nothing is edited meanwhile.
+      const estaba = desbloqueado.value;
+      cerrandoSesion = true;
+      desbloqueado.value = false;
+      if (estaba && !(await guardarFinalEnPausa())) {
+        desbloqueado.value = true;
+        cerrandoSesion = false;
+        throw new Error("guardado-pendiente");
+      }
+      try {
+        await boveda.restaurarCopia(nombre);
+      } catch (e) {
+        desbloqueado.value = estaba;
+        cerrandoSesion = false;
+        throw e;
+      }
       bloqueando = true;
       autobloqueo.parar();
       useFinanzas().hidratar(datosVacios());
       guardados = cambios;
       bloqueando = false;
-      desbloqueado.value = false;
+      cerrandoSesion = false;
       fallo.value = null;
     });
     await arrancar();

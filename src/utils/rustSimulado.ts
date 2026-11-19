@@ -382,6 +382,13 @@ const comandos: Record<string, (a: Args) => unknown> = {
     if (!ab.porRecuperacion && a.antigua !== f.credencial) err("credencial");
     if (st.fallarGuardado) err("io:disco lleno");
     st.principal = { ...f, bloqueo, credencial: a.nueva as string };
+    // ES: Como en Rust: las copias con la misma DEK pasan a la credencial nueva.
+    // EN: As in Rust: backups with the same DEK move to the new credential.
+    for (const c of Object.values(st.copias))
+      if (c.dekId === f.dekId && c.credencial !== null) {
+        c.bloqueo = bloqueo;
+        c.credencial = a.nueva as string;
+      }
     ab.porRecuperacion = false;
     rotar(st.principal);
   },
