@@ -3,13 +3,16 @@
  * Onboarding.vue — Pantalla de bienvenida inicial / First-run welcome screen
  * -----------------------------------------------------------------------------
  * ES: Pantalla de configuración del primer arranque. Recoge el nombre del
- *     usuario, la fecha de inicio (la del PC o un mes concreto) y un bloqueo
- *     opcional de la app (PIN/contraseña). Al terminar lo guarda todo y entra
- *     en la app. Incluye un selector de idioma en línea cuyos cambios
+ *     usuario, la fecha de inicio (la del PC o un mes concreto), si empieza
+ *     vacío o con datos de ejemplo y un bloqueo opcional de la app
+ *     (PIN/contraseña). Nada se guarda hasta pulsar "Empezar" (o Enter, porque
+ *     es un <form>); entonces lo guarda todo y entra en la app. Incluye un selector de idioma en línea cuyos cambios
  *     re-renderizan toda la pantalla al vuelo.
  * EN: First-launch setup screen. Collects the user's name, the starting date
- *     (the PC's date or a chosen month) and an optional app lock (PIN/password).
- *     On finish it persists everything and enters the app. Includes an inline
+ *     (the PC's date or a chosen month), whether to start empty or with sample
+ *     data, and an optional app lock (PIN/password). Nothing is saved until
+ *     "Get started" is pressed (or Enter, as it is a <form>); then it persists
+ *     everything and enters the app. Includes an inline
  *     language switcher whose changes re-render the whole screen on the fly.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
@@ -58,6 +61,20 @@ const t = crearT({
     en: "Use my computer's date (recommended)",
   },
   fechaManual: { es: "Empezar en un mes concreto", en: "Start in a specific month" },
+  etiquetaDatos: { es: "¿Con qué empiezas?", en: "What do you start with?" },
+  datosVacio: { es: "Vacío, con mis propios datos", en: "Empty, with my own data" },
+  datosEjemplo: {
+    es: "Con datos de ejemplo para probar",
+    en: "With sample data to try it out",
+  },
+  notaDatos: {
+    es: "Podrás cambiarlo después en Ajustes (Empezar de cero / Cargar ejemplo).",
+    en: "You can change it later in Settings (Start from scratch / Load samples).",
+  },
+  errorGuardar: {
+    es: "No se ha podido guardar. Comprueba el espacio libre y vuelve a intentarlo.",
+    en: "Could not save. Check the free space and try again.",
+  },
   etiquetaBloqueo: { es: "¿Proteger la app al abrir?", en: "Protect the app on open?" },
   bloqueoNinguno: { es: "No, abrir directamente", en: "No, open directly" },
   bloqueoPin: { es: "Sí, con un PIN (4-6 dígitos)", en: "Yes, with a PIN (4-6 digits)" },
@@ -88,6 +105,9 @@ const modoFecha = ref<"sistema" | "manual">("sistema");
 // ES: Mes "YYYY-MM" elegido, precargado con el actual para el modo manual.
 // EN: Chosen "YYYY-MM" month, prefilled with the current one for the manual mode.
 const mesElegido = ref(mesActual());
+// ES: Datos con los que se empieza: vacío (por defecto, para uso real) o ejemplo.
+// EN: Data to start with: empty (default, for real use) or samples.
+const datosIniciales = ref<"vacio" | "ejemplo">("vacio");
 // ES: Tipo de bloqueo: ninguno / PIN / contraseña. Decide si se piden credenciales.
 // EN: Lock type: none / PIN / password. Drives whether credentials are asked.
 const tipoBloqueo = ref<"ninguno" | "pin" | "password">("ninguno");
@@ -114,6 +134,9 @@ const pideCredencial = computed(() => tipoBloqueo.value !== "ninguno");
 // EN: Validates the optional lock, applies the chosen starting month, persists
 //     the onboarding result and enters the app.
 async function empezar() {
+  // ES: Evita un doble envío (Enter repetido) mientras se guarda.
+  // EN: Prevents a double submit (repeated Enter) while saving.
+  if (cargando.value) return;
   error.value = "";
   // ES: Validar el bloqueo solo si se eligió. / EN: Validate the lock only if one was chosen.
   if (pideCredencial.value) {
@@ -142,14 +165,21 @@ async function empezar() {
   }
   // ES: Guardar nombre / EN: Persist name and lock (null = open directly, no lock).
   //     y bloqueo (null = abrir directamente, sin bloqueo).
-  await sesion.completarOnboarding({
-    nombre: nombre.value,
-    bloqueo: pideCredencial.value
-      ? { tipo: tipoBloqueo.value as "pin" | "password", credencial: credencial.value }
-      : null,
-    datosIniciales: "ejemplo",
-  });
-  cargando.value = false;
+  //     Si el guardado falla, se queda en la bienvenida con el aviso.
+  // EN: If saving fails, it stays on the welcome screen with the warning.
+  try {
+    await sesion.completarOnboarding({
+      nombre: nombre.value,
+      bloqueo: pideCredencial.value
+        ? { tipo: tipoBloqueo.value as "pin" | "password", credencial: credencial.value }
+        : null,
+      datosIniciales: datosIniciales.value,
+    });
+  } catch {
+    error.value = t("errorGuardar");
+  } finally {
+    cargando.value = false;
+  }
 }
 </script>
 
@@ -157,13 +187,18 @@ async function empezar() {
   <!-- ES: Tarjeta de bienvenida centrada sobre el fondo de la app.
        EN: Centered welcome card over the app background. -->
   <div class="min-h-screen flex items-center justify-center bg-base p-6">
-    <div class="w-full max-w-md rounded-2xl bg-surface border border-border p-7">
+    <!-- ES: Es un <form>: Enter en cualquier campo envía. / EN: It is a <form>: Enter in any field submits. -->
+    <form
+      class="w-full max-w-md rounded-2xl bg-surface border border-border p-7"
+      @submit.prevent="empezar"
+    >
       <!-- ES: Selector de idioma: arranca con el idioma detectado del sistema.
            Como los textos usan crearT (reactivo), toda la bienvenida cambia al vuelo.
            EN: Language switcher: starts on the system-detected language. As the
            texts use crearT (reactive), the whole welcome changes on the fly. -->
       <div class="flex justify-end gap-1 mb-4">
         <button
+          type="button"
           class="rounded-md px-3 py-1 text-sm font-medium transition-colors"
           :class="
             ajustes.idioma === 'es'
@@ -175,6 +210,7 @@ async function empezar() {
           Español
         </button>
         <button
+          type="button"
           class="rounded-md px-3 py-1 text-sm font-medium transition-colors"
           :class="
             ajustes.idioma === 'en'
@@ -225,6 +261,20 @@ async function empezar() {
             type="month"
             class="mt-2 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
+        </div>
+
+        <!-- ES: Datos iniciales: vacío o ejemplo. Nada se guarda hasta "Empezar".
+             EN: Initial data: empty or samples. Nothing is saved until "Get started". -->
+        <div>
+          <label class="text-muted text-sm">{{ t("etiquetaDatos") }}</label>
+          <select
+            v-model="datosIniciales"
+            class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          >
+            <option value="vacio">{{ t("datosVacio") }}</option>
+            <option value="ejemplo">{{ t("datosEjemplo") }}</option>
+          </select>
+          <p class="text-faint text-xs mt-1">{{ t("notaDatos") }}</p>
         </div>
 
         <!-- ES: Bloqueo opcional: ninguno, PIN o contraseña. Si se activa,
@@ -282,12 +332,12 @@ async function empezar() {
       <!-- ES: Botón de envío: muestra una etiqueta de carga y se deshabilita al terminar.
            EN: Submit button: shows a loading label and is disabled while finishing. -->
       <button
+        type="submit"
         class="mt-6 w-full rounded-lg bg-brand px-4 py-2.5 text-white font-medium hover:bg-brand-soft transition-colors disabled:opacity-50"
         :disabled="cargando"
-        @click="empezar"
       >
         {{ cargando ? t("botonPreparando") : t("botonEmpezar") }}
       </button>
-    </div>
+    </form>
   </div>
 </template>

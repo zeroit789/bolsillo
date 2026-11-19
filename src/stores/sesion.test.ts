@@ -265,3 +265,41 @@ describe("esDatosValidos", () => {
     expect(esDatosValidos(d)).toBe(false);
   });
 });
+
+describe("datos iniciales y reemplazo / initial data and replacement", () => {
+  it("nada se guarda hasta terminar la bienvenida / nothing is saved until the welcome ends", async () => {
+    const sesion = useSesion();
+    await sesion.arrancar();
+    expect(sesion.necesitaOnboarding).toBe(true);
+    expect(almacen.hayDatos()).toBe(false);
+
+    await sesion.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    const r = await almacen.leer();
+    expect(r.estado === "ok" && r.datos.recurrentes.length === 0).toBe(true);
+    expect(useAjustes().configurado).toBe(true);
+  });
+
+  it("con ejemplo se guardan los datos de ejemplo / with samples the sample data is saved", async () => {
+    const sesion = useSesion();
+    await sesion.arrancar();
+    await sesion.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "ejemplo" });
+    const r = await almacen.leer();
+    expect(r.estado === "ok" && r.datos.recurrentes.length > 0).toBe(true);
+  });
+
+  it("Empezar de cero y Cargar ejemplo sustituyen y guardan / start from scratch and load samples replace and save", async () => {
+    const sesion = useSesion();
+    await sesion.arrancar();
+    await sesion.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "ejemplo" });
+
+    await sesion.reemplazarDatos("vacio");
+    expect(useFinanzas().snapshot().deudas).toEqual([]);
+    let r = await almacen.leer();
+    expect(r.estado === "ok" && r.datos.deudas.length === 0).toBe(true);
+
+    await sesion.reemplazarDatos("ejemplo");
+    r = await almacen.leer();
+    expect(r.estado === "ok" && r.datos.deudas.length > 0).toBe(true);
+    expect(sesion.estadoGuardado).toBe("ok");
+  });
+});

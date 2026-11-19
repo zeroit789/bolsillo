@@ -505,12 +505,17 @@ export const useSesion = defineStore("sesion", () => {
       entrar(datos);
       return;
     }
-    // ES: Importación normal: con el guardado en pausa, hidrata y guarda ya. Si
-    //     falla, los datos quedan en pantalla pero el estado pasa a "error" (aviso
-    //     y reintento) y se lanza para que la vista no diga "importada".
-    // EN: Normal import: with autosave paused, hydrate and save now. If it
-    //     fails, the data stays on screen but the state becomes "error" (warning
-    //     and retry) and it throws so the view does not say "imported".
+    await hidratarYGuardar(datos);
+  }
+
+  // ES: Sustituye todos los datos y los guarda ya, con el guardado automático en
+  //     pausa. Si falla, los datos quedan en pantalla pero el estado pasa a
+  //     "error" (aviso y reintento) y se lanza para que la vista no dé el
+  //     cambio por hecho.
+  // EN: Replaces all the data and saves it now, with autosave paused. If it
+  //     fails, the data stays on screen but the state becomes "error" (warning
+  //     and retry) and it throws so the view does not treat it as done.
+  async function hidratarYGuardar(datos: DatosBolsillo) {
     await conGuardadoEnPausa(async () => {
       const f = useFinanzas();
       f.hidratar(datos);
@@ -523,6 +528,16 @@ export const useSesion = defineStore("sesion", () => {
       }
       marcarGuardado(hasta);
     });
+  }
+
+  // ES: Botones de Ajustes "Empezar de cero" y "Cargar ejemplo": sustituyen
+  //     todos los datos por un conjunto vacío o por el de ejemplo (la vista
+  //     pide confirmación antes).
+  // EN: Settings buttons "Start from scratch" and "Load samples": replace all
+  //     the data with an empty set or the sample one (the view asks for
+  //     confirmation first).
+  async function reemplazarDatos(tipo: "ejemplo" | "vacio") {
+    await hidratarYGuardar(tipo === "ejemplo" ? datosDemo() : datosVacios());
   }
 
   // ── 10. API pública / Public API ────────────────────────────────────────────
@@ -550,5 +565,6 @@ export const useSesion = defineStore("sesion", () => {
     cambiarCredencial,
     completarOnboarding,
     importarDatos,
+    reemplazarDatos,
   };
 });

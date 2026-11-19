@@ -208,6 +208,23 @@ const t = crearT({
     es: "Copia importada correctamente.",
     en: "Backup imported successfully.",
   },
+  datosApp: { es: "Datos de la app", en: "App data" },
+  empezarCero: { es: "Empezar de cero", en: "Start from scratch" },
+  cargarEjemplo: { es: "Cargar ejemplo", en: "Load samples" },
+  confirmEmpezarCero: {
+    es: "Se borrarán todos tus movimientos, deudas, planes, presupuestos, plantillas y cuentas. Exporta antes una copia si quieres conservarlos. ¿Seguir?",
+    en: "All your transactions, debts, plans, budgets, templates and accounts will be deleted. Export a backup first if you want to keep them. Continue?",
+  },
+  confirmCargarEjemplo: {
+    es: "Tus datos se sustituirán por los de ejemplo. Exporta antes una copia si quieres conservarlos. ¿Seguir?",
+    en: "Your data will be replaced with the sample data. Export a backup first if you want to keep it. Continue?",
+  },
+  okDatosVacios: { es: "Datos vaciados.", en: "Data cleared." },
+  okDatosEjemplo: { es: "Datos de ejemplo cargados.", en: "Sample data loaded." },
+  errDatosGuardar: {
+    es: "No se ha podido guardar el cambio.",
+    en: "Could not save the change.",
+  },
   errCopiaVersion: {
     es: "La copia es de una versión más nueva de Bolsillo. Actualiza la app para importarla.",
     en: "The backup comes from a newer version of Bolsillo. Update the app to import it.",
@@ -503,6 +520,22 @@ function importarCopia(evento: Event) {
     input.value = "";
   };
   lector.readAsText(fichero);
+}
+
+// ES: "Empezar de cero" / "Cargar ejemplo": confirma y sustituye todos los
+//     datos. El resultado sale en los mensajes de la sección de copia.
+// EN: "Start from scratch" / "Load samples": confirms and replaces all the
+//     data. The outcome shows in the backup section messages.
+async function reemplazarDatos(tipo: "vacio" | "ejemplo") {
+  mensajeCopia.value = "";
+  errorCopia.value = "";
+  if (!confirm(t(tipo === "vacio" ? "confirmEmpezarCero" : "confirmCargarEjemplo"))) return;
+  try {
+    await sesion.reemplazarDatos(tipo);
+    mensajeCopia.value = t(tipo === "vacio" ? "okDatosVacios" : "okDatosEjemplo");
+  } catch {
+    errorCopia.value = t("errDatosGuardar");
+  }
 }
 
 // ── 6. Categorías personalizadas / Custom categories ─────────────────────────
@@ -836,6 +869,26 @@ function quitarCategoria(nombre: string): void {
       <p class="text-faint text-xs mt-3">
         {{ t("copiaAviso") }}
       </p>
+
+      <!-- ES: Datos de la app: vaciar o cargar el ejemplo (con confirmación).
+           EN: App data: clear or load the samples (with confirmation). -->
+      <h3 class="font-semibold text-ink text-sm mt-5">{{ t("datosApp") }}</h3>
+      <div class="flex flex-wrap gap-3 mt-2">
+        <button
+          type="button"
+          class="rounded-lg border border-danger/60 px-4 py-2 text-danger font-medium hover:bg-danger/10 transition-colors"
+          @click="reemplazarDatos('vacio')"
+        >
+          {{ t("empezarCero") }}
+        </button>
+        <button
+          type="button"
+          class="rounded-lg border border-border px-4 py-2 text-ink font-medium hover:border-faint transition-colors"
+          @click="reemplazarDatos('ejemplo')"
+        >
+          {{ t("cargarEjemplo") }}
+        </button>
+      </div>
 
       <!-- ES: Mensajes de feedback de la sección de copia. / EN: Feedback messages of the backup section. -->
       <p v-if="errorCopia" class="text-danger text-sm mt-3">{{ errorCopia }}</p>
