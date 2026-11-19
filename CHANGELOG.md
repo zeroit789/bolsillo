@@ -32,7 +32,7 @@ Antes de actualizar, lee los avisos del final de esta versión y [`docs/MIGRACIO
 - Esquema de datos versionado (ahora la versión 4) con migraciones paso a paso y validación de cada campo al abrir y al importar copias. Las fechas imposibles de versiones anteriores se corrigen y el valor original queda en una etiqueta.
 - El patrimonio cuenta las transferencias y los ajustes de saldo.
 - Las fuentes Syne y DM Sans van dentro de la app: no hay peticiones a Google Fonts.
-- ExcelJS y jsPDF solo se cargan al exportar o importar. El bundle principal baja de unos 1.612 kB a unos 390 kB.
+- jsPDF solo se carga al exportar y ExcelJS al exportar o al importar un Excel. El bundle principal baja de unos 1.612 kB a unos 390 kB.
 - Los diálogos son accesibles con teclado: `role="dialog"`, foco atrapado, cierre con `Esc` y nombre en botones de icono y campos.
 - Exportar e importar abre los diálogos nativos desde Rust; el frontend ya no elige rutas.
 
@@ -92,7 +92,7 @@ Before updating, read the notices at the end of this version and [`docs/MIGRACIO
 - Versioned data schema (now version 4) with step-by-step migrations and per-field validation when opening data and importing backups. Impossible dates from earlier versions are corrected and the original value is kept in a tag.
 - Net worth counts transfers and balance adjustments.
 - The Syne and DM Sans fonts ship inside the app: no requests to Google Fonts.
-- ExcelJS and jsPDF only load when exporting or importing. The main bundle drops from about 1,612 kB to about 390 kB.
+- jsPDF only loads when exporting and ExcelJS when exporting or importing an Excel file. The main bundle drops from about 1,612 kB to about 390 kB.
 - Dialogs are keyboard accessible: `role="dialog"`, focus trap, `Esc` to close and names on icon buttons and fields.
 - Export and import open native dialogs from Rust; the frontend no longer picks paths.
 

@@ -69,13 +69,13 @@ interface EntradaZip {
 // ES: Lee el directorio central del ZIP (un .xlsx es un ZIP) o null si no es
 //     coherente: el registro de fin tiene que cerrar el fichero (su comentario
 //     llega justo al final, así una firma dentro del comentario no engaña),
-//     el directorio tiene que caber antes de ese registro y cada entrada,
+//     el directorio tiene que ir justo antes de ese registro y cada entrada,
 //     con su nombre, extra y comentario, tiene que caber en el directorio.
 //     ZIP64 (tamaños 0xFFFFFFFF) no se admite.
 // EN: Reads the ZIP central directory (an .xlsx is a ZIP) or null if it is
 //     not consistent: the end record must close the file (its comment reaches
 //     exactly the end, so a signature inside the comment does not fool it),
-//     the directory must fit before that record and every entry, with its
+//     the directory must sit right before that record and every entry, with its
 //     name, extra and comment, must fit in the directory. ZIP64 (0xFFFFFFFF
 //     sizes) is not supported.
 function entradasZip(datos: Uint8Array): { entradas: EntradaZip[]; inicioDir: number } | null {

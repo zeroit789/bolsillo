@@ -2,14 +2,14 @@
 /* =============================================================================
  * AjustesView.vue — Pantalla de Ajustes / Settings screen
  * -----------------------------------------------------------------------------
- * ES: Vista de Ajustes de Bolsillo. Cuatro tarjetas: Apariencia (tema/moneda/
+ * ES: Vista de Ajustes de Bolsillo. Tarjetas: Apariencia (tema/moneda/
  *     idioma), Seguridad (bloqueo con PIN o contraseña, cambiar credencial,
  *     bloquear ahora, autobloqueo y clave de recuperación), Copia (cifrada,
  *     JSON, importar y copias automáticas, en CopiasSeguridad.vue),
  *     Categorías propias y Reglas de categoría (ReglasCategoria.vue).
  *     No toca disco directamente: delega la persistencia en los stores de Pinia
  *     (ajustes/sesion/finanzas) y en el módulo de datos categorias (localStorage).
- * EN: Settings view of Bolsillo. Four cards: Appearance (theme/currency/language),
+ * EN: Settings view of Bolsillo. Cards: Appearance (theme/currency/language),
  *     Security (PIN or password lock, change credential, lock now, auto-lock
  *     and recovery key), Backup (encrypted, JSON, import and automatic
  *     backups, in CopiasSeguridad.vue), Custom categories and Category rules
