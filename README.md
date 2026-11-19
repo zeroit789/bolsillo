@@ -62,8 +62,8 @@ Es un proyecto de portfolio de código abierto, versión **1.1.0**.
 - **Sin PIN ni contraseña** los datos solo se **ofuscan**: se cifran con una clave fija que está en el código, así que no se guardan en texto plano pero tampoco quedan protegidos frente a alguien con acceso a tu equipo. Si te importa la privacidad, activa el bloqueo.
 - Los ajustes (tema, idioma, nombre, moneda) se guardan sin cifrar porque no son sensibles.
 - **La copia de seguridad JSON se exporta sin cifrar.** Guárdala en un sitio seguro.
-- No hay telemetría ni llamadas a servidores propios. La única petición externa es la carga de las fuentes tipográficas desde Google Fonts.
-- **CSP** definida en `src-tauri/tauri.conf.json` (`csp` y `devCsp`): solo código propio (`script-src 'self'`, sin `eval`), estilos propios y de Google Fonts, imágenes propias y en `data:`/`blob:` (recibos), y conexiones solo al IPC de Tauri (`ipc: http://ipc.localhost`; en desarrollo también al servidor de Vite).
+- No hay telemetría ni llamadas a servidores propios, y la app no hace ninguna petición externa: las fuentes tipográficas van empaquetadas dentro de la app.
+- **CSP** definida en `src-tauri/tauri.conf.json` (`csp` y `devCsp`): solo código propio (`script-src 'self'`, sin `eval`), estilos y fuentes propios (sin Google Fonts), imágenes propias y en `data:`/`blob:` (recibos), y conexiones solo al IPC de Tauri (`ipc: http://ipc.localhost`; en desarrollo también al servidor de Vite).
 
 ### Stack
 
@@ -158,6 +158,8 @@ El código lleva comentarios en español y en inglés.
 
 [MIT](LICENSE) © 2026 Daniel Castaños Mefle · [danimefle.com](https://danimefle.com)
 
+Las fuentes Syne y DM Sans (paquetes `@fontsource-variable/syne` y `@fontsource-variable/dm-sans`) tienen licencia SIL Open Font License 1.1; el texto de cada una está en [`src/assets/fonts/`](src/assets/fonts/) (`LICENSE-*-OFL.txt`).
+
 ---
 
 <a id="en"></a>
@@ -198,8 +200,8 @@ It's an open-source portfolio project, version **1.1.0**.
 - **Without a PIN or password** the data is only **obfuscated**: it's encrypted with a fixed key that lives in the source code. It isn't stored as plain text, but it isn't protected from someone with access to your computer either. If privacy matters to you, turn on the lock.
 - Settings (theme, language, name, currency) are stored unencrypted because they aren't sensitive.
 - **The JSON backup is exported unencrypted.** Keep it somewhere safe.
-- There's no telemetry and no calls to any backend. The only outside request is loading the fonts from Google Fonts.
-- **CSP** set in `src-tauri/tauri.conf.json` (`csp` and `devCsp`): only the app's own code (`script-src 'self'`, no `eval`), its own styles plus Google Fonts, its own images plus `data:`/`blob:` (receipts), and connections only to Tauri's IPC (`ipc: http://ipc.localhost`; in development also to the Vite server).
+- There's no telemetry and no calls to any backend, and the app makes no outside requests at all: the fonts are bundled inside the app.
+- **CSP** set in `src-tauri/tauri.conf.json` (`csp` and `devCsp`): only the app's own code (`script-src 'self'`, no `eval`), its own styles and fonts (no Google Fonts), its own images plus `data:`/`blob:` (receipts), and connections only to Tauri's IPC (`ipc: http://ipc.localhost`; in development also to the Vite server).
 
 ### Stack
 
@@ -293,3 +295,5 @@ Code comments are written in both Spanish and English.
 ### License
 
 [MIT](LICENSE) © 2026 Daniel Castaños Mefle · [danimefle.com](https://danimefle.com)
+
+The Syne and DM Sans fonts (packages `@fontsource-variable/syne` and `@fontsource-variable/dm-sans`) are licensed under the SIL Open Font License 1.1; each license text is in [`src/assets/fonts/`](src/assets/fonts/) (`LICENSE-*-OFL.txt`).

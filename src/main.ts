@@ -2,12 +2,12 @@
  * main.ts — Punto de arranque de la aplicación / App bootstrap
  * -----------------------------------------------------------------------------
  * ES: Punto de entrada de la app Bolsillo. Crea la aplicación Vue, registra
- *     Pinia para el estado global, carga la hoja de estilos global y monta todo
- *     en el elemento #app de index.html. Es el primer código que se ejecuta en
- *     el frontend.
+ *     Pinia para el estado global, carga las fuentes locales y la hoja de
+ *     estilos global y monta todo en el elemento #app de index.html. Es el
+ *     primer código que se ejecuta en el frontend.
  * EN: Entry point of the Bolsillo app. Creates the Vue application, registers
- *     Pinia for global state, loads the global stylesheet, and mounts everything
- *     into the #app element of index.html. This is the very first code that runs
+ *     Pinia for global state, loads the local fonts and the global stylesheet,
+ *     and mounts everything into the #app element of index.html. This is the very first code that runs
  *     on the frontend.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
@@ -22,6 +22,8 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 // ES: Componente raíz que contiene todo el árbol de UI. / EN: Root component that holds the whole UI tree.
 import App from "./App.vue";
+// ES: Fuentes Syne y DM Sans empaquetadas en local (sin Google Fonts). / EN: Syne and DM Sans fonts bundled locally (no Google Fonts).
+import "./assets/fonts/fuentes.css";
 // ES: Estilos globales (Tailwind + tema oscuro de la app). / EN: Global styles (Tailwind + app dark theme).
 import "./assets/main.css";
 
