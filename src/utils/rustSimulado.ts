@@ -464,7 +464,7 @@ const comandos: Record<string, (a: Args) => unknown> = {
     st.principalRoto = null;
     st.marca = true;
     st.abierta = { dekId: c.dekId, porRecuperacion: false };
-    return c.datos;
+    return { datos: c.datos, estado: estadoSim() };
   },
 
   exportar_copia_cifrada: (a) => {

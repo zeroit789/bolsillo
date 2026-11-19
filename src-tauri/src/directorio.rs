@@ -503,20 +503,30 @@ impl Directorio {
     // EN: Neither the folder nor the file may be a redirection (symbolic link,
     //     directory junction or other reparse point): so a rewrap never writes
     //     outside the store.
-    pub fn ficheros_con_dek(&self) -> Vec<PathBuf> {
-        [COPIAS, RESCATE]
-            .iter()
-            .filter(|d| sin_redireccion(&self.raiz.join(d)))
-            .flat_map(|d| {
-                fs::read_dir(self.raiz.join(d))
-                    .into_iter()
-                    .flatten()
-                    .flatten()
-            })
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "bolsillo"))
-            .filter(|p| sin_redireccion(p))
-            .collect()
+    //     Un error al listar (o una carpeta redirigida) se devuelve: quien
+    //     cambia la protección no debe seguir sin saber qué copias hay.
+    // EN: An error while listing (or a redirected folder) is returned: whoever
+    //     changes the protection must not go on without knowing which backups exist.
+    pub fn ficheros_con_dek(&self) -> io::Result<Vec<PathBuf>> {
+        let mut v = Vec::new();
+        for d in [COPIAS, RESCATE] {
+            let carpeta = self.raiz.join(d);
+            match fs::symlink_metadata(&carpeta) {
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e),
+                Ok(_) => {}
+            }
+            if !sin_redireccion(&carpeta) {
+                return Err(io::Error::other("carpeta redirigida"));
+            }
+            for e in fs::read_dir(&carpeta)? {
+                let p = e?.path();
+                if p.extension().is_some_and(|x| x == "bolsillo") && sin_redireccion(&p) {
+                    v.push(p);
+                }
+            }
+        }
+        Ok(v)
     }
 
     // ES: Nombre de copia que no existe todavía ("antes-<s>[-n].bolsillo").

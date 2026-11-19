@@ -1015,8 +1015,9 @@ export const useSesion = defineStore("sesion", () => {
         // ES: 3. Rust publica (el actual queda como "antes-…") y la deja abierta.
         // EN: 3. Rust publishes (the current one stays as "antes-…") and leaves it open.
         let datos: DatosBolsillo;
+        let e: EstadoAlmacen;
         try {
-          datos = await boveda.restaurarCopia(nombre, credencial);
+          ({ datos, estado: e } = await boveda.restaurarCopia(nombre, credencial));
         } catch (e) {
           // ES: Si ya se publicó pero no se puede cargar, se olvida la clave y
           //     se va a la pantalla de error: nada de lo de antes en memoria
@@ -1039,28 +1040,19 @@ export const useSesion = defineStore("sesion", () => {
         }
         // ES: Ya publicada: desde aquí ningún guardado de lo de antes puede
         //     colarse (bloqueado ANTES de esperar nada) hasta entrar con los
-        //     datos restaurados. Si falla leer el estado, se entra igual.
+        //     datos restaurados. El estado llega junto a los datos.
         // EN: Already published: from here no save of the previous data can
         //     slip in (blocked BEFORE waiting for anything) until entering
-        //     with the restored data. If reading the state fails, it enters anyway.
+        //     with the restored data. The state arrives with the data.
         bloqueando = true;
         cancelarTemporizadores();
         retirarClaveRecuperacion();
         porRecuperacion.value = false;
-        const e = await boveda.estado().catch(() => null);
-        if (e) {
-          sincronizarAjustes(e.bloqueo);
-          tieneRecuperacion.value = e.tieneRecuperacion;
-          copiasPendientes.value = e.copiasPendientes;
-        } else {
-          // ES: Sin estado: el bloqueo se deduce de la credencial con que se
-          //     abrió la copia (con credencial, la copia tiene bloqueo), para
-          //     que el autobloqueo no quede apagado.
-          // EN: Without state: the lock is deduced from the credential the
-          //     backup was opened with (with a credential, it has a lock), so
-          //     the auto-lock is not left off.
-          sincronizarAjustes(credencial ? tipoDe(credencial) : "ninguno");
-        }
+        // ES: El estado llega con los datos (sin otra llamada que pueda fallar).
+        // EN: The state arrives with the data (no other call that could fail).
+        sincronizarAjustes(e.bloqueo);
+        tieneRecuperacion.value = e.tieneRecuperacion;
+        copiasPendientes.value = e.copiasPendientes;
         modo.value = "fichero";
         necesitaOnboarding.value = false;
         entrar(datos);

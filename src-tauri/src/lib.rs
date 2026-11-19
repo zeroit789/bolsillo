@@ -260,11 +260,25 @@ async fn restaurar_copia(
     s: State<'_, EstadoBoveda>,
     nombre: String,
     credencial: Option<String>,
-) -> Res<String> {
+) -> Res<Restaurada> {
     con(&s, move |b| {
-        b.restaurar_copia(&nombre, credencial.as_deref())
+        let datos = b.restaurar_copia(&nombre, credencial.as_deref())?;
+        Ok(Restaurada {
+            datos,
+            estado: b.estado(),
+        })
     })
     .await
+}
+
+// ES: Resultado de restaurar: los datos y el estado ya publicado (así el
+//     frontend no necesita otra llamada que pueda fallar).
+// EN: Restore result: the data and the already published state (so the
+//     frontend needs no other call that could fail).
+#[derive(serde::Serialize)]
+struct Restaurada {
+    datos: String,
+    estado: boveda::Estado,
 }
 
 // ── 4. Copias cifradas exportadas / Exported encrypted backups ────────────────

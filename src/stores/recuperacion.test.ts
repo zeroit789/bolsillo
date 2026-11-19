@@ -432,7 +432,7 @@ describe("copias / backups", () => {
     expect(useFinanzas().planes).toEqual([]);
   });
 
-  it("si falla leer el estado tras restaurar, se entra con lo restaurado y no se pisa / state failure after restore", async () => {
+  it("restaurar no depende de otra lectura del estado y no se pisa / restore needs no extra state read", async () => {
     const s = useSesion();
     await s.arrancar();
     await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
@@ -441,6 +441,8 @@ describe("copias / backups", () => {
     await s.vaciarGuardado();
     simulador.estado.fallarEstado = 1;
     await s.restaurarCopia(vieja.nombre);
+    expect(simulador.estado.fallarEstado).toBe(1);
+    simulador.estado.fallarEstado = 0;
     expect(s.desbloqueado).toBe(true);
     expect(useFinanzas().planes).toEqual([]);
     useFinanzas().addPlan({ nombre: "Tras restaurar", objetivo: 10, aportado: 0 });

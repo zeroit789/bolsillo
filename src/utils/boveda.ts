@@ -447,10 +447,17 @@ export async function probarCopia(nombre: string, credencial: string | null): Pr
 //     devuelve sus datos en forma de memoria (con sus recibos).
 // EN: Restores an already tested automatic backup: it is left open with it
 //     and returns its data in memory shape (with its receipts).
-export function restaurarCopia(nombre: string, credencial: string | null) {
+export function restaurarCopia(
+  nombre: string,
+  credencial: string | null
+): Promise<{ datos: DatosBolsillo; estado: EstadoAlmacen }> {
   return enCola(async () => {
     olvidarRecibos();
-    return aMemoria(await invocar<string>("restaurar_copia", { nombre, credencial }));
+    const r = await invocar<{ datos: string; estado: Record<string, unknown> }>("restaurar_copia", {
+      nombre,
+      credencial,
+    });
+    return { datos: await aMemoria(r.datos), estado: aEstado(r.estado) };
   });
 }
 

@@ -64,6 +64,19 @@ const PENDIENTES: &str = "pendientes.json";
 //     simple acabado en .bolsillo (sin subcarpetas ni "..").
 // EN: Acceptable rewrap path? "copias/…" or "rescate/…" with a plain name
 //     ending in .bolsillo (no subfolders nor "..").
+// ES: Une dos listas de reenvolturas sin repetir.
+// EN: Joins two rewrap lists without repeats.
+fn unir(base: &[Reenvoltura], nuevas: &[Reenvoltura]) -> Vec<Reenvoltura> {
+    let mut v = base.to_vec();
+    for n in nuevas {
+        if !v.contains(n) {
+            v.push(n.clone());
+        }
+    }
+    v
+}
+
+// ES: (ver arriba) / EN: (see above)
 fn ruta_pendiente_valida(r: &str) -> bool {
     let r = r.replace('\\', "/");
     let Some((dir, nombre)) = r.split_once('/') else {
@@ -104,6 +117,12 @@ struct Reenvoltura {
     //     backup already has another one (the new one), it is left alone.
     #[serde(default)]
     sal: Option<String>,
+    // ES: true cuando el cambio del principal ya se publicó (lo escribe el
+    //     cierre). Sin él, una DEK previa igual a la actual = no publicado.
+    // EN: true once the main-file change was published (written on close).
+    //     Without it, a previous DEK equal to the current one = not published.
+    #[serde(default)]
+    publicada: bool,
 }
 
 type R<T> = Result<T, ErrorAlmacen>;
@@ -709,12 +728,13 @@ impl Boveda {
     //     error: if a backup cannot be rewritten, it goes on with the rest and
     //     the main change (and the new recovery key) is not lost. Returns the
     //     ones that could not be rewrapped (they are recorded as pending).
-    fn reenvolver_copias<F>(&self, dek_id: &str, mut cambio: F) -> Vec<std::path::PathBuf>
+    fn reenvolver_copias<F>(&self, dek_id: &str, mut cambio: F) -> Option<Vec<std::path::PathBuf>>
     where
         F: FnMut(&mut Fichero) -> R<()>,
     {
         let mut fallos = Vec::new();
-        for ruta in self.dir.ficheros_con_dek() {
+        let rutas = self.dir.ficheros_con_dek().ok()?;
+        for ruta in rutas {
             let Ok(bytes) = std::fs::read(&ruta) else {
                 fallos.push(ruta);
                 continue;
@@ -732,7 +752,7 @@ impl Boveda {
                 fallos.push(ruta);
             }
         }
-        fallos
+        Some(fallos)
     }
 
     // ── Reenvolturas pendientes / Pending rewraps ──────────────────────────────
@@ -771,11 +791,11 @@ impl Boveda {
     //     need nothing drop out by themselves). Returns the previous list.
     //     Si el registro no se puede escribir, la operación NO sigue.
     // EN: If the record cannot be written, the operation does NOT go on.
-    fn preanotar(&self, accion: &str, dek_id: &str) -> R<Vec<Reenvoltura>> {
+    fn preanotar(&self, accion: &str, dek_id: &str) -> R<(Vec<Reenvoltura>, Vec<Reenvoltura>)> {
         let previas = self.leer_pendientes_estricto()?;
-        let todas = self.con_entradas(&previas, self.dir.ficheros_con_dek(), accion, dek_id);
-        self.escribir_pendientes(&todas)?;
-        Ok(previas)
+        let nuevas = self.entradas(self.dir.ficheros_con_dek()?, accion, dek_id)?;
+        self.escribir_pendientes(&unir(&previas, &nuevas))?;
+        Ok((previas, nuevas))
     }
 
     // ES: Tras reenvolver: quedan las previas más las que fallaron ahora.
@@ -787,52 +807,72 @@ impl Boveda {
     fn cerrar_pendientes(
         &self,
         previas: Vec<Reenvoltura>,
-        fallos: Vec<std::path::PathBuf>,
-        accion: &str,
-        dek_id: &str,
+        nuevas: Vec<Reenvoltura>,
+        fallos: Option<Vec<std::path::PathBuf>>,
     ) {
-        let v = self.con_entradas(&previas, fallos, accion, dek_id);
-        let _ = self.escribir_pendientes(&v);
+        // ES: Se conservan las entradas preanotadas (con lo que se capturó antes
+        //     de publicar) de las copias que fallaron; si no se pudo listar,
+        //     todas.
+        // EN: The pre-recorded entries (with what was captured before
+        //     publishing) of the failed backups are kept; if listing failed, all.
+        let fallidas: Option<Vec<String>> =
+            fallos.map(|f| f.iter().map(|r| self.relativa(r)).collect());
+        let quedan: Vec<Reenvoltura> = nuevas
+            .into_iter()
+            .filter(|n| fallidas.as_ref().is_none_or(|f| f.contains(&n.ruta)))
+            .map(|mut n| {
+                n.publicada = true;
+                n
+            })
+            .collect();
+        let _ = self.escribir_pendientes(&unir(&previas, &quedan));
     }
 
     // ES: Apunta en disco (duradero) las copias que no se pudieron reenvolver.
     // EN: Records on disk (durably) the backups that could not be rewrapped.
     //     (Solo construye la lista en memoria: base + rutas nuevas.)
     // EN: (It only builds the list in memory: base + new paths.)
-    fn con_entradas(
+    fn entradas(
         &self,
-        base: &[Reenvoltura],
         rutas: Vec<std::path::PathBuf>,
         accion: &str,
         dek_id: &str,
-    ) -> Vec<Reenvoltura> {
-        let raiz = self.dir.ruta("");
-        let mut v = base.to_vec();
+    ) -> R<Vec<Reenvoltura>> {
+        let mut v = Vec::new();
         for r in rutas {
-            let rel = r
-                .strip_prefix(&raiz)
-                .unwrap_or(&r)
-                .to_string_lossy()
-                .replace('\\', "/");
+            // ES: Para quitar la recuperación vieja hace falta saber cuál es
+            //     (su sal): si la copia no se puede leer, no se sigue. Una
+            //     copia dañada no se abre con nada y se omite.
+            // EN: Removing the old recovery requires knowing which one (its
+            //     salt): if the backup cannot be read, it stops. A damaged
+            //     backup opens with nothing and is skipped.
             let sal = if accion == "recuperacion" {
-                std::fs::read(&r)
+                let b = std::fs::read(&r)?;
+                desde_bytes(&b)
                     .ok()
-                    .and_then(|b| desde_bytes(&b).ok())
                     .and_then(|f| f.envolturas.recuperacion.map(|e| e.kdf.sal))
             } else {
                 None
             };
-            let nueva = Reenvoltura {
-                ruta: rel,
+            v.push(Reenvoltura {
+                ruta: self.relativa(&r),
                 accion: accion.into(),
                 dek_id: Some(dek_id.into()),
                 sal,
-            };
-            if !v.contains(&nueva) {
-                v.push(nueva);
-            }
+                publicada: false,
+            });
         }
-        v
+        Ok(v)
+    }
+
+    // ES: Ruta relativa al almacén, con "/" (la forma en que se registra).
+    // EN: Path relative to the store, with "/" (the way it is recorded).
+    fn relativa(&self, r: &std::path::Path) -> String {
+        let raiz = self.dir.ruta("");
+        r.strip_prefix(&raiz)
+            .unwrap_or(r)
+            .to_string_lossy()
+            .replace('\\', "/")
     }
 
     // ES: Reintenta las reenvolturas pendientes con la credencial actual (una
@@ -859,7 +899,11 @@ impl Boveda {
         //     the backups would remove wrappings that are still valid).
         let v: Vec<Reenvoltura> = v
             .into_iter()
-            .filter(|p| !(p.accion != "credencial" && p.dek_id.as_deref() == Some(dek_id.as_str())))
+            .filter(|p| {
+                p.publicada
+                    || p.accion == "credencial"
+                    || p.dek_id.as_deref() != Some(dek_id.as_str())
+            })
             .collect();
         if bloqueo == Bloqueo::Ninguno {
             let _ = self.escribir_pendientes(&v);
@@ -892,11 +936,16 @@ impl Boveda {
                 continue;
             }
             let hecho = (|| -> R<()> {
+                // ES: Sin DEK registrada no se puede comprobar: queda para revisión.
+                // EN: Without a recorded DEK it cannot be checked: kept for review.
+                if p.accion != "credencial" && p.dek_id.is_none() {
+                    return Err(ErrorAlmacen::Interno);
+                }
                 let mut f = desde_bytes(&std::fs::read(&ruta)?)?;
                 match p.accion.as_str() {
                     "proteger"
                         if f.bloqueo == Bloqueo::Ninguno
-                            && p.dek_id.as_deref().is_none_or(|d| d == f.dek_id) =>
+                            && p.dek_id.as_deref() == Some(f.dek_id.as_str()) =>
                     {
                         let d = f.abrir_dek(None)?;
                         f.envolturas = crate::formato::Envolturas {
@@ -925,7 +974,7 @@ impl Boveda {
                     }
                     "recuperacion"
                         if f.envolturas.credencial.is_some()
-                            && p.dek_id.as_deref().is_none_or(|d| d == f.dek_id)
+                            && p.dek_id.as_deref() == Some(f.dek_id.as_str())
                             && p.sal.is_some()
                             && f.envolturas.recuperacion.as_ref().map(|e| &e.kdf.sal)
                                 == p.sal.as_ref() =>
@@ -1003,7 +1052,7 @@ impl Boveda {
                 ofuscacion: None,
             })
         };
-        let previas = self.preanotar("proteger", &viejo_id)?;
+        let (previas, nuevas) = self.preanotar("proteger", &viejo_id)?;
         if let Err(e) = self.rotar_dek(bloqueo, envolver) {
             let _ = self.escribir_pendientes(&previas);
             return Err(e);
@@ -1015,7 +1064,7 @@ impl Boveda {
             }
             Ok(())
         });
-        self.cerrar_pendientes(previas, fallos, "proteger", &viejo_id);
+        self.cerrar_pendientes(previas, nuevas, fallos);
         Ok(clave)
     }
 
@@ -1087,7 +1136,7 @@ impl Boveda {
         let nueva_env = f.envolturas.credencial.clone();
         let dek_id = f.dek_id.clone();
         let dek = Zeroizing::new(*a.dek);
-        let previas = self.preanotar("credencial", &dek_id)?;
+        let (previas, nuevas) = self.preanotar("credencial", &dek_id)?;
         if let Err(e) = self.escribir_principal(f, dek, false) {
             let _ = self.escribir_pendientes(&previas);
             return Err(e);
@@ -1099,7 +1148,7 @@ impl Boveda {
             }
             Ok(())
         });
-        self.cerrar_pendientes(previas, fallos, "credencial", &dek_id);
+        self.cerrar_pendientes(previas, nuevas, fallos);
         Ok(())
     }
 
@@ -1124,7 +1173,7 @@ impl Boveda {
         let (kek_c, sal_c) = self.kek_nueva(credencial.as_bytes())?;
         let (kek_r, sal_r) = self.kek_nueva(norm.as_bytes())?;
         let kdf = self.kdf;
-        let previas = self.preanotar("recuperacion", &viejo_id)?;
+        let (previas, nuevas) = self.preanotar("recuperacion", &viejo_id)?;
         let rotada = self.rotar_dek(bloqueo, |dek, id| {
             Ok(crate::formato::Envolturas {
                 credencial: Some(envolver_con_kek(
@@ -1163,7 +1212,7 @@ impl Boveda {
             }
             Ok(())
         });
-        self.cerrar_pendientes(previas, fallos, "recuperacion", &viejo_id);
+        self.cerrar_pendientes(previas, nuevas, fallos);
         Ok(clave)
     }
 
@@ -1674,6 +1723,61 @@ mod tests {
         b.abrir(Some("4831")).unwrap();
         let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
         assert!(f.envolturas.recuperacion.is_some());
+    }
+
+    #[test]
+    fn sin_inventario_de_copias_no_se_cambia_la_proteccion() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        // ES: "copias" pasa a ser un fichero: listar falla.
+        // EN: "copias" becomes a file: listing fails.
+        let copias = b.dir.ruta("copias");
+        std::fs::remove_dir_all(&copias).unwrap();
+        std::fs::write(&copias, b"x").unwrap();
+        assert!(b.configurar_bloqueo(Bloqueo::Pin, "4831").is_err());
+        let f = desde_bytes(&b.dir.leer(PRINCIPAL).unwrap().unwrap()).unwrap();
+        assert_eq!(f.bloqueo, Bloqueo::Ninguno);
+    }
+
+    #[test]
+    fn una_rotacion_publicada_se_reintenta_aunque_vuelva_la_dek_vieja() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let actual = b.abierta().unwrap().cabecera.dek_id.clone();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let sal = desde_bytes(&b.dir.leer_copia(&copia).unwrap())
+            .unwrap()
+            .envolturas
+            .recuperacion
+            .unwrap()
+            .kdf
+            .sal;
+        // ES: Publicada (p. ej. luego se restauró una copia con esa DEK).
+        // EN: Published (e.g. a backup with that DEK was restored later).
+        let reg = format!(
+            r#"[{{"ruta":"copias/{copia}","accion":"recuperacion","dek_id":"{actual}","sal":"{sal}","publicada":true}}]"#
+        );
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        assert!(f.envolturas.recuperacion.is_none());
+        assert_eq!(b.estado().copias_pendientes, 0);
+    }
+
+    #[test]
+    fn una_entrada_sin_dek_queda_para_revision() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let reg = format!(r#"[{{"ruta":"copias/{copia}","accion":"proteger"}}]"#);
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
+        assert_eq!(b.estado().copias_pendientes, 1);
     }
 
     #[test]
