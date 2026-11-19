@@ -119,8 +119,13 @@ where
     if let Some(padre) = ruta.parent() {
         fs::create_dir_all(padre)?;
     }
+    // ES: Nombre temporal único (dos escrituras nunca comparten el mismo .tmp).
+    // EN: Unique temporary name (two writes never share the same .tmp).
+    let unico: u64 = crate::cripto::aleatorio::<8>()
+        .map(u64::from_le_bytes)
+        .unwrap_or(0);
     let mut tmp = ruta.as_os_str().to_owned();
-    tmp.push(".tmp");
+    tmp.push(format!(".{unico:016x}.tmp"));
     let tmp = PathBuf::from(tmp);
     let resultado = (|| {
         let mut f = File::create(&tmp)?;
@@ -357,17 +362,72 @@ impl Directorio {
     }
 
     // ES: Ids de los recibos guardados con una DEK. / EN: Ids of the receipts stored with a DEK.
-    pub fn ids_recibos(&self, dek_id: &str) -> Vec<String> {
-        fs::read_dir(self.raiz.join(RECIBOS).join(dek_id))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|e| {
-                let n = e.file_name().into_string().ok()?;
-                let id = n.strip_suffix(".rec")?.to_string();
-                id_recibo_valido(&id).then_some(id)
+    //     Si la carpeta no existe no hay recibos; cualquier otro error se
+    //     devuelve (una rotación no debe seguir sin ver todos los recibos).
+    // EN: If the folder does not exist there are no receipts; any other error
+    //     is returned (a rotation must not go on without seeing every receipt).
+    pub fn ids_recibos(&self, dek_id: &str) -> io::Result<Vec<String>> {
+        let lector = match fs::read_dir(self.raiz.join(RECIBOS).join(dek_id)) {
+            Ok(l) => l,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e),
+        };
+        let mut ids = Vec::new();
+        for e in lector {
+            let n = e?.file_name().into_string().unwrap_or_default();
+            if let Some(id) = n.strip_suffix(".rec") {
+                if id_recibo_valido(id) {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+        Ok(ids)
+    }
+
+    // ES: Rutas de todos los .bolsillo de copias/ y rescate/ (para reenvolverlos).
+    // EN: Paths of every .bolsillo in copias/ and rescate/ (to rewrap them).
+    pub fn ficheros_con_dek(&self) -> Vec<PathBuf> {
+        [COPIAS, RESCATE]
+            .iter()
+            .flat_map(|d| {
+                fs::read_dir(self.raiz.join(d))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
             })
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "bolsillo"))
             .collect()
+    }
+
+    // ES: Nombre de copia que no existe todavía ("antes-<s>[-n].bolsillo").
+    // EN: Backup name that does not exist yet ("antes-<s>[-n].bolsillo").
+    pub fn nombre_copia_libre(&self, prefijo: &str, ahora: u64) -> String {
+        let base = format!("{prefijo}-{ahora:012}");
+        let mut nombre = format!("{base}.bolsillo");
+        let mut n = 2;
+        while self.raiz.join(COPIAS).join(&nombre).exists() {
+            nombre = format!("{base}-{n}.bolsillo");
+            n += 1;
+        }
+        nombre
+    }
+
+    // ES: ¿La ruta cae dentro del directorio de datos? Se compara con rutas
+    //     canónicas (el fichero puede no existir aún: se canoniza su carpeta).
+    //     Así una exportación nunca puede pisar datos.bolsillo ni un recibo.
+    // EN: Does the path fall inside the data directory? Canonical paths are
+    //     compared (the file may not exist yet: its folder is canonicalized).
+    //     So an export can never overwrite datos.bolsillo or a receipt.
+    pub fn contiene(&self, ruta: &Path) -> bool {
+        let Ok(raiz) = fs::canonicalize(&self.raiz) else {
+            return false;
+        };
+        let padre = ruta.parent().unwrap_or(ruta);
+        match fs::canonicalize(padre) {
+            Ok(p) => p.starts_with(&raiz),
+            Err(_) => false,
+        }
     }
 }
 
@@ -398,7 +458,17 @@ mod tests {
         });
         assert!(e.is_err());
         assert_eq!(fs::read(&r).unwrap(), b"original");
-        assert!(!t.path().join("datos.bolsillo.tmp").exists());
+        let restos = fs::read_dir(t.path())
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".tmp")
+            })
+            .count();
+        assert_eq!(restos, 0);
         escribir_atomico(&r, b"siguiente").unwrap();
         assert_eq!(fs::read(&r).unwrap(), b"siguiente");
     }
@@ -454,6 +524,19 @@ mod tests {
         assert_eq!(fs::read(t.path().join(&a)).unwrap(), b"roto1");
         assert_eq!(fs::read(t.path().join(&b)).unwrap(), b"roto2");
         assert!(d.hay_rescate());
+    }
+
+    #[test]
+    fn rutas_dentro_del_almacen() {
+        let t = tempfile::tempdir().unwrap();
+        let d = Directorio::new(t.path().to_path_buf());
+        d.escribir(PRINCIPAL, b"x").unwrap();
+        d.escribir_recibo("aa", "r1", b"y").unwrap();
+        assert!(d.contiene(&t.path().join(PRINCIPAL)));
+        assert!(d.contiene(&t.path().join("recibos").join("aa").join("r1.rec")));
+        assert!(d.contiene(&t.path().join("recibos").join("..").join(PRINCIPAL)));
+        let fuera = tempfile::tempdir().unwrap();
+        assert!(!d.contiene(&fuera.path().join("export.xlsx")));
     }
 
     #[test]

@@ -250,6 +250,9 @@ async fn exportar_copia_cifrada(
         .blocking_save_file();
     let Some(ruta) = ruta else { return Ok(false) };
     let ruta = ruta.into_path().map_err(|e| e.to_string())?;
+    if bov(&s).protegido(&ruta) {
+        return Err(c(ErrorAlmacen::DestinoProtegido));
+    }
     escribir_atomico(&ruta, &bytes).map_err(|e| format!("io:{e}"))?;
     Ok(true)
 }
@@ -319,7 +322,11 @@ fn decodificar(s: &str) -> String {
 //     name and the filter. Rust opens the dialog and writes; the frontend can
 //     no longer ask to write to an arbitrary path. false if cancelled.
 #[tauri::command]
-async fn guardar_archivo(app: AppHandle, request: tauri::ipc::Request<'_>) -> Res<bool> {
+async fn guardar_archivo(
+    app: AppHandle,
+    s: State<'_, EstadoBoveda>,
+    request: tauri::ipc::Request<'_>,
+) -> Res<bool> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("cuerpo".into());
     };
@@ -343,6 +350,11 @@ async fn guardar_archivo(app: AppHandle, request: tauri::ipc::Request<'_>) -> Re
         return Ok(false);
     };
     let ruta = ruta.into_path().map_err(|e| e.to_string())?;
+    // ES: Nunca se exporta encima de datos.bolsillo, un recibo o una copia.
+    // EN: Never export on top of datos.bolsillo, a receipt or a backup.
+    if bov(&s).protegido(&ruta) {
+        return Err(c(ErrorAlmacen::DestinoProtegido));
+    }
     escribir_atomico(&ruta, bytes).map_err(|e| format!("io:{e}"))?;
     Ok(true)
 }
@@ -355,6 +367,18 @@ async fn guardar_archivo(app: AppHandle, request: tauri::ipc::Request<'_>) -> Re
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // ES: plugin single-instance — va el PRIMERO (lo pide su documentación):
+        //     una segunda instancia no arranca, se enfoca la ventana abierta.
+        //     Así dos procesos nunca escriben a la vez en el mismo almacén.
+        // EN: single-instance plugin — goes FIRST (its docs require it): a
+        //     second instance does not start, the open window gets focus. So
+        //     two processes never write to the same store at once.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(v) = app.get_webview_window("main") {
+                let _ = v.unminimize();
+                let _ = v.set_focus();
+            }
+        }))
         // ES: plugin opener — abrir URLs/archivos con la app por defecto del SO.
         // EN: opener plugin — open URLs/files with the OS default handler.
         .plugin(tauri_plugin_opener::init())

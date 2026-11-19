@@ -81,8 +81,10 @@ impl ParamsKdf {
     //     gigas de memoria ni horas de cálculo (ni bajar de lo mínimo de Argon2).
     // EN: Reasonable parameters? A tampered header must not be able to ask for
     //     gigabytes of memory or hours of work (nor go below Argon2's minimum).
+    //     Tope: 256 MiB, 4 pasadas y 4 hilos (varias veces lo que se emite hoy).
+    // EN: Cap: 256 MiB, 4 passes and 4 threads (several times what is emitted today).
     pub fn validos(&self) -> bool {
-        (8..=1_048_576).contains(&self.m) && (1..=16).contains(&self.t) && (1..=8).contains(&self.p)
+        (8..=262_144).contains(&self.m) && (1..=4).contains(&self.t) && (1..=4).contains(&self.p)
     }
 }
 

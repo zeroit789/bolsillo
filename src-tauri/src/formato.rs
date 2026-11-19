@@ -80,6 +80,10 @@ pub enum ErrorAlmacen {
     SinCopia,
     // ES: la migración no se pudo verificar / EN: the migration could not be verified
     Verificacion,
+    // ES: el fichero elegido no lleva los recibos dentro / EN: the picked file does not carry the receipts
+    NoAutosuficiente,
+    // ES: destino de exportación dentro del almacén / EN: export target inside the store
+    DestinoProtegido,
     Io(String),
     Interno,
 }
@@ -100,6 +104,8 @@ impl ErrorAlmacen {
             ErrorAlmacen::CredencialInvalida => "credencial-invalida".into(),
             ErrorAlmacen::SinCopia => "sin-copia".into(),
             ErrorAlmacen::Verificacion => "verificacion".into(),
+            ErrorAlmacen::NoAutosuficiente => "no-autosuficiente".into(),
+            ErrorAlmacen::DestinoProtegido => "destino-protegido".into(),
             ErrorAlmacen::Io(m) => format!("io:{m}"),
             ErrorAlmacen::Interno => "interno".into(),
         }

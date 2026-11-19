@@ -32,6 +32,9 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+# ES: Una sola instancia de la app (versión exacta comprobada el 19-11-2026).
+# EN: A single app instance (exact version checked on 2026-11-19).
+tauri-plugin-single-instance = "=2.5.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # ES: Cifrado del almacén (Tanda 2). Versiones exactas comprobadas en crates.io
