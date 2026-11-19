@@ -316,9 +316,7 @@ impl Boveda {
     //     rewraps.
     pub fn abrir(&mut self, credencial: Option<&str>) -> R<String> {
         let texto = self.abrir_con(credencial.map(Llave::Credencial), false)?;
-        if let Some(c) = credencial {
-            self.reintentar_pendientes(c);
-        }
+        self.reintentar_pendientes(credencial);
         Ok(texto)
     }
 
@@ -956,7 +954,11 @@ impl Boveda {
     //       - "recuperacion": se le quita la recuperación anterior.
     // EN: Retries the pending rewraps with the current credential (a single
     //     derivation). The ones that succeed are removed from the list.
-    fn reintentar_pendientes(&mut self, credencial: &str) {
+    //     Sin credencial (o sin bloqueo) solo se retiran las recuperaciones
+    //     revocadas, que no la necesitan; lo demás espera a tenerla.
+    // EN: Without a credential (or without a lock) only revoked recoveries
+    //     are removed, which do not need it; the rest waits until it is available.
+    fn reintentar_pendientes(&mut self, credencial: Option<&str>) {
         let v = self.leer_pendientes();
         if v.is_empty() {
             return;
@@ -978,12 +980,9 @@ impl Boveda {
                     || p.dek_id.as_deref() != Some(dek_id.as_str())
             })
             .collect();
-        if bloqueo == Bloqueo::Ninguno {
-            let _ = self.escribir_pendientes(&v);
-            return;
-        }
-        let Ok((kek, sal)) = self.kek_nueva(credencial.as_bytes()) else {
-            return;
+        let clave = match credencial {
+            Some(c) if bloqueo != Bloqueo::Ninguno => self.kek_nueva(c.as_bytes()).ok(),
+            _ => None,
         };
         let kdf = self.kdf;
         let mut quedan = Vec::new();
@@ -1027,11 +1026,12 @@ impl Boveda {
                         if f.bloqueo == Bloqueo::Ninguno
                             && p.dek_id.as_deref() == Some(f.dek_id.as_str()) =>
                     {
+                        let (kek, sal) = clave.as_ref().ok_or(ErrorAlmacen::Bloqueado)?;
                         let d = f.abrir_dek(None)?;
                         f.envolturas = crate::formato::Envolturas {
                             credencial: Some(envolver_con_kek(
-                                &kek,
-                                &sal,
+                                kek,
+                                sal,
                                 "credencial",
                                 &f.dek_id,
                                 &d,
@@ -1044,9 +1044,10 @@ impl Boveda {
                     "credencial"
                         if f.dek_id == dek_id && p.dek_id.as_deref() == Some(f.dek_id.as_str()) =>
                     {
+                        let (kek, sal) = clave.as_ref().ok_or(ErrorAlmacen::Bloqueado)?;
                         f.envolturas.credencial = Some(envolver_con_kek(
-                            &kek,
-                            &sal,
+                            kek,
+                            sal,
                             "credencial",
                             &f.dek_id,
                             &dek,
@@ -2129,6 +2130,29 @@ mod tests {
         b.regenerar_recuperacion("7391").unwrap();
         let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
         assert!(f.envolturas.recuperacion.is_some());
+        assert_eq!(b.estado().copias_pendientes, 0);
+    }
+
+    #[test]
+    fn sin_pin_tambien_se_retira_una_recuperacion_revocada() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        let sal = f.envolturas.recuperacion.unwrap().kdf.sal;
+        let dek = f.dek_id;
+        // ES: Revocación ya publicada que no pudo aplicarse a la copia.
+        // EN: Already published revocation that could not be applied to the backup.
+        let reg = format!(
+            r#"[{{"ruta":"copias/{copia}","accion":"recuperacion","dek_id":"0123456789abcdef","sal":"{sal}","dek_copia":"{dek}","publicada":true}}]"#
+        );
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.quitar_bloqueo().unwrap();
+        b.bloquear();
+        b.abrir(None).unwrap();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        assert!(f.envolturas.recuperacion.is_none());
         assert_eq!(b.estado().copias_pendientes, 0);
     }
 
