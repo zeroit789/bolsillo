@@ -15,7 +15,7 @@
  *     All data is made up.
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
-import { ocurrenciasEnMes, type RecurrenteProgramable } from "./recurrencia";
+import { cobrosProximos, ocurrenciasEnMes, type RecurrenteProgramable } from "./recurrencia";
 
 // ES: Fechas del mes de un recurrente (atajo). / EN: Month dates of an entry (shortcut).
 const fechas = (r: RecurrenteProgramable, mes: string) => ocurrenciasEnMes(r, mes).fechas;
@@ -311,5 +311,39 @@ describe("fin por fecha o por cuotas / end by date or by instalments", () => {
     // EN: Years 0000-0099: Date.UTC would turn them into 1900-1999.
     expect(ocurrenciasEnMes({ ...base, desde: "0099-01" }, "0099-01").veces).toBe(0);
     expect(ocurrenciasEnMes({ ...base, fechaInicio: "0050-01-01" }, "2026-02").veces).toBe(0);
+  });
+});
+
+describe("cobros próximos / upcoming charges", () => {
+  it("devuelve los cobros entre hoy y dentro de N días, cruzando el mes / returns the charges from today to N days ahead, across months", () => {
+    const semanal: RecurrenteProgramable = {
+      importe: 5,
+      desde: "2026-01",
+      hasta: null,
+      frecuencia: "semanal",
+      fechaInicio: "2026-01-29",
+    };
+    expect(cobrosProximos(semanal, "2026-01-29", 3)).toEqual(["2026-01-29"]);
+    expect(cobrosProximos(semanal, "2026-02-03", 3)).toEqual(["2026-02-05"]);
+    const mensual: RecurrenteProgramable = {
+      importe: 5,
+      desde: "2026-01",
+      hasta: null,
+      diaPago: 1,
+    };
+    expect(cobrosProximos(mensual, "2026-01-30", 3)).toEqual(["2026-02-01"]);
+    expect(cobrosProximos(mensual, "2026-01-20", 3)).toEqual([]);
+  });
+
+  it("respeta el fin por cuotas y una fecha mal escrita no da nada / respects the instalment end and a malformed date gives nothing", () => {
+    const r: RecurrenteProgramable = {
+      importe: 5,
+      desde: "2026-01",
+      hasta: null,
+      diaPago: 1,
+      cuotas: 1,
+    };
+    expect(cobrosProximos(r, "2026-01-30", 3)).toEqual([]);
+    expect(cobrosProximos(r, "2026-13-01", 3)).toEqual([]);
   });
 });

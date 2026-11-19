@@ -196,6 +196,8 @@ export interface LineaMes {
   recibo?: string; // ES: imagen base64 (solo puntuales); opcional / EN: base64 image (one-off entries only); optional
   cuenta?: string; // ES: id de cuenta; opcional / EN: account id; optional
   subdivisiones?: Subdivision[]; // ES: gasto dividido; opcional / EN: split expense; optional
+  veces?: number; // ES: veces que toca el recurrente ese mes (v4) / EN: times the recurring entry falls that month (v4)
+  frecuencia?: Frecuencia; // ES: frecuencia del recurrente (v4) / EN: recurring entry's frequency (v4)
 }
 
 // ── 6. Cuentas y subdivisiones / Accounts & subdivisions ──────────────────────

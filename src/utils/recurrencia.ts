@@ -199,3 +199,25 @@ export function ocurrenciasEnMes(r: RecurrenteProgramable, mes: string): Ocurren
   const centimos = fechas.length * Math.round(redondear2(r.importe) * 100);
   return { fechas, veces: fechas.length, centimos, importe: centimos / 100 };
 }
+
+// ── 4. Cobros próximos / Upcoming charges ────────────────────────────────────
+
+// ES: Cobros del recurrente entre `hoy` ("AAAA-MM-DD", incluido) y `dias`
+//     días después (incluido), aunque crucen de mes. Lo usan los avisos de
+//     pagos próximos. Una fecha mal escrita no da nada.
+// EN: Charges of the recurring entry from `hoy` ("YYYY-MM-DD", included) to
+//     `dias` days later (included), even across months. Used by the
+//     upcoming-payment reminders. A malformed date gives nothing.
+export function cobrosProximos(r: RecurrenteProgramable, hoy: string, dias: number): string[] {
+  const desde = leerFecha(hoy);
+  if (desde === null || !Number.isInteger(dias) || dias < 0) return [];
+  const hasta = iso(desde + dias);
+  // ES: Meses que toca el intervalo (como mucho unos pocos). / EN: Months the span touches (a few at most).
+  const meses = new Set<string>();
+  for (let d = desde; d <= desde + dias; d++) meses.add(iso(d).slice(0, 7));
+  const fechas: string[] = [];
+  for (const mes of [...meses].sort()) {
+    for (const f of ocurrenciasEnMes(r, mes).fechas) if (f >= hoy && f <= hasta) fechas.push(f);
+  }
+  return fechas;
+}

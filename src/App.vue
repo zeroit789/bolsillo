@@ -30,6 +30,7 @@ import { useAjustes } from "./stores/ajustes";
 import { useFinanzas } from "./stores/finanzas";
 import { mesActual, mesLegible, euro } from "./utils/format";
 import { estadoDeuda } from "./utils/deuda";
+import { cobrosProximos } from "./utils/recurrencia";
 import { notificar } from "./utils/notificar";
 import { crearT } from "./i18n";
 import PantallaBloqueo from "./components/PantallaBloqueo.vue";
@@ -258,21 +259,31 @@ function revisarPagosProximos() {
     return dias >= 0 && dias <= 3;
   };
 
-  // ES: Gastos fijos (recurrentes de gasto activos este mes). Id con prefijo "r"
+  // ES: Gastos fijos con fecha conocida (día de pago o fecha de inicio): sus
+  //     cobros de los próximos 3 días según su frecuencia (cobrosProximos,
+  //     utils/recurrencia.ts), así un semanal avisa cada semana y uno ya
+  //     terminado por cuotas o fecha de fin no avisa. Clave "r" + id + fecha
   //     para no chocar con los ids de deudas en el mismo set de avisados.
-  // EN: Fixed expenses (expense recurrents active this month). Id prefixed "r"
-  //     to avoid colliding with debt ids in the same notified set.
+  // EN: Fixed expenses with a known date (payment day or start date): their
+  //     charges in the next 3 days according to their frequency
+  //     (cobrosProximos, utils/recurrencia.ts), so a weekly one reminds every
+  //     week and one already finished by instalments or end date does not.
+  //     Key "r" + id + date to avoid colliding with debt ids in the same
+  //     notified set.
+  const dos = (n: number) => String(n).padStart(2, "0");
+  const hoyISO = `${ahora.getFullYear()}-${dos(ahora.getMonth() + 1)}-${dos(ahora.getDate())}`;
   for (const r of f.recurrentes) {
-    if (r.signo !== "gasto") continue;
-    if (!(r.desde <= mes && (r.hasta === null || mes <= r.hasta))) continue;
-    if (enRango(r.diaPago) && !set.has("r" + r.id)) {
-      set.add("r" + r.id);
+    if (r.signo !== "gasto" || (r.diaPago === undefined && r.fechaInicio === undefined)) continue;
+    for (const fecha of cobrosProximos(r, hoyISO, 3)) {
+      const clave = "r" + r.id + fecha;
+      if (set.has(clave)) continue;
+      set.add(clave);
       void notificar(
         t("notifPagoTitulo"),
         t("notifPagoCuerpo")
           .replace("@c", r.concepto)
           .replace("@i", euro(r.importe))
-          .replace("@d", String(r.diaPago))
+          .replace("@d", String(Number(fecha.slice(8, 10))))
       );
     }
   }

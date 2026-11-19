@@ -2,11 +2,21 @@
  * finanzas.ts — Store central de finanzas (Pinia) / Central finance store (Pinia)
  * -----------------------------------------------------------------------------
  * ES: Mantiene recurrentes, puntuales y deudas, y deriva los KPIs de cada mes.
- *     La persistencia se delega en utils/almacen (que más adelante cifra los
- *     datos). Este store es la única fuente de verdad de las finanzas.
+ *     La persistencia se delega en la sesión (que cifra los datos). Este store
+ *     es la única fuente de verdad de las finanzas. Desde la v4 también lleva
+ *     transferencias y ajustes de saldo (mueven saldos, no son ingreso ni
+ *     gasto), reglas de categoría, perfiles de banco, la importación de
+ *     extractos y las correcciones que alimentan las sugerencias de reglas.
+ *     Cada acción nueva valida antes de guardar: un elemento mal formado haría
+ *     que la validación del guardado rechazara TODOS los datos.
  * EN: Holds recurring entries, one-off entries and debts, and derives each
- *     month's KPIs. Persistence is delegated to utils/almacen (which later
- *     encrypts the data). This store is the single source of truth for finances.
+ *     month's KPIs. Persistence is delegated to the session (which encrypts
+ *     the data). This store is the single source of truth for finances. Since
+ *     v4 it also holds transfers and balance adjustments (they move balances,
+ *     they are not income or expense), category rules, bank profiles, the
+ *     statement import and the corrections that feed the rule suggestions.
+ *     Every new action validates before saving: a malformed item would make
+ *     the save validation reject ALL the data.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
  *   1. Imports y tipos / Imports & types
@@ -20,13 +30,16 @@
  *   9. Acciones: plantillas de alta rápida / Actions: templates
  *  10. Acciones: cuentas y patrimonio / Actions: accounts & net worth
  *  11. Acciones: varios (baja, borrado de línea, mes) / Actions: misc
- *  12. API pública del store / Public store API
+ *  12. Acciones: transferencias y ajustes / Actions: transfers & adjustments
+ *  13. Acciones: reglas, correcciones y sugerencias / Actions: rules, corrections & suggestions
+ *  14. Acciones: perfiles de banco e importación / Actions: bank profiles & import
+ *  15. API pública del store / Public store API
  * ===========================================================================*/
 
 // ── 1. Imports y tipos / Imports & types ─────────────────────────────────────
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import { VERSION_DATOS } from "../types";
+import { CORRECCIONES_MAX, esFechaValida, VERSION_DATOS } from "../types";
 import type {
   AjusteSaldo,
   Correccion,
@@ -48,6 +61,17 @@ import { mesActual, diffMeses, sumarMeses } from "../utils/format";
 import { estadoDeuda } from "../utils/deuda";
 import { nuevoId } from "../utils/id";
 import { importeDentroDeRango, redondear2 } from "../utils/importe";
+import { ocurrenciasEnMes } from "../utils/recurrencia";
+import { saldosPorCuenta, validarTransferencia } from "../utils/transferencias";
+import {
+  esReglaCategoriaValida,
+  sugerirReglas,
+  type SugerenciaRegla,
+} from "../utils/importador/reglas";
+import { esPerfilBancoValido } from "../utils/importador/perfil";
+import { normalizarTexto } from "../utils/importador/texto";
+import { crearPuntualesImportados, leerHuella } from "../utils/importador/importar";
+import type { FilaImportada } from "../utils/importador/vistaPrevia";
 
 // ES: Resumen de KPIs de un solo mes (la forma que usan el dashboard y el historial).
 // EN: KPI summary of a single month (the shape the dashboard and history use).
@@ -143,16 +167,23 @@ export const useFinanzas = defineStore("finanzas", () => {
 
   // ── 4. Helpers de cálculo / Calculation helpers ──────────────────────────────
 
-  // ES: ¿Está vivo el recurrente en ese mes? (ya empezó y aún no terminó).
-  // EN: Is the recurring entry alive in that month? (started, not yet ended).
-  function recurrenteVivo(r: Recurrente, mes: string): boolean {
-    return r.desde <= mes && (r.hasta === null || mes <= r.hasta);
-  }
-
-  // ES: Recurrentes activos en un mes dado.
-  // EN: Recurring entries active in a given month.
-  function recurrentesEn(mes: string): Recurrente[] {
-    return recurrentes.value.filter((r) => recurrenteVivo(r, mes));
+  // ES: Recurrentes que tocan en un mes dado, con lo que suman ese mes. Usa
+  //     ocurrenciasEnMes (utils/recurrencia.ts): un semanal toca 4 o 5 veces,
+  //     un trimestral o anual solo en sus meses y uno con cuotas o fecha de fin
+  //     deja de tocar. Un recurrente sin los campos nuevos toca una vez cada
+  //     mes entre `desde` y `hasta`, como siempre.
+  // EN: Recurring entries due in a given month, with what they add up to that
+  //     month. Uses ocurrenciasEnMes (utils/recurrencia.ts): a weekly one falls
+  //     4 or 5 times, a quarterly or yearly one only in its months and one with
+  //     instalments or an end date stops. A recurring entry without the new
+  //     fields falls once every month between `desde` and `hasta`, as always.
+  function recurrentesEn(mes: string): { r: Recurrente; importe: number; veces: number }[] {
+    const lista: { r: Recurrente; importe: number; veces: number }[] = [];
+    for (const r of recurrentes.value) {
+      const o = ocurrenciasEnMes(r, mes);
+      if (o.veces > 0) lista.push({ r, importe: o.importe, veces: o.veces });
+    }
+    return lista;
   }
 
   // ES: Puntuales fechados dentro de un mes dado (compara el prefijo YYYY-MM).
@@ -182,13 +213,13 @@ export const useFinanzas = defineStore("finanzas", () => {
     // ES: Ingresos = ingresos recurrentes + ingresos puntuales.
     // EN: Income = recurring incomes + one-off incomes.
     const ingresos =
-      recs.filter((r) => r.signo === "ingreso").reduce((a, r) => a + r.importe, 0) +
+      recs.filter((x) => x.r.signo === "ingreso").reduce((a, x) => a + x.importe, 0) +
       punts.filter((p) => p.signo === "ingreso").reduce((a, p) => a + p.importe, 0);
 
     // ES: Gastos fijos = gastos recurrentes + cuotas de deuda.
     // EN: Fixed expenses = recurring expenses + debt instalments.
     const gastosFijos =
-      recs.filter((r) => r.signo === "gasto").reduce((a, r) => a + r.importe, 0) + cuotasDeuda;
+      recs.filter((x) => x.r.signo === "gasto").reduce((a, x) => a + x.importe, 0) + cuotasDeuda;
 
     // ES: Gastos variables = solo gastos puntuales.
     // EN: Variable expenses = one-off expenses only.
@@ -233,19 +264,23 @@ export const useFinanzas = defineStore("finanzas", () => {
     const mes = mesSeleccionado.value;
     const lineas: LineaMes[] = [];
 
-    // ES: Los recurrentes se convierten en líneas fijas (fijo: true).
-    // EN: Recurring entries become fixed lines (fijo: true).
-    for (const r of recurrentesEn(mes)) {
+    // ES: Los recurrentes que tocan este mes se convierten en líneas fijas
+    //     (fijo: true) con el total del mes y las veces que tocan.
+    // EN: Recurring entries due this month become fixed lines (fijo: true)
+    //     with the month's total and how many times they fall.
+    for (const { r, importe, veces } of recurrentesEn(mes)) {
       lineas.push({
         id: r.id,
         origen: "recurrente",
         concepto: r.concepto,
         categoria: r.categoria,
         signo: r.signo,
-        importe: r.importe,
+        importe,
         fijo: true,
         comercio: r.comercio,
         tags: r.tags,
+        veces,
+        frecuencia: r.frecuencia ?? "mensual",
       });
     }
     // ES: Cada deuda con cuota distinta de cero se convierte en línea de gasto fijo.
@@ -374,10 +409,19 @@ export const useFinanzas = defineStore("finanzas", () => {
 
   // ── 6. Acciones: movimientos (recurrentes, puntuales, deudas) / Actions: entries ──
 
+  // ES: Si el recurrente trae fechaInicio, su mes de alta (`desde`) es el de
+  //     esa fecha: así el selector de meses, la baja y el cálculo coinciden.
+  // EN: If the recurring entry has fechaInicio, its start month (`desde`) is
+  //     that date's month: so the month picker, cancelling and the maths agree.
+  function conDesde<T extends Partial<Recurrente>>(r: T): T {
+    return r.fechaInicio && esFechaValida(r.fechaInicio)
+      ? { ...r, desde: r.fechaInicio.slice(0, 7) }
+      : r;
+  }
   // ES: Añade un recurrente (asigna id automáticamente).
   // EN: Add a recurring entry (auto-assigns an id).
   function addRecurrente(r: Omit<Recurrente, "id">) {
-    recurrentes.value.push({ ...r, id: nuevoId() });
+    recurrentes.value.push({ ...conDesde(r), id: nuevoId() });
   }
   // ES: Añade un puntual (asigna id automáticamente).
   // EN: Add a one-off entry (auto-assigns an id).
@@ -393,13 +437,20 @@ export const useFinanzas = defineStore("finanzas", () => {
   // EN: Patch a recurring entry by id, merging the given changes.
   function actualizarRecurrente(id: string, cambios: Partial<Recurrente>) {
     const i = recurrentes.value.findIndex((r) => r.id === id);
-    if (i !== -1) recurrentes.value[i] = { ...recurrentes.value[i], ...cambios };
+    if (i !== -1) recurrentes.value[i] = conDesde({ ...recurrentes.value[i], ...cambios });
   }
   // ES: Modifica un puntual por id, fusionando los cambios dados.
   // EN: Patch a one-off entry by id, merging the given changes.
+  //     Si cambia la categoría, se anota la corrección (para sugerir reglas).
+  // EN: If the category changes, the correction is recorded (to suggest rules).
   function actualizarPuntual(id: string, cambios: Partial<Puntual>) {
     const i = puntuales.value.findIndex((p) => p.id === id);
-    if (i !== -1) puntuales.value[i] = { ...puntuales.value[i], ...cambios };
+    if (i === -1) return;
+    const antes = puntuales.value[i];
+    if (cambios.categoria !== undefined && cambios.categoria !== antes.categoria) {
+      registrarCorreccion(antes, cambios.categoria);
+    }
+    puntuales.value[i] = { ...antes, ...cambios };
   }
   // ES: Modifica una deuda por id, fusionando los cambios dados.
   // EN: Patch a debt by id, merging the given changes.
@@ -548,20 +599,21 @@ export const useFinanzas = defineStore("finanzas", () => {
   function eliminarCuenta(id: string) {
     cuentas.value = cuentas.value.filter((c) => c.id !== id);
   }
-  // ES: Saldo de cada cuenta = saldo inicial + neto de sus movimientos puntuales.
-  //     El ingreso suma, el gasto resta; redondeado a 2 decimales.
-  // EN: Balance of each account = initial balance + net of its one-off movements.
-  //     Income adds, expense subtracts; rounded to 2 decimals.
-  const patrimonio = computed(() =>
-    cuentas.value.map((c) => {
-      let saldo = c.saldoInicial;
-      for (const p of puntuales.value) {
-        if (p.cuenta !== c.id) continue;
-        saldo += p.signo === "ingreso" ? p.importe : -p.importe;
-      }
-      return { cuenta: c, saldo: redondear2(saldo) };
-    })
-  );
+  // ES: Saldo de cada cuenta = saldo inicial + neto de sus movimientos
+  //     puntuales + transferencias (salen de una, entran en otra) + ajustes de
+  //     saldo. Se suma en céntimos (utils/transferencias.ts, saldosPorCuenta).
+  // EN: Balance of each account = initial balance + net of its one-off
+  //     movements + transfers (out of one, into another) + balance
+  //     adjustments. Summed in cents (utils/transferencias.ts, saldosPorCuenta).
+  const patrimonio = computed(() => {
+    const saldos = saldosPorCuenta(
+      cuentas.value,
+      puntuales.value,
+      transferencias.value,
+      ajustesSaldo.value
+    );
+    return cuentas.value.map((c, i) => ({ cuenta: c, saldo: saldos[i].saldo }));
+  });
   // ES: Patrimonio total = suma del saldo de todas las cuentas.
   // EN: Total net worth = sum of every account balance.
   const patrimonioTotal = computed(() => patrimonio.value.reduce((a, x) => a + x.saldo, 0));
@@ -593,7 +645,208 @@ export const useFinanzas = defineStore("finanzas", () => {
     localStorage.setItem(MES_KEY, mes); // ES: recuerda el mes visto / EN: remember viewed month
   }
 
-  // ── 12. API pública del store / Public store API ─────────────────────────────
+  // ── 12. Acciones: transferencias y ajustes / Actions: transfers & adjustments ──
+
+  // ES: Añade una transferencia entre dos cuentas. Devuelve false (y no
+  //     guarda nada) si las cuentas son la misma o faltan, el importe no vale
+  //     o la fecha no existe. El importe se redondea al céntimo.
+  // EN: Adds a transfer between two accounts. Returns false (and saves
+  //     nothing) if the accounts are the same or missing, the amount is not
+  //     valid or the date does not exist. The amount is rounded to the cent.
+  function addTransferencia(t: Omit<Transferencia, "id">): boolean {
+    if (!validarTransferencia(t).ok || !esFechaValida(t.fecha)) return false;
+    const concepto = t.concepto?.trim();
+    transferencias.value.push({
+      id: nuevoId(),
+      origen: t.origen,
+      destino: t.destino,
+      importe: redondear2(t.importe),
+      fecha: t.fecha,
+      ...(concepto ? { concepto } : {}),
+    });
+    return true;
+  }
+  // ES: Elimina una transferencia por id. / EN: Remove a transfer by id.
+  function eliminarTransferencia(id: string) {
+    transferencias.value = transferencias.value.filter((t) => t.id !== id);
+  }
+
+  // ES: Deja una cuenta en el saldo que dice el banco en una fecha: guarda un
+  //     ajuste con la diferencia frente al saldo calculado HASTA esa fecha.
+  //     "igual" si ya cuadra al céntimo; "invalido" si la cuenta no existe,
+  //     el saldo o la diferencia no valen o la fecha no existe.
+  // EN: Leaves an account at the balance the bank shows on a date: it saves
+  //     an adjustment with the difference against the balance computed UP TO
+  //     that date. "igual" if it already matches to the cent; "invalido" if
+  //     the account does not exist, the balance or the difference is not
+  //     valid or the date does not exist.
+  function ajustarSaldo(
+    cuentaId: string,
+    saldoObjetivo: number,
+    fecha: string,
+    nota?: string
+  ): "ok" | "igual" | "invalido" {
+    const i = cuentas.value.findIndex((c) => c.id === cuentaId);
+    if (i === -1 || !esFechaValida(fecha) || !Number.isFinite(saldoObjetivo)) return "invalido";
+    if (!importeDentroDeRango(Math.abs(saldoObjetivo))) return "invalido";
+    const actual = saldosPorCuenta(
+      cuentas.value,
+      puntuales.value,
+      transferencias.value,
+      ajustesSaldo.value,
+      fecha
+    )[i].saldo;
+    const importe = redondear2(redondear2(saldoObjetivo) - actual);
+    if (importe === 0) return "igual";
+    if (!importeDentroDeRango(Math.abs(importe))) return "invalido";
+    const n = nota?.trim();
+    ajustesSaldo.value.push({
+      id: nuevoId(),
+      cuenta: cuentaId,
+      importe,
+      fecha,
+      ...(n ? { nota: n } : {}),
+    });
+    return "ok";
+  }
+  // ES: Elimina un ajuste de saldo por id. / EN: Remove a balance adjustment by id.
+  function eliminarAjuste(id: string) {
+    ajustesSaldo.value = ajustesSaldo.value.filter((a) => a.id !== id);
+  }
+
+  // ── 13. Acciones: reglas, correcciones y sugerencias / Actions: rules, corrections & suggestions ──
+
+  // ES: Reglas en el orden en que se aplican (prioridad; a igualdad, la lista).
+  // EN: Rules in the order they apply (priority; if tied, the list).
+  const reglasOrdenadas = computed(() =>
+    reglas.value
+      .map((r, i) => ({ r, i }))
+      .sort((a, b) => a.r.prioridad - b.r.prioridad || a.i - b.i)
+      .map((x) => x.r)
+  );
+
+  // ES: Añade una regla al final (la de menos prioridad). false si no es válida.
+  // EN: Adds a rule at the end (the lowest priority). false if it is not valid.
+  function addRegla(r: Omit<ReglaCategoria, "id" | "prioridad">): boolean {
+    const prioridad = reglas.value.reduce((m, x) => Math.max(m, x.prioridad + 1), 0);
+    const nueva: ReglaCategoria = {
+      ...r,
+      contiene: r.contiene.trim(),
+      id: nuevoId(),
+      prioridad,
+    };
+    if (!esReglaCategoriaValida(nueva)) return false;
+    reglas.value.push(nueva);
+    return true;
+  }
+  // ES: Modifica una regla; false (sin cambios) si quedaría mal formada.
+  // EN: Patches a rule; false (no change) if it would end up malformed.
+  function actualizarRegla(id: string, cambios: Partial<ReglaCategoria>): boolean {
+    const i = reglas.value.findIndex((r) => r.id === id);
+    if (i === -1) return false;
+    const nueva = { ...reglas.value[i], ...cambios, id };
+    if (typeof nueva.contiene === "string") nueva.contiene = nueva.contiene.trim();
+    if (!esReglaCategoriaValida(nueva)) return false;
+    reglas.value[i] = nueva;
+    return true;
+  }
+  // ES: Elimina una regla por id. / EN: Remove a rule by id.
+  function eliminarRegla(id: string) {
+    reglas.value = reglas.value.filter((r) => r.id !== id);
+  }
+  // ES: Sube (-1) o baja (+1) una regla en el orden y renumera las
+  //     prioridades 0, 1, 2… para que el orden quede explícito.
+  // EN: Moves a rule up (-1) or down (+1) in the order and renumbers the
+  //     priorities 0, 1, 2… so the order is explicit.
+  function moverRegla(id: string, paso: -1 | 1) {
+    const orden = [...reglasOrdenadas.value];
+    const i = orden.findIndex((r) => r.id === id);
+    const j = i + paso;
+    if (i === -1 || j < 0 || j >= orden.length) return;
+    [orden[i], orden[j]] = [orden[j], orden[i]];
+    reglas.value = orden.map((r, k) => ({ ...r, prioridad: k }));
+  }
+
+  // ES: Anota que el usuario cambió la categoría de un puntual. De los
+  //     importados se guarda el texto del banco (el de su huella), que es lo
+  //     que verán las reglas en la próxima importación. Se guardan las
+  //     CORRECCIONES_MAX más recientes.
+  // EN: Records that the user changed a one-off entry's category. For
+  //     imported ones the bank text (their fingerprint's) is stored, which is
+  //     what rules will see on the next import. The CORRECCIONES_MAX most
+  //     recent ones are kept.
+  function registrarCorreccion(p: Puntual, categoria: string) {
+    const huella = p.importId ? leerHuella(p.importId) : null;
+    const concepto = huella ? huella.concepto : normalizarTexto(p.concepto);
+    if (!concepto || !categoria) return;
+    const lista = [...correcciones.value, { concepto, categoria, signo: p.signo }];
+    correcciones.value = lista.slice(-CORRECCIONES_MAX);
+  }
+
+  // ES: Reglas propuestas a partir de las correcciones (utils/importador/reglas.ts).
+  // EN: Rules proposed from the corrections (utils/importador/reglas.ts).
+  const sugerencias = computed<SugerenciaRegla[]>(() =>
+    sugerirReglas(correcciones.value, reglas.value)
+  );
+  // ES: Crea la regla de una sugerencia. / EN: Creates a suggestion's rule.
+  function crearReglaDeSugerencia(s: SugerenciaRegla): boolean {
+    return addRegla({
+      contiene: s.contiene,
+      categoria: s.categoria,
+      ...(s.signo ? { signo: s.signo } : {}),
+    });
+  }
+
+  // ── 14. Acciones: perfiles de banco e importación / Actions: bank profiles & import ──
+
+  // ES: Guarda un perfil de banco. Si trae id de uno que existe, o hay otro
+  //     con el mismo nombre (sin mayúsculas ni acentos), lo sustituye; si no,
+  //     lo añade. Devuelve el id guardado o null si no es válido.
+  // EN: Saves a bank profile. If it carries the id of an existing one, or
+  //     another has the same name (ignoring case and accents), it replaces
+  //     it; otherwise it is added. Returns the saved id or null if invalid.
+  function guardarPerfil(p: Omit<PerfilBanco, "id"> & { id?: string }): string | null {
+    const nombre = p.nombre.trim();
+    if (!nombre) return null;
+    const i = perfilesBanco.value.findIndex(
+      (x) => x.id === p.id || normalizarTexto(x.nombre) === normalizarTexto(nombre)
+    );
+    const id = i === -1 ? nuevoId() : perfilesBanco.value[i].id;
+    const perfil: PerfilBanco = { ...p, nombre, id };
+    if (!esPerfilBancoValido(perfil)) return null;
+    if (i === -1) perfilesBanco.value.push(perfil);
+    else perfilesBanco.value[i] = perfil;
+    return id;
+  }
+  // ES: Elimina un perfil de banco por id. / EN: Remove a bank profile by id.
+  function eliminarPerfil(id: string) {
+    perfilesBanco.value = perfilesBanco.value.filter((p) => p.id !== id);
+  }
+
+  // ES: Importa filas ya elegidas del extracto como puntuales (origen
+  //     "importado", huella, categoría por reglas o "Otros"). Una sola
+  //     asignación a `puntuales`: el guardado automático observa en
+  //     profundidad y un extracto puede traer miles de filas. Una cuenta que
+  //     no existe no se asigna. Devuelve cuántos apuntes se crearon.
+  // EN: Imports already chosen statement rows as one-off entries ("importado"
+  //     origin, fingerprint, category by rules or "Otros"). A single
+  //     assignment to `puntuales`: autosave watches deeply and a statement may
+  //     carry thousands of rows. A missing account is not assigned. Returns
+  //     how many entries were created.
+  function importarFilas(filas: FilaImportada[], opciones: { cuenta?: string }): number {
+    const cuenta =
+      opciones.cuenta && cuentas.value.some((c) => c.id === opciones.cuenta)
+        ? opciones.cuenta
+        : undefined;
+    const nuevos = crearPuntualesImportados(filas, reglas.value, { cuenta }).map((p) => ({
+      ...p,
+      id: nuevoId(),
+    }));
+    if (nuevos.length) puntuales.value = [...puntuales.value, ...nuevos];
+    return nuevos.length;
+  }
+
+  // ── 15. API pública del store / Public store API ─────────────────────────────
   // ES: Todo lo devuelto aquí es la superficie pública del store (estado, getters, acciones).
   // EN: Everything returned here is the store's public surface (state, getters, actions).
   return {
@@ -656,5 +909,20 @@ export const useFinanzas = defineStore("finanzas", () => {
     darDeBajaRecurrente,
     eliminarLinea,
     seleccionarMes,
+    // ES: v4 / EN: v4
+    addTransferencia,
+    eliminarTransferencia,
+    ajustarSaldo,
+    eliminarAjuste,
+    reglasOrdenadas,
+    addRegla,
+    actualizarRegla,
+    eliminarRegla,
+    moverRegla,
+    sugerencias,
+    crearReglaDeSugerencia,
+    guardarPerfil,
+    eliminarPerfil,
+    importarFilas,
   };
 });
