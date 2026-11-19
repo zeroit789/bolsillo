@@ -36,6 +36,9 @@ import PantallaBloqueo from "./components/PantallaBloqueo.vue";
 import Onboarding from "./components/Onboarding.vue";
 import PantallaErrorDatos from "./components/PantallaErrorDatos.vue";
 import AvisoGuardado from "./components/AvisoGuardado.vue";
+import AvisoAlmacen from "./components/AvisoAlmacen.vue";
+import ClaveRecuperacion from "./components/ClaveRecuperacion.vue";
+import RestablecerCredencial from "./components/RestablecerCredencial.vue";
 import { isTauri } from "@tauri-apps/api/core";
 import DashboardView from "./views/DashboardView.vue";
 import MovimientosView from "./views/MovimientosView.vue";
@@ -76,6 +79,7 @@ const t = crearT({
   cargando: { es: "Cargando…", en: "Loading…" },
   navegacion: { es: "Secciones", en: "Sections" },
   mesSeleccionado: { es: "Mes", en: "Month" },
+  bloquearAhora: { es: "Bloquear ahora", en: "Lock now" },
   // ES: Textos de las notificaciones nativas. "@x/@c/@i/@d" son marcadores que se
   //     sustituyen al llamar por el valor dinámico (concepto, importe, día) —
   //     crearT no interpola, así que sustituimos a mano tras traducir.
@@ -392,6 +396,12 @@ onMounted(async () => {
   <!-- ES: Aviso persistente si el último guardado falló / EN: Persistent warning if the last save failed -->
   <AvisoGuardado />
 
+  <!-- ES: Clave de recuperación recién creada (se enseña una vez) y PIN nuevo
+       tras entrar con ella. EN: Newly created recovery key (shown once) and a
+       new PIN after getting in with it. -->
+  <ClaveRecuperacion />
+  <RestablecerCredencial />
+
   <!-- ES: Bienvenida / onboarding (primer arranque) / EN: Welcome / onboarding (first run) -->
   <Onboarding v-if="sesion.necesitaOnboarding" />
 
@@ -436,6 +446,18 @@ onMounted(async () => {
             >{{ t("hola") }}, <span class="text-ink font-medium">{{ ajustes.nombre }}</span></span
           >
         </p>
+        <!-- ES: Candado de "Bloquear ahora" (solo con PIN o contraseña).
+             EN: "Lock now" padlock (only with a PIN or password). -->
+        <button
+          v-if="ajustes.bloqueoActivo && sesion.modo === 'fichero'"
+          type="button"
+          class="ml-auto rounded-lg border border-border px-3 py-2 text-ink hover:border-brand"
+          :aria-label="t('bloquearAhora')"
+          :title="t('bloquearAhora')"
+          @click="void sesion.bloquearAhora()"
+        >
+          <span aria-hidden="true">🔒</span>
+        </button>
         <select
           v-if="mostrarMes"
           :aria-label="t('mesSeleccionado')"
@@ -446,6 +468,9 @@ onMounted(async () => {
           <option v-for="m in f.mesesDisponibles" :key="m" :value="m">{{ mesLegible(m) }}</option>
         </select>
       </header>
+
+      <!-- ES: Avisos de la migración desde la 1.1.0 / EN: Migration warnings from 1.1.0 -->
+      <AvisoAlmacen />
 
       <!-- ES: Vista activa renderizada dinámicamente desde NAV / EN: Active view rendered dynamically from NAV -->
       <main class="flex-1 overflow-y-auto px-8 py-6">

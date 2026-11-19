@@ -3,13 +3,16 @@
  * AjustesView.vue — Pantalla de Ajustes / Settings screen
  * -----------------------------------------------------------------------------
  * ES: Vista de Ajustes de Bolsillo. Cuatro tarjetas: Apariencia (tema/moneda/
- *     idioma), Seguridad (bloqueo al abrir con PIN o contraseña + cambiar
- *     credencial), Copia (exportar/importar un .json) y Categorías propias.
+ *     idioma), Seguridad (bloqueo con PIN o contraseña, cambiar credencial,
+ *     bloquear ahora, autobloqueo y clave de recuperación), Copia (cifrada,
+ *     JSON, importar y copias automáticas, en CopiasSeguridad.vue) y
+ *     Categorías propias.
  *     No toca disco directamente: delega la persistencia en los stores de Pinia
  *     (ajustes/sesion/finanzas) y en el módulo de datos categorias (localStorage).
  * EN: Settings view of Bolsillo. Four cards: Appearance (theme/currency/language),
- *     Security (open lock with PIN or password + change credential), Backup
- *     (export/import a .json) and Custom categories. It never touches the disk
+ *     Security (PIN or password lock, change credential, lock now, auto-lock
+ *     and recovery key), Backup (encrypted, JSON, import and automatic
+ *     backups, in CopiasSeguridad.vue) and Custom categories. It never touches the disk
  *     directly: it delegates persistence to the Pinia stores (ajustes/sesion/
  *     finanzas) and to the categorias data module (localStorage).
  * -----------------------------------------------------------------------------
@@ -18,32 +21,30 @@
  *   2. Apariencia (tema/moneda/idioma) / Appearance (theme/currency/language)
  *   3. Seguridad: activar/quitar bloqueo / Security: enable/disable lock
  *   4. Cambiar credencial / Change credential
- *   5. Copia: exportar/importar (.json) / Backup: export/import (.json)
+ *   5. Datos de la app (vaciar / ejemplo) / App data (clear / samples)
  *   6. Categorías personalizadas / Custom categories
  * ===========================================================================*/
 import { ref, computed, watch, useId } from "vue";
 import { useAjustes } from "../stores/ajustes";
 import { useSesion } from "../stores/sesion";
-import { useFinanzas } from "../stores/finanzas";
-import { prepararDatos, ErrorDatos } from "../utils/migraciones";
 import {
   categoriasCustom,
   agregarCategoriaCustom,
   eliminarCategoriaCustom,
-  setCategoriasCustom,
 } from "../data/categorias";
+import { validarCredencial, MIN_PASSWORD } from "../utils/credencial";
 import { crearT } from "../i18n";
+import AvisoPinDebil from "../components/AvisoPinDebil.vue";
+import SeguridadSesion from "../components/SeguridadSesion.vue";
+import CopiasSeguridad from "../components/CopiasSeguridad.vue";
 
 // ── 1. Stores y traducciones / Stores & translations ─────────────────────────
 // ES: Stores de Pinia que usa esta vista. ajustes = preferencias (tema/moneda/
-//     idioma), sesion = bloqueo/cifrado + importación de datos, finanzas = el
-//     snapshot de datos financieros que usa la copia de seguridad.
+//     idioma), sesion = bloqueo/cifrado + importación de datos.
 // EN: Pinia stores used by this view. ajustes = preferences (theme/currency/
-//     language), sesion = lock/encryption + import of data, finanzas = the
-//     financial data snapshot used by the backup.
+//     language), sesion = lock/encryption + import of data.
 const ajustes = useAjustes();
 const sesion = useSesion();
-const finanzas = useFinanzas();
 
 /* ---------------------------------------------------------------------------
    TRADUCCIONES (ES/EN) / TRANSLATIONS (ES/EN)
@@ -119,20 +120,6 @@ const t = crearT({
   tipoActivoPin: { es: "PIN", en: "PIN" },
   tipoActivoPassword: { es: "Contraseña", en: "Password" },
 
-  // ES: Sección 3 — Copia de seguridad
-  // EN: Section 3 — Backup
-  copia: { es: "Copia de seguridad", en: "Backup" },
-  copiaDesc: {
-    es: "Exporta todos tus datos a un fichero .json para guardarlo a salvo, o impórtalo para restaurarlos en este u otro equipo.",
-    en: "Export all your data to a .json file to keep it safe, or import it to restore it on this or another device.",
-  },
-  exportarCopia: { es: "Exportar copia (.json)", en: "Export backup (.json)" },
-  importarCopia: { es: "Importar copia", en: "Import backup" },
-  copiaAviso: {
-    es: "Importar reemplaza todos los datos actuales. Te pediremos confirmación antes de hacerlo.",
-    en: "Importing replaces all current data. We'll ask for confirmation first.",
-  },
-
   // ES: Sección 4 — Categorías personalizadas
   // EN: Section 4 — Custom categories
   categorias: { es: "Categorías", en: "Categories" },
@@ -155,8 +142,8 @@ const t = crearT({
     en: "The PIN must be 4 to 6 digits long (numbers only).",
   },
   errPasswordCorta: {
-    es: "La contraseña debe tener al menos 4 caracteres.",
-    en: "The password must be at least 4 characters long.",
+    es: `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`,
+    en: `The password must be at least ${MIN_PASSWORD} characters long.`,
   },
   errPinNoCoincide: { es: "Los PIN no coinciden.", en: "The PINs don't match." },
   errPasswordNoCoincide: {
@@ -182,8 +169,12 @@ const t = crearT({
     en: "The new PIN must be 4 to 6 digits long.",
   },
   errNuevaPassword: {
-    es: "La nueva contraseña debe tener al menos 4 caracteres.",
-    en: "The new password must be at least 4 characters long.",
+    es: `La nueva contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`,
+    en: `The new password must be at least ${MIN_PASSWORD} characters long.`,
+  },
+  errMigracionPendiente: {
+    es: "Tus datos aún no se han pasado al fichero cifrado: reinicia la app y vuelve a intentarlo.",
+    en: "Your data has not been moved to the encrypted file yet: restart the app and try again.",
   },
   errNuevaNoCoincide: {
     es: "La nueva credencial no coincide.",
@@ -194,23 +185,6 @@ const t = crearT({
     en: "The current credential is not correct.",
   },
   okCredActualizada: { es: "Credencial actualizada.", en: "Credential updated." },
-  okCopiaExportada: {
-    es: "Copia exportada como bolsillo-backup.json",
-    en: "Backup exported as bolsillo-backup.json",
-  },
-  errCopiaExportar: { es: "No se pudo exportar la copia.", en: "Couldn't export the backup." },
-  errCopiaInvalida: {
-    es: "El fichero no es una copia válida de Bolsillo.",
-    en: "The file is not a valid Bolsillo backup.",
-  },
-  confirmImportar: {
-    es: "Esto reemplazará TODOS tus datos actuales. ¿Continuar?",
-    en: "This will replace ALL your current data. Continue?",
-  },
-  okCopiaImportada: {
-    es: "Copia importada correctamente.",
-    en: "Backup imported successfully.",
-  },
   datosApp: { es: "Datos de la app", en: "App data" },
   empezarCero: { es: "Empezar de cero", en: "Start from scratch" },
   cargarEjemplo: { es: "Cargar ejemplo", en: "Load samples" },
@@ -228,15 +202,6 @@ const t = crearT({
     es: "No se ha podido guardar el cambio.",
     en: "Could not save the change.",
   },
-  errCopiaVersion: {
-    es: "La copia es de una versión más nueva de Bolsillo. Actualiza la app para importarla.",
-    en: "The backup comes from a newer version of Bolsillo. Update the app to import it.",
-  },
-  errCopiaLeerJson: {
-    es: "No se pudo leer el fichero (JSON inválido).",
-    en: "Couldn't read the file (invalid JSON).",
-  },
-  errCopiaLeer: { es: "No se pudo leer el fichero.", en: "Couldn't read the file." },
   errCategoriaVacia: {
     es: "Escribe un nombre para la categoría.",
     en: "Enter a name for the category.",
@@ -277,10 +242,6 @@ const credencialRepetir = ref("");
 const mensajeSeguridad = ref("");
 const errorSeguridad = ref(""); // ES: con texto -> se pinta en rojo / EN: text here -> painted red
 
-// ES: Regex de validación del PIN: solo dígitos, entre 4 y 6.
-// EN: PIN validation regex: digits only, 4 to 6 long.
-const REGEX_PIN = /^\d{4,6}$/;
-
 // ES: Etiqueta legible del tipo de bloqueo activo (para mostrarlo cuando ya existe).
 // EN: Readable label of the active lock type (shown when a lock already exists).
 const etiquetaTipoActivo = computed(() =>
@@ -297,19 +258,14 @@ async function activarBloqueo() {
   const cred = credencial.value;
   const rep = credencialRepetir.value;
 
-  // ES: Validación según el tipo seleccionado. / EN: Validation by selected type.
-  if (tipoBloqueo.value === "pin") {
-    // ES: PIN: solo dígitos, mínimo 4 y máximo 6. / EN: PIN: digits only, min 4 max 6.
-    if (!REGEX_PIN.test(cred)) {
-      errorSeguridad.value = t("errPinFormato");
-      return;
-    }
-  } else {
-    // ES: Contraseña: libre, mínimo 4 caracteres. / EN: Password: free text, at least 4 chars.
-    if (cred.length < 4) {
-      errorSeguridad.value = t("errPasswordCorta");
-      return;
-    }
+  // ES: Mínimos comunes (utils/credencial.ts, los mismos que aplica Rust):
+  //     PIN de 4 a 6 cifras; contraseña de al menos 8 caracteres.
+  // EN: Shared minimums (utils/credencial.ts, the same ones Rust enforces):
+  //     4 to 6 digit PIN; password of at least 8 characters.
+  const motivo = validarCredencial(tipoBloqueo.value, cred);
+  if (motivo) {
+    errorSeguridad.value = t(motivo === "pin-formato" ? "errPinFormato" : "errPasswordCorta");
+    return;
   }
 
   // ES: Las dos casillas deben coincidir. / EN: Both boxes must match.
@@ -327,8 +283,11 @@ async function activarBloqueo() {
     credencial.value = "";
     credencialRepetir.value = "";
     mensajeSeguridad.value = t("okBloqueoActivado");
-  } catch {
-    errorSeguridad.value = t("errBloqueoActivar");
+  } catch (e) {
+    errorSeguridad.value =
+      e instanceof Error && e.message === "migracion-pendiente"
+        ? t("errMigracionPendiente")
+        : t("errBloqueoActivar");
   }
 }
 
@@ -378,13 +337,9 @@ async function cambiarCred() {
     errorCambio.value = t("errCredActual");
     return;
   }
-  if (tipoNuevo.value === "pin") {
-    if (!REGEX_PIN.test(nue)) {
-      errorCambio.value = t("errNuevoPin");
-      return;
-    }
-  } else if (nue.length < 4) {
-    errorCambio.value = t("errNuevaPassword");
+  const motivoNuevo = validarCredencial(tipoNuevo.value, nue);
+  if (motivoNuevo) {
+    errorCambio.value = t(motivoNuevo === "pin-formato" ? "errNuevoPin" : "errNuevaPassword");
     return;
   }
   if (nue !== rep) {
@@ -392,7 +347,13 @@ async function cambiarCred() {
     return;
   }
 
-  const ok = await sesion.cambiarCredencial(act, nue, tipoNuevo.value);
+  let ok: boolean;
+  try {
+    ok = await sesion.cambiarCredencial(act, nue, tipoNuevo.value);
+  } catch {
+    errorCambio.value = t("errBloqueoActivar");
+    return;
+  }
   if (!ok) {
     errorCambio.value = t("errCredActualIncorrecta");
     return;
@@ -403,127 +364,10 @@ async function cambiarCred() {
   mensajeCambio.value = t("okCredActualizada");
 }
 
-// ── 5. Copia: exportar/importar (.json) / Backup: export/import (.json) ───────
-// ES: Mensajes de feedback de la sección de copia. / EN: Feedback messages of the backup section.
+// ── 5. Datos de la app (vaciar / ejemplo) / App data (clear / samples) ───────
+// ES: Mensajes de feedback de la sección de datos. / EN: Feedback messages of the data section.
 const mensajeCopia = ref("");
 const errorCopia = ref("");
-// ES: Referencia al input file oculto que dispara el botón "Importar".
-// EN: Reference to the hidden file input triggered by the "Import" button.
-const inputFichero = ref<HTMLInputElement | null>(null);
-
-// ES: Exporta todos los datos a un .json y fuerza su descarga.
-// EN: Exports all data to a .json and forces its download.
-function exportarCopia() {
-  mensajeCopia.value = "";
-  errorCopia.value = "";
-  try {
-    // ES: Serializa el snapshot completo legible (indentado a 2 espacios).
-    //     Incluye también las categorías personalizadas (viven fuera del cifrado).
-    // EN: Serialize the full readable snapshot (2-space indent). Custom
-    //     categories are included too (they live outside the encryption).
-    const json = JSON.stringify(
-      { ...finanzas.snapshot(), categoriasCustom: categoriasCustom() },
-      null,
-      2
-    );
-    // ES: Crea un blob de texto y una URL temporal para descargarlo.
-    // EN: Build a text blob and a temporary URL to download it.
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    // ES: Enlace invisible que se "pulsa" para lanzar la descarga.
-    // EN: Invisible link that is "clicked" to launch the download.
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bolsillo-backup.json";
-    a.click();
-    // ES: Libera la URL temporal para no acumular memoria. / EN: Release the temporary URL so memory isn't leaked.
-    URL.revokeObjectURL(url);
-    mensajeCopia.value = t("okCopiaExportada");
-  } catch {
-    errorCopia.value = t("errCopiaExportar");
-  }
-}
-
-// ES: Abre el selector de fichero (el input está oculto). / EN: Opens the file picker (the input is hidden).
-function pedirImportar() {
-  inputFichero.value?.click();
-}
-
-// ES: Lee el fichero elegido, valida el JSON e hidrata las finanzas.
-// EN: Reads the chosen file, validates the JSON and hydrates the finances.
-function importarCopia(evento: Event) {
-  mensajeCopia.value = "";
-  errorCopia.value = "";
-
-  // ES: Recupera el fichero seleccionado del input. / EN: Get the selected file from the input.
-  const input = evento.target as HTMLInputElement;
-  const fichero = input.files?.[0];
-  if (!fichero) return;
-
-  // ES: Lee el contenido del fichero como texto. / EN: Read the file contents as text.
-  const lector = new FileReader();
-  lector.onload = async () => {
-    try {
-      // ES: Parsea el JSON y lo pasa por el camino único: migrar (las copias
-      //     antiguas sin versión se actualizan) + validar cada campo.
-      // EN: Parse the JSON and send it through the single path: migrate (old
-      //     unversioned backups are upgraded) + validate every field.
-      const datos: unknown = JSON.parse(String(lector.result));
-      try {
-        prepararDatos(datos);
-      } catch (e) {
-        errorCopia.value =
-          e instanceof ErrorDatos && e.motivo === "version"
-            ? t("errCopiaVersion")
-            : t("errCopiaInvalida");
-        return;
-      }
-
-      // ES: Confirma antes de sobrescribir los datos actuales. / EN: Confirm before overwriting the current data.
-      if (!confirm(t("confirmImportar"))) {
-        return;
-      }
-
-      // ES: Restaura las categorías personalizadas de la copia (si las trae).
-      // EN: Restore the backup's custom categories (if it brings any).
-      const custom = (datos as { categoriasCustom?: unknown }).categoriasCustom;
-      if (Array.isArray(custom)) {
-        setCategoriasCustom(custom as string[]);
-        refrescarCategorias();
-      }
-
-      // ES: Importa y PERSISTE de forma garantizada (con await, no depende del watch).
-      //     El store ahora lanza Error("copia-invalida") si la copia no es válida,
-      //     así que se captura abajo para mostrar el mensaje correcto de "copia inválida".
-      // EN: Import and PERSIST in a guaranteed way (with await, not relying on the watch).
-      //     The store now throws Error("copia-invalida") if the backup is not valid,
-      //     so it is caught below to show the right "invalid backup" message.
-      await sesion.importarDatos(datos);
-      mensajeCopia.value = t("okCopiaImportada");
-    } catch (e) {
-      // ES: Distingue la señal "copia-invalida" del store de un fallo de parseo JSON
-      //     para que el usuario vea el motivo exacto en vez de un genérico "JSON inválido".
-      // EN: Distinguish the store's "invalid backup" signal from a JSON parse error
-      //     so the user sees the precise reason instead of a generic "invalid JSON".
-      if (e instanceof Error && e.message === "copia-invalida") {
-        errorCopia.value = t("errCopiaInvalida");
-      } else if (e instanceof Error && e.message === "copia-version") {
-        errorCopia.value = t("errCopiaVersion");
-      } else {
-        errorCopia.value = t("errCopiaLeerJson");
-      }
-    } finally {
-      // ES: Resetea el input para poder volver a elegir el mismo fichero. / EN: Reset the input so the same file can be chosen again.
-      input.value = "";
-    }
-  };
-  // ES: Error de lectura del propio fichero. / EN: Error reading the file itself.
-  lector.onerror = () => {
-    errorCopia.value = t("errCopiaLeer");
-    input.value = "";
-  };
-  lector.readAsText(fichero);
-}
 
 // ES: "Empezar de cero" / "Cargar ejemplo": confirma y sustituye todos los
 //     datos. El resultado sale en los mensajes de la sección de copia.
@@ -743,6 +587,8 @@ function quitarCategoria(nombre: string): void {
             :placeholder="tipoBloqueo === 'pin' ? t('phPin') : t('phPassword')"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
+          <!-- ES: Aviso si el PIN es fácil de adivinar / EN: Warning if the PIN is easy to guess -->
+          <AvisoPinDebil v-if="tipoBloqueo === 'pin'" :pin="credencial" />
         </div>
 
         <!-- ES: Repetir credencial para confirmar. / EN: Repeat credential to confirm. -->
@@ -819,6 +665,7 @@ function quitarCategoria(nombre: string): void {
             :aria-label="tipoNuevo === 'pin' ? t('phNuevoPin') : t('phNuevaPassword')"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
+          <AvisoPinDebil v-if="tipoNuevo === 'pin'" :pin="credNueva" />
           <input
             v-model="credNuevaRep"
             :type="tipoNuevo === 'pin' ? 'tel' : 'password'"
@@ -837,6 +684,10 @@ function quitarCategoria(nombre: string): void {
           <p v-if="errorCambio" class="text-danger text-sm">{{ errorCambio }}</p>
           <p v-else-if="mensajeCambio" class="text-ok text-sm">{{ mensajeCambio }}</p>
         </div>
+
+        <!-- ES: Bloquear ahora, autobloqueo y clave de recuperación (solo con el fichero cifrado).
+             EN: Lock now, auto-lock and recovery key (only with the encrypted file). -->
+        <SeguridadSesion v-if="sesion.modo === 'fichero'" />
       </div>
 
       <!-- ES: Mensajes de feedback de la sección de seguridad. / EN: Feedback messages of the security section. -->
@@ -844,54 +695,18 @@ function quitarCategoria(nombre: string): void {
       <p v-else-if="mensajeSeguridad" class="text-ok text-sm mt-3">{{ mensajeSeguridad }}</p>
     </section>
 
+    <!-- ES: SECCIÓN — Copias de seguridad (cifrada, JSON, importar y automáticas).
+         EN: SECTION — Backups (encrypted, JSON, import and automatic). -->
+    <CopiasSeguridad @importada="refrescarCategorias" />
+
     <!-- =====================================================================
-         ES: SECCIÓN — Copia de seguridad (exportar / importar .json)
-         EN: SECTION — Backup (export / import .json)
+         ES: SECCIÓN — Datos de la app (vaciar / ejemplo)
+         EN: SECTION — App data (clear / samples)
          ===================================================================== -->
     <section class="rounded-2xl bg-surface border border-border p-5">
-      <h2 class="font-display font-bold text-lg text-ink">{{ t("copia") }}</h2>
-      <p class="text-muted text-sm mt-1">
-        {{ t("copiaDesc") }}
-      </p>
-
-      <!-- ES: Botones de exportar / importar. / EN: Export / import buttons. -->
-      <div class="flex flex-wrap gap-3 mt-4">
-        <!-- ES: Exportar copia. / EN: Export backup. -->
-        <button
-          class="rounded-lg bg-brand px-4 py-2 text-white font-medium hover:bg-brand-soft transition-colors"
-          @click="exportarCopia"
-        >
-          {{ t("exportarCopia") }}
-        </button>
-
-        <!-- ES: Importar copia: el botón dispara el input file oculto.
-             EN: Import backup: the button triggers the hidden file input. -->
-        <button
-          class="rounded-lg border border-border px-4 py-2 text-ink font-medium hover:border-faint transition-colors"
-          @click="pedirImportar"
-        >
-          {{ t("importarCopia") }}
-        </button>
-
-        <!-- ES: Input file oculto: solo acepta JSON; al elegir, lanza importarCopia.
-             EN: Hidden file input: only accepts JSON; on pick, runs importarCopia. -->
-        <input
-          ref="inputFichero"
-          type="file"
-          accept="application/json"
-          class="hidden"
-          @change="importarCopia"
-        />
-      </div>
-
-      <!-- ES: Aviso sobre el reemplazo de datos al importar. / EN: Notice about data replacement on import. -->
-      <p class="text-faint text-xs mt-3">
-        {{ t("copiaAviso") }}
-      </p>
-
       <!-- ES: Datos de la app: vaciar o cargar el ejemplo (con confirmación).
            EN: App data: clear or load the samples (with confirmation). -->
-      <h3 class="font-semibold text-ink text-sm mt-5">{{ t("datosApp") }}</h3>
+      <h2 class="font-display font-bold text-lg text-ink">{{ t("datosApp") }}</h2>
       <div class="flex flex-wrap gap-3 mt-2">
         <button
           type="button"

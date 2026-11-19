@@ -29,6 +29,8 @@ import { useFinanzas } from "../stores/finanzas";
 import { useAjustes } from "../stores/ajustes";
 import { mesActual } from "../utils/format";
 import { crearT } from "../i18n";
+import { validarCredencial, MIN_PASSWORD } from "../utils/credencial";
+import AvisoPinDebil from "./AvisoPinDebil.vue";
 
 // ES: Store de sesión: gestiona el fin del onboarding y el bloqueo persistido.
 // EN: Session store: owns onboarding completion and the persisted lock.
@@ -84,18 +86,21 @@ const t = crearT({
   bloqueoPin: { es: "Sí, con un PIN (4-6 dígitos)", en: "Yes, with a PIN (4-6 digits)" },
   bloqueoPassword: { es: "Sí, con una contraseña", en: "Yes, with a password" },
   placeholderPin: { es: "Tu PIN", en: "Your PIN" },
-  placeholderPassword: { es: "Tu contraseña", en: "Your password" },
+  placeholderPassword: {
+    es: `Tu contraseña (mínimo ${MIN_PASSWORD})`,
+    en: `Your password (at least ${MIN_PASSWORD})`,
+  },
   placeholderRepetir: { es: "Repetir", en: "Repeat" },
   notaCifrado: {
-    es: "Tus datos se cifrarán con esta clave. Si la olvidas, no se pueden recuperar.",
-    en: "Your data will be encrypted with this key. If you forget it, it cannot be recovered.",
+    es: "Tus datos se cifrarán con esta clave. Al terminar te daremos una clave de recuperación para entrar si la olvidas: apúntala.",
+    en: "Your data will be encrypted with this key. When you finish you will get a recovery key to get in if you forget it: write it down.",
   },
   botonPreparando: { es: "Preparando…", en: "Setting up…" },
   botonEmpezar: { es: "Empezar", en: "Get started" },
   errorPin: { es: "El PIN debe tener entre 4 y 6 dígitos.", en: "The PIN must be 4 to 6 digits." },
   errorPassword: {
-    es: "La contraseña debe tener al menos 4 caracteres.",
-    en: "The password must be at least 4 characters.",
+    es: `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres.`,
+    en: `The password must be at least ${MIN_PASSWORD} characters.`,
   },
   errorNoCoincide: { es: "La credencial no coincide.", en: "The credentials don't match." },
 });
@@ -126,8 +131,6 @@ const error = ref("");
 //     carga: true mientras se termina, para deshabilitar el botón.
 const cargando = ref(false);
 
-// ES: El PIN debe tener entre 4 y 6 dígitos. / EN: PIN must be 4 to 6 digits.
-const REGEX_PIN = /^\d{4,6}$/;
 // ES: True cuando hay bloqueo activo, para mostrar y validar los campos de credencial.
 // EN: True when a lock is enabled, so credential fields are shown and validated.
 const pideCredencial = computed(() => tipoBloqueo.value !== "ninguno");
@@ -144,14 +147,11 @@ async function empezar() {
   error.value = "";
   // ES: Validar el bloqueo solo si se eligió. / EN: Validate the lock only if one was chosen.
   if (pideCredencial.value) {
-    // ES: PIN: exigir el formato de 4-6 dígitos. / EN: PIN: enforce the 4-6 digit format.
-    if (tipoBloqueo.value === "pin" && !REGEX_PIN.test(credencial.value)) {
-      error.value = t("errorPin");
-      return;
-    }
-    // ES: Contraseña: exigir longitud mínima. / EN: Password: enforce a minimum length.
-    if (tipoBloqueo.value === "password" && credencial.value.length < 4) {
-      error.value = t("errorPassword");
+    // ES: Mínimos comunes con Rust: PIN de 4-6 cifras; contraseña de 8 o más.
+    // EN: Minimums shared with Rust: 4-6 digit PIN; password of 8 or more.
+    const motivo = validarCredencial(tipoBloqueo.value as "pin" | "password", credencial.value);
+    if (motivo) {
+      error.value = t(motivo === "pin-formato" ? "errorPin" : "errorPassword");
       return;
     }
     // ES: Ambos campos deben coincidir. / EN: Both fields must match.
@@ -324,6 +324,8 @@ async function empezar() {
               :placeholder="tipoBloqueo === 'pin' ? t('placeholderPin') : t('placeholderPassword')"
               class="mt-2 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             />
+            <!-- ES: Aviso si el PIN es fácil de adivinar / EN: Warning if the PIN is easy to guess -->
+            <AvisoPinDebil v-if="tipoBloqueo === 'pin'" :pin="credencial" />
             <!-- ES: Confirmación de la credencial (debe coincidir con la de arriba).
                  EN: Credential confirmation (must match the one above). -->
             <input
