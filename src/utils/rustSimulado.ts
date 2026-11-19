@@ -69,6 +69,10 @@ interface EstadoSim {
   cifradoAlterado: boolean;
   // ES: Rust no consigue bloquear / EN: Rust fails to lock
   fallarBloqueo: boolean;
+  // ES: veces que se pidió bloquear / EN: times locking was requested
+  intentosBloqueo: number;
+  // ES: el estado falla N veces / EN: the state call fails N times
+  fallarEstado: number;
   proximoArchivo: string | null;
   cancelarDialogo: boolean;
 }
@@ -93,6 +97,8 @@ function vacio(): EstadoSim {
     fallarVerificacion: false,
     cifradoAlterado: false,
     fallarBloqueo: false,
+    intentosBloqueo: 0,
+    fallarEstado: 0,
     proximoArchivo: null,
     cancelarDialogo: false,
   };
@@ -202,10 +208,10 @@ function abrirCopia(a: Record<string, unknown>): FicheroSim {
   return c;
 }
 
-// ── 3. Comandos / Commands ───────────────────────────────────────────────────
-type Args = Record<string, unknown>;
-const comandos: Record<string, (a: Args) => unknown> = {
-  estado_almacen: () => ({
+// ES: Estado del almacén simulado (lo que devuelve estado_almacen).
+// EN: Simulated store state (what estado_almacen returns).
+function estadoSim() {
+  return {
     hay_fichero: st.principal !== null || st.principalRoto !== null,
     legible: st.principal !== null,
     motivo: st.principalRoto,
@@ -218,7 +224,19 @@ const comandos: Record<string, (a: Args) => unknown> = {
     abierta: st.abierta !== null,
     por_recuperacion: !!st.abierta?.porRecuperacion,
     copias_pendientes: 0,
-  }),
+  };
+}
+
+// ── 3. Comandos / Commands ───────────────────────────────────────────────────
+type Args = Record<string, unknown>;
+const comandos: Record<string, (a: Args) => unknown> = {
+  estado_almacen: () => {
+    if (st.fallarEstado > 0) {
+      st.fallarEstado--;
+      err("interno");
+    }
+    return estadoSim();
+  },
 
   abrir_almacen: (a) => {
     if (st.principalRoto) err(st.principalRoto);
@@ -326,6 +344,7 @@ const comandos: Record<string, (a: Args) => unknown> = {
   },
 
   bloquear_almacen: () => {
+    st.intentosBloqueo++;
     if (st.fallarBloqueo) err("interno");
     st.abierta = null;
     st.pendiente = false;

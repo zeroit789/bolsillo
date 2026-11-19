@@ -432,6 +432,22 @@ describe("copias / backups", () => {
     expect(useFinanzas().planes).toEqual([]);
   });
 
+  it("si falla leer el estado tras restaurar, se entra con lo restaurado y no se pisa / state failure after restore", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    const vieja = (await s.listarCopias()).find((c) => c.nombre.startsWith("reciente-"))!;
+    useFinanzas().addPlan({ nombre: "Antes de restaurar", objetivo: 10, aportado: 0 });
+    await s.vaciarGuardado();
+    simulador.estado.fallarEstado = 1;
+    await s.restaurarCopia(vieja.nombre);
+    expect(s.desbloqueado).toBe(true);
+    expect(useFinanzas().planes).toEqual([]);
+    useFinanzas().addPlan({ nombre: "Tras restaurar", objetivo: 10, aportado: 0 });
+    await s.vaciarGuardado();
+    expect(enDisco().planes.map((p) => p.nombre)).toEqual(["Tras restaurar"]);
+  });
+
   it("un reciboId sin recibo de una copia importada no se pierde al guardar / a dangling reciboId from an import is kept", async () => {
     const s = useSesion();
     await s.arrancar();

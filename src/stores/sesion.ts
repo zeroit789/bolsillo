@@ -319,7 +319,14 @@ export const useSesion = defineStore("sesion", () => {
       return;
     }
     const ok = await bloquearAhora();
-    bloqueoPendiente.value = !ok && desbloqueado.value && useAjustes().bloqueoActivo;
+    // ES: Solo queda pendiente si lo que falló fue guardar (se retoma tras el
+    //     siguiente guardado bueno). Si falló Rust, no se reprograma en bucle:
+    //     el autobloqueo vuelve a contar sus minutos y lo intentará entonces.
+    // EN: It only stays pending if saving failed (resumed after the next good
+    //     save). If Rust failed, it is not rescheduled in a loop: the auto-lock
+    //     counts its minutes again and will try then.
+    bloqueoPendiente.value =
+      !ok && desbloqueado.value && useAjustes().bloqueoActivo && estadoGuardado.value === "error";
   }
 
   // ES: La clave de recuperación sin confirmar nunca queda en pantalla ni en
@@ -1018,8 +1025,11 @@ export const useSesion = defineStore("sesion", () => {
           //     forgotten and it goes to the error screen: nothing from before
           //     in memory can be saved on top of what was restored.
           if (codigo(e) !== "credencial" && codigo(e) !== "sin-copia") {
-            await boveda.bloquear().catch(() => {});
+            // ES: Guardado bloqueado ANTES de cualquier espera.
+            // EN: Saving blocked BEFORE any wait.
             bloqueando = true;
+            cancelarTemporizadores();
+            await boveda.bloquear().catch(() => {});
             useFinanzas().hidratar(datosVacios());
             guardados = cambios;
             bloqueando = false;
@@ -1027,12 +1037,22 @@ export const useSesion = defineStore("sesion", () => {
           }
           throw e;
         }
+        // ES: Ya publicada: desde aquí ningún guardado de lo de antes puede
+        //     colarse (bloqueado ANTES de esperar nada) hasta entrar con los
+        //     datos restaurados. Si falla leer el estado, se entra igual.
+        // EN: Already published: from here no save of the previous data can
+        //     slip in (blocked BEFORE waiting for anything) until entering
+        //     with the restored data. If reading the state fails, it enters anyway.
+        bloqueando = true;
+        cancelarTemporizadores();
         retirarClaveRecuperacion();
         porRecuperacion.value = false;
-        const e = await boveda.estado();
-        sincronizarAjustes(e.bloqueo);
-        tieneRecuperacion.value = e.tieneRecuperacion;
-        copiasPendientes.value = e.copiasPendientes;
+        const e = await boveda.estado().catch(() => null);
+        if (e) {
+          sincronizarAjustes(e.bloqueo);
+          tieneRecuperacion.value = e.tieneRecuperacion;
+          copiasPendientes.value = e.copiasPendientes;
+        }
         modo.value = "fichero";
         necesitaOnboarding.value = false;
         entrar(datos);

@@ -197,6 +197,20 @@ describe("bloquear ahora y autobloqueo / lock now and auto-lock", () => {
     expect(await s.desbloquear("4831")).toBe(true);
   });
 
+  it("si Rust no deja bloquear, el autobloqueo no se reintenta en bucle / no tight retry loop if Rust refuses to lock", async () => {
+    vi.useFakeTimers();
+    const s = await app("4831");
+    useAjustes().setMinutosAutobloqueo(1);
+    simulador.estado.fallarBloqueo = true;
+    await vi.advanceTimersByTimeAsync(80_000);
+    const tras = simulador.estado.intentosBloqueo;
+    expect(tras).toBeGreaterThan(0);
+    expect(s.bloqueoPendiente).toBe(false);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(simulador.estado.intentosBloqueo).toBe(tras);
+    simulador.estado.fallarBloqueo = false;
+  });
+
   it("un autobloqueo que no pudo guardar queda pendiente y se hace tras el siguiente guardado / a failed auto-lock is retried after the next save", async () => {
     vi.useFakeTimers();
     const s = await app("4831");
