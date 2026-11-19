@@ -39,7 +39,13 @@
 // ── 1. Imports y tipos / Imports & types ─────────────────────────────────────
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import { CORRECCIONES_MAX, esFechaValida, VERSION_DATOS } from "../types";
+import {
+  CORRECCIONES_MAX,
+  esFechaValida,
+  esPuntualValido,
+  esRecurrenteValido,
+  VERSION_DATOS,
+} from "../types";
 import type {
   AjusteSaldo,
   Correccion,
@@ -418,10 +424,17 @@ export const useFinanzas = defineStore("finanzas", () => {
       ? { ...r, desde: r.fechaInicio.slice(0, 7) }
       : r;
   }
-  // ES: Añade un recurrente (asigna id automáticamente).
-  // EN: Add a recurring entry (auto-assigns an id).
-  function addRecurrente(r: Omit<Recurrente, "id">) {
-    recurrentes.value.push({ ...conDesde(r), id: nuevoId() });
+  // ES: Añade un recurrente (asigna id automáticamente). false (sin guardar
+  //     nada) si no pasa la validación del esquema: un recurrente mal formado
+  //     haría que el guardado rechazara TODOS los datos.
+  // EN: Add a recurring entry (auto-assigns an id). false (saving nothing) if
+  //     it fails the schema validation: a malformed recurring entry would make
+  //     the save reject ALL the data.
+  function addRecurrente(r: Omit<Recurrente, "id">): boolean {
+    const nuevo = { ...conDesde(r), id: nuevoId() };
+    if (!esRecurrenteValido(JSON.parse(JSON.stringify(nuevo)))) return false;
+    recurrentes.value.push(nuevo);
+    return true;
   }
   // ES: Añade un puntual (asigna id automáticamente).
   // EN: Add a one-off entry (auto-assigns an id).
@@ -435,9 +448,15 @@ export const useFinanzas = defineStore("finanzas", () => {
   }
   // ES: Modifica un recurrente por id, fusionando los cambios dados.
   // EN: Patch a recurring entry by id, merging the given changes.
-  function actualizarRecurrente(id: string, cambios: Partial<Recurrente>) {
+  //     false (sin cambios) si el resultado no pasaría la validación del esquema.
+  // EN: false (no change) if the result would fail the schema validation.
+  function actualizarRecurrente(id: string, cambios: Partial<Recurrente>): boolean {
     const i = recurrentes.value.findIndex((r) => r.id === id);
-    if (i !== -1) recurrentes.value[i] = conDesde({ ...recurrentes.value[i], ...cambios });
+    if (i === -1) return false;
+    const nuevo = conDesde({ ...recurrentes.value[i], ...cambios });
+    if (!esRecurrenteValido(JSON.parse(JSON.stringify(nuevo)))) return false;
+    recurrentes.value[i] = nuevo;
+    return true;
   }
   // ES: Modifica un puntual por id, fusionando los cambios dados.
   // EN: Patch a one-off entry by id, merging the given changes.
@@ -655,6 +674,8 @@ export const useFinanzas = defineStore("finanzas", () => {
   //     valid or the date does not exist. The amount is rounded to the cent.
   function addTransferencia(t: Omit<Transferencia, "id">): boolean {
     if (!validarTransferencia(t).ok || !esFechaValida(t.fecha)) return false;
+    const existe = (id: string) => cuentas.value.some((c) => c.id === id);
+    if (!existe(t.origen) || !existe(t.destino)) return false;
     const concepto = t.concepto?.trim();
     transferencias.value.push({
       id: nuevoId(),
@@ -669,6 +690,36 @@ export const useFinanzas = defineStore("finanzas", () => {
   // ES: Elimina una transferencia por id. / EN: Remove a transfer by id.
   function eliminarTransferencia(id: string) {
     transferencias.value = transferencias.value.filter((t) => t.id !== id);
+  }
+
+  // ES: Saldo de una cuenta hasta una fecha incluida (sin lo posterior), o
+  //     null si la cuenta no existe. Lo usa el formulario de ajustar saldo.
+  // EN: Balance of an account up to a date included (without what comes
+  //     later), or null if the account does not exist. Used by the adjust
+  //     balance form.
+  function saldoCuentaEn(cuentaId: string, fecha: string): number | null {
+    const i = cuentas.value.findIndex((c) => c.id === cuentaId);
+    if (i === -1) return null;
+    return saldosPorCuenta(
+      cuentas.value,
+      puntuales.value,
+      transferencias.value,
+      ajustesSaldo.value,
+      fecha
+    )[i].saldo;
+  }
+
+  // ES: ¿Tiene la cuenta transferencias o ajustes? Si se borrara, esos
+  //     movimientos seguirían moviendo la otra cuenta y descuadrarían el
+  //     patrimonio, así que la vista pide borrarlos antes.
+  // EN: Does the account have transfers or adjustments? If it were deleted,
+  //     those movements would keep moving the other account and unbalance net
+  //     worth, so the view asks to delete them first.
+  function cuentaConMovimientosEntreCuentas(cuentaId: string): boolean {
+    return (
+      transferencias.value.some((t) => t.origen === cuentaId || t.destino === cuentaId) ||
+      ajustesSaldo.value.some((a) => a.cuenta === cuentaId)
+    );
   }
 
   // ES: Deja una cuenta en el saldo que dice el banco en una fecha: guarda un
@@ -838,10 +889,21 @@ export const useFinanzas = defineStore("finanzas", () => {
       opciones.cuenta && cuentas.value.some((c) => c.id === opciones.cuenta)
         ? opciones.cuenta
         : undefined;
-    const nuevos = crearPuntualesImportados(filas, reglas.value, { cuenta }).map((p) => ({
-      ...p,
-      id: nuevoId(),
-    }));
+    // ES: Solo entran los puntuales que pasan la validación del esquema, con
+    //     importe > 0 y concepto: una fila mal formada se descarta en vez de
+    //     bloquear el guardado de todo.
+    // EN: Only entries that pass the schema validation, with amount > 0 and a
+    //     concept, go in: a malformed row is dropped instead of blocking the
+    //     whole save.
+    const nuevos = crearPuntualesImportados(filas, reglas.value, { cuenta })
+      .map((p) => ({ ...p, id: nuevoId() }))
+      .filter(
+        (p) =>
+          p.concepto !== "" &&
+          p.importe > 0 &&
+          importeDentroDeRango(p.importe) &&
+          esPuntualValido(JSON.parse(JSON.stringify(p)))
+      );
     if (nuevos.length) puntuales.value = [...puntuales.value, ...nuevos];
     return nuevos.length;
   }
@@ -912,6 +974,8 @@ export const useFinanzas = defineStore("finanzas", () => {
     // ES: v4 / EN: v4
     addTransferencia,
     eliminarTransferencia,
+    saldoCuentaEn,
+    cuentaConMovimientosEntreCuentas,
     ajustarSaldo,
     eliminarAjuste,
     reglasOrdenadas,

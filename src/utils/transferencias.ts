@@ -139,7 +139,11 @@ export function saldosPorCuenta(
   };
   for (const m of movimientos) {
     if (!dentro(m.fecha, hasta)) continue;
-    const c = aCentimos(Math.abs(m.importe));
+    // ES: Con su signo, como el patrimonio de antes: un importe negativo
+    //     heredado (las versiones viejas no lo impedían) cuenta igual que antes.
+    // EN: With its sign, like the old net worth: an inherited negative amount
+    //     (old versions did not prevent it) counts the same as before.
+    const c = aCentimos(m.importe);
     sumar(m.cuenta, m.signo === "ingreso" ? c : -c);
   }
   for (const t of transferencias) {

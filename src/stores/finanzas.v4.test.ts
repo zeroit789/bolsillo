@@ -276,3 +276,61 @@ describe("el snapshot sigue siendo válido / the snapshot stays valid", () => {
     expect(esDatosValidos(JSON.parse(JSON.stringify(f.snapshot())))).toBe(true);
   }); // prettier-ignore
 });
+
+describe("revisión: validación antes de guardar / review: validation before saving", () => {
+  it("importarFilas descarta filas mal formadas sin tocar las buenas / importarFilas drops malformed rows and keeps the good ones", () => {
+    const f = useFinanzas();
+    const malas = [
+      { ...fila(1, "MALA FECHA", 100), fecha: "2026-02-30" },
+      { ...fila(2, "NAN", 100), importe: Number.NaN },
+      { ...fila(3, "   ", 100) },
+      { ...fila(4, "CERO", 0), importe: 0 },
+    ];
+    expect(f.importarFilas([...malas, fila(5, "BUENA", 250)], {})).toBe(1);
+    expect(f.puntuales.map((p) => p.concepto)).toEqual(["BUENA"]);
+    expect(esDatosValidos(JSON.parse(JSON.stringify(f.snapshot())))).toBe(true);
+  });
+
+  it("alta y edición de recurrentes rechazan lo que el esquema no admite / adding and editing recurring entries reject what the schema does not allow", () => {
+    const f = useFinanzas();
+    expect(f.addRecurrente(rec({ cuotas: 0 }))).toBe(false);
+    expect(f.addRecurrente(rec({ fechaInicio: "2026-02-30" }))).toBe(false);
+    expect(f.addRecurrente(rec({ importe: Number.NaN }))).toBe(false);
+    expect(f.recurrentes).toEqual([]);
+    expect(f.addRecurrente(rec({ cuotas: 3 }))).toBe(true);
+    const id = f.recurrentes[0].id;
+    expect(f.actualizarRecurrente(id, { fechaFin: "2026-13-01" })).toBe(false);
+    expect(f.recurrentes[0].fechaFin).toBeUndefined();
+    expect(f.actualizarRecurrente(id, { cuotas: undefined, fechaFin: "2026-12-31" })).toBe(true);
+    expect(esDatosValidos(JSON.parse(JSON.stringify(f.snapshot())))).toBe(true);
+  });
+
+  it("una transferencia exige que existan las dos cuentas / a transfer requires both accounts to exist", () => {
+    const { f, banco } = conCuentas();
+    expect(f.addTransferencia({ origen: banco, destino: "no-existe", importe: 5, fecha: "2026-02-01" })).toBe(false);
+  }); // prettier-ignore
+
+  it("saldo de una cuenta en una fecha (sin lo posterior) / account balance on a date (without what comes later)", () => {
+    const { f, banco } = conCuentas();
+    f.addPuntual({ concepto: "Futuro", importe: 100, signo: "gasto", categoria: "Otros", fecha: "2026-03-01", cuenta: banco });
+    expect(f.saldoCuentaEn(banco, "2026-02-28")).toBe(1000);
+    expect(f.saldoCuentaEn(banco, "2026-03-01")).toBe(900);
+    expect(f.saldoCuentaEn("no-existe", "2026-03-01")).toBeNull();
+  }); // prettier-ignore
+
+  it("un importe negativo heredado cuenta igual que antes en el saldo / an inherited negative amount counts as before in the balance", () => {
+    const { f, banco } = conCuentas();
+    f.addPuntual({ concepto: "Raro", importe: -10, signo: "gasto", categoria: "Otros", fecha: "2026-02-01", cuenta: banco });
+    expect(saldo(f, banco)).toBe(1010);
+  }); // prettier-ignore
+
+  it("sabe si una cuenta tiene transferencias o ajustes / knows whether an account has transfers or adjustments", () => {
+    const { f, banco, hucha } = conCuentas();
+    expect(f.cuentaConMovimientosEntreCuentas(banco)).toBe(false);
+    f.addTransferencia({ origen: banco, destino: hucha, importe: 5, fecha: "2026-02-01" });
+    expect(f.cuentaConMovimientosEntreCuentas(hucha)).toBe(true);
+    f.eliminarTransferencia(f.transferencias[0].id);
+    f.ajustarSaldo(banco, 1, "2026-02-01");
+    expect(f.cuentaConMovimientosEntreCuentas(banco)).toBe(true);
+  });
+});

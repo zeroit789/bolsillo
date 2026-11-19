@@ -332,6 +332,88 @@ export interface DatosBolsillo {
 // EN: Cap on stored corrections (the most recent ones).
 export const CORRECCIONES_MAX = 300;
 
+// ── Guards comunes de la validación / Shared validation guards ───────────────
+// ES: Pequeños guards de tipo reutilizables en las comprobaciones por elemento.
+// EN: Tiny reusable type guards used across the per-item checks.
+const esObjeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object";
+const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
+const str = (x: unknown) => typeof x === "string";
+const signoOk = (x: unknown) => x === "ingreso" || x === "gasto";
+// ES: Fecha de calendario real, exacta (blinda los cálculos de fechas).
+// EN: Real calendar date, exact (shields the date math).
+const fechaOk = esFechaValida;
+// ES: Campos opcionales: o no están (undefined) o tienen el tipo correcto.
+// EN: Optional fields: either absent (undefined) or of the right type.
+const opt = (x: unknown, ok: (v: unknown) => boolean) => x === undefined || ok(x);
+const diaOk = (x: unknown) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 31;
+const tagsOk = (x: unknown) => Array.isArray(x) && x.every((t) => typeof t === "string");
+// ES: Cuotas: entero entre 1 y CUOTAS_MAX. / EN: Instalments: integer between 1 and CUOTAS_MAX.
+const cuotasOk = (x: unknown) =>
+  Number.isInteger(x) && (x as number) >= 1 && (x as number) <= CUOTAS_MAX;
+// ES: Huella de importación: texto no vacío con tope. / EN: Import fingerprint: non-empty capped text.
+const huellaOk = (x: unknown) => typeof x === "string" && x.length > 0 && x.length <= IMPORT_ID_MAX;
+// ES: Las subdivisiones (gasto dividido) son opcionales, pero si vienen deben
+//     ser { categoria:string, importe:number finito } o el reparto daría NaN.
+// EN: Subdivisions (split expense) are optional, but if present they must be
+//     { categoria:string, importe:number finite } or the split would be NaN.
+const subOk = (x: unknown) =>
+  Array.isArray(x) && x.every((e: unknown) => esObjeto(e) && str(e.categoria) && num(e.importe));
+
+// ES: Recurrente válido: id, concepto, importe finito, signo y categoría,
+//     `desde` válido, `hasta` null o mes válido, y sus opcionales bien formados.
+//     Lo usan la validación de los datos y las altas y ediciones del store.
+// EN: Valid recurring entry: id, concept, finite amount, sign and category,
+//     valid `desde`, `hasta` null or a valid month, and well-formed optionals.
+//     Used by the data validation and by the store's adds and edits.
+export function esRecurrenteValido(x: unknown): x is Recurrente {
+  if (!esObjeto(x) || Array.isArray(x)) return false;
+  const r = x;
+  return (
+    str(r.id) &&
+    str(r.concepto) &&
+    num(r.importe) &&
+    signoOk(r.signo) &&
+    str(r.categoria) &&
+    esMesValido(r.desde) &&
+    (r.hasta === null || esMesValido(r.hasta)) &&
+    opt(r.diaPago, diaOk) &&
+    opt(r.comercio, str) &&
+    opt(r.tags, tagsOk) &&
+    opt(r.cuenta, str) &&
+    opt(r.frecuencia, (v) => FRECUENCIAS.includes(v as Frecuencia)) &&
+    opt(r.fechaInicio, fechaOk) &&
+    opt(r.fechaFin, fechaOk) &&
+    opt(r.cuotas, cuotasOk)
+  );
+}
+
+// ES: Puntual válido: id, concepto, importe, signo, categoría, fecha válida y
+//     sus opcionales (comercio, tags, recibo, cuenta, subdivisiones, origen,
+//     huella de importación).
+// EN: Valid one-off entry: id, concept, amount, sign, category, valid date and
+//     its optionals (comercio, tags, recibo, cuenta, subdivisiones, origen,
+//     import fingerprint).
+export function esPuntualValido(x: unknown): x is Puntual {
+  if (!esObjeto(x) || Array.isArray(x)) return false;
+  const p = x;
+  return (
+    str(p.id) &&
+    str(p.concepto) &&
+    num(p.importe) &&
+    signoOk(p.signo) &&
+    str(p.categoria) &&
+    fechaOk(p.fecha) &&
+    opt(p.comercio, str) &&
+    opt(p.tags, tagsOk) &&
+    opt(p.recibo, str) &&
+    opt(p.reciboId, esIdReciboValido) &&
+    opt(p.cuenta, str) &&
+    opt(p.subdivisiones, subOk) &&
+    opt(p.origen, (v) => v === "manual" || v === "importado") &&
+    opt(p.importId, huellaOk)
+  );
+}
+
 // ES: Valida que un objeto tenga EXACTAMENTE la forma de DatosBolsillo en la
 //     versión actual: todas las colecciones y todos los campos, incluidos los
 //     opcionales (comercio, tags, recibo, cuenta, diaPago…). Las copias antiguas
@@ -351,84 +433,20 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const o = d as Record<string, unknown>;
   if (o.version !== VERSION_DATOS) return false;
 
-  // ES: Pequeños guards de tipo reutilizables en las comprobaciones por elemento.
-  // EN: Tiny reusable type guards used across the per-item checks.
-  const esObjeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object";
-  const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
-  const str = (x: unknown) => typeof x === "string";
-  const signo = (x: unknown) => x === "ingreso" || x === "gasto";
-  // ES: Mes y fecha de calendario real, exactos (blinda los cálculos de fechas).
-  // EN: Real calendar month and date, exact (shields the date math).
+  // ES: Guards de tipo de uso local (los comunes están fuera de la función).
+  // EN: Locally used type guards (the shared ones are outside the function).
+  const signo = signoOk;
   const mesOk = esMesValido;
-  const fechaOk = esFechaValida;
-  // ES: Campos opcionales: o no están (undefined) o tienen el tipo correcto.
-  // EN: Optional fields: either absent (undefined) or of the right type.
-  const opt = (x: unknown, ok: (v: unknown) => boolean) => x === undefined || ok(x);
-  const diaOk = (x: unknown) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 31;
-  const tagsOk = (x: unknown) => Array.isArray(x) && x.every((t) => typeof t === "string");
   const tiposDeuda: string[] = TIPOS_DEUDA.map((t) => t.valor);
-  // ES: Cuotas: entero entre 1 y CUOTAS_MAX. / EN: Instalments: integer between 1 and CUOTAS_MAX.
-  const cuotasOk = (x: unknown) =>
-    Number.isInteger(x) && (x as number) >= 1 && (x as number) <= CUOTAS_MAX;
-  // ES: Huella de importación: texto no vacío con tope. / EN: Import fingerprint: non-empty capped text.
-  const huellaOk = (x: unknown) =>
-    typeof x === "string" && x.length > 0 && x.length <= IMPORT_ID_MAX;
   // ES: Una colección obligatoria: array cuyos elementos (objetos) pasan `ok`.
   // EN: A mandatory collection: an array whose items (objects) all pass `ok`.
   const lista = (x: unknown, ok: (e: Record<string, unknown>) => boolean) =>
     Array.isArray(x) && x.every((e: unknown) => esObjeto(e) && ok(e));
 
-  // ES: Recurrentes: id, concepto, importe finito, signo y categoría, `desde`
-  //     válido, `hasta` null o mes válido, y sus opcionales bien formados.
-  // EN: Recurring entries: id, concept, finite amount, sign and category, valid
-  //     `desde`, `hasta` null or a valid month, and well-formed optionals.
-  const rec = lista(
-    o.recurrentes,
-    (r) =>
-      str(r.id) &&
-      str(r.concepto) &&
-      num(r.importe) &&
-      signo(r.signo) &&
-      str(r.categoria) &&
-      mesOk(r.desde) &&
-      (r.hasta === null || mesOk(r.hasta)) &&
-      opt(r.diaPago, diaOk) &&
-      opt(r.comercio, str) &&
-      opt(r.tags, tagsOk) &&
-      opt(r.cuenta, str) &&
-      opt(r.frecuencia, (x) => FRECUENCIAS.includes(x as Frecuencia)) &&
-      opt(r.fechaInicio, fechaOk) &&
-      opt(r.fechaFin, fechaOk) &&
-      opt(r.cuotas, cuotasOk)
-  );
-  // ES: Las subdivisiones (gasto dividido) son opcionales, pero si vienen deben
-  //     ser { categoria:string, importe:number finito } o el reparto daría NaN.
-  // EN: Subdivisions (split expense) are optional, but if present they must be
-  //     { categoria:string, importe:number finite } or the split would be NaN.
-  const subOk = (x: unknown) =>
-    Array.isArray(x) && x.every((e: unknown) => esObjeto(e) && str(e.categoria) && num(e.importe));
-  // ES: Puntuales: id, concepto, importe, signo, categoría, fecha válida y sus
-  //     opcionales (comercio, tags, recibo, cuenta, subdivisiones).
-  // EN: One-off entries: id, concept, amount, sign, category, valid date and
-  //     their optionals (comercio, tags, recibo, cuenta, subdivisiones).
-  const pun = lista(
-    o.puntuales,
-    (p) =>
-      str(p.id) &&
-      str(p.concepto) &&
-      num(p.importe) &&
-      signo(p.signo) &&
-      str(p.categoria) &&
-      fechaOk(p.fecha) &&
-      opt(p.comercio, str) &&
-      opt(p.tags, tagsOk) &&
-      opt(p.recibo, str) &&
-      opt(p.reciboId, esIdReciboValido) &&
-      opt(p.cuenta, str) &&
-      opt(p.subdivisiones, subOk) &&
-      opt(p.origen, (x) => x === "manual" || x === "importado") &&
-      opt(p.importId, huellaOk)
-  );
+  // ES: Recurrentes y puntuales con su validador (también lo usa el store).
+  // EN: Recurring and one-off entries with their validator (the store uses it too).
+  const rec = lista(o.recurrentes, esRecurrenteValido);
+  const pun = lista(o.puntuales, esPuntualValido);
   // ES: Deudas: id, concepto, tipo conocido, importes finitos, mes de inicio
   //     válido y día de pago opcional.
   // EN: Debts: id, concept, known type, finite amounts, valid start month and
