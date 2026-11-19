@@ -15,6 +15,15 @@
  * ===========================================================================*/
 import type { Deuda, EstadoDeuda } from "../types";
 import { diffMeses } from "./format";
+import { redondear2 } from "./importe";
+
+// ES: Euros -> céntimos enteros (con el redondeo comercial de redondear2).
+//     Todo el cálculo va en céntimos: en coma flotante, 2,10 - 3 × 0,70 deja
+//     un residuo que daba una cuota de más de 0,00 € y su aviso.
+// EN: Euros -> whole cents (with redondear2's commercial rounding). All the
+//     maths is in cents: in floating point, 2.10 - 3 × 0.70 leaves a residue
+//     that produced an extra 0.00 € installment and its reminder.
+const aCentimos = (euros: number) => Math.round(redondear2(euros) * 100);
 
 // ── 1. Estado de la deuda en un mes / Debt state for a month ──────────────────
 // ES: Calcula el estado de una deuda al final del mes indicado ("YYYY-MM").
@@ -28,21 +37,20 @@ export function estadoDeuda(deuda: Deuda, mes: string): EstadoDeuda {
 
   // ES: Pagado = lo que ya llevaba + las cuotas aplicadas, tope en el total.
   // EN: Paid = what it already carried + the applied installments, capped at total.
-  const pagadoBruto = deuda.pagadoInicial + deuda.cuotaMensual * transcurridos;
-  const pagado = Math.min(deuda.total, pagadoBruto);
-  const pendiente = Math.max(0, deuda.total - pagado);
-  const terminada = pendiente <= 0;
+  const total = aCentimos(deuda.total);
+  const cuota = aCentimos(deuda.cuotaMensual);
+  const inicial = aCentimos(deuda.pagadoInicial);
+  const pagadoC = Math.min(total, inicial + cuota * transcurridos);
+  const pendienteC = Math.max(0, total - pagadoC);
+  const terminada = pendienteC <= 0;
 
   // ES: Pendiente AL INICIO de este mes (antes de aplicar la cuota de este mes),
   //     para saber si este mes todavía toca pagar y cuánto (última cuota parcial).
   // EN: Outstanding AT THE START of this month (before applying this month's
   //     installment), to know whether this month still owes payment and how much
   //     (handles the last, partial installment).
-  const pagadoMesAnterior = Math.min(
-    deuda.total,
-    deuda.pagadoInicial + deuda.cuotaMensual * Math.max(0, transcurridos - 1)
-  );
-  const pendienteInicioMes = Math.max(0, deuda.total - pagadoMesAnterior);
+  const pagadoMesAnterior = Math.min(total, inicial + cuota * Math.max(0, transcurridos - 1));
+  const pendienteInicioMes = Math.max(0, total - pagadoMesAnterior);
   // ES: ¿El mes consultado es igual o posterior al mes de inicio de la deuda?
   // EN: Is the queried month at or after the debt's start month?
   const dentroDeRango = diffMeses(deuda.inicioMes, mes) >= 0;
@@ -50,19 +58,28 @@ export function estadoDeuda(deuda: Deuda, mes: string): EstadoDeuda {
   //     menor (el último pago parcial).
   // EN: Installment counted this month: the regular installment, or just the
   //     remaining balance if it is smaller (the final partial payment).
-  const cuotaDelMes =
-    dentroDeRango && pendienteInicioMes > 0 ? Math.min(deuda.cuotaMensual, pendienteInicioMes) : 0;
+  const cuotaDelMesC =
+    dentroDeRango && pendienteInicioMes > 0 ? Math.min(cuota, pendienteInicioMes) : 0;
 
   // ES: Meses que faltan para saldarla por completo (redondeo arriba; 0 sin cuota).
   // EN: Months left to fully settle the debt (rounded up; 0 if no installment).
-  const mesesRestantes = deuda.cuotaMensual > 0 ? Math.ceil(pendiente / deuda.cuotaMensual) : 0;
+  const mesesRestantes = cuota > 0 ? Math.ceil(pendienteC / cuota) : 0;
 
   // ES: Progreso 0-100 (% pagado), acotado; 100 si el total es 0 (nada que deber).
   // EN: Progress 0-100 (% paid), clamped; 100 if the total is 0 (nothing to owe).
   const progreso =
-    deuda.total > 0 ? Math.min(100, Math.max(0, Math.round((pagado / deuda.total) * 100))) : 100;
+    total > 0 ? Math.min(100, Math.max(0, Math.round((pagadoC / total) * 100))) : 100;
 
-  return { deuda, pagado, pendiente, cuotaDelMes, terminada, mesesRestantes, progreso };
+  // ES: De vuelta a euros. / EN: Back to euros.
+  return {
+    deuda,
+    pagado: pagadoC / 100,
+    pendiente: pendienteC / 100,
+    cuotaDelMes: cuotaDelMesC / 100,
+    terminada,
+    mesesRestantes,
+    progreso,
+  };
 }
 
 // ── 2. Comprobar si se salda este mes / Settled-this-month check ──────────────

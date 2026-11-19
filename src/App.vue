@@ -322,7 +322,7 @@ function revisarPagosProximos() {
         t("notifPagoCuerpo")
           .replace("@c", d.concepto)
           .replace("@i", euro(cuota))
-          .replace("@d", String(d.diaPago))
+          .replace("@d", String(Number(vence.slice(8, 10))))
       );
     }
   }

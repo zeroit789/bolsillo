@@ -101,3 +101,30 @@ describe("seSaldaEnMes", () => {
     expect(seSaldaEnMes(deuda({ pagadoInicial: 1000 }), "2026-01")).toBe(false);
   });
 });
+
+describe("céntimos enteros / whole cents", () => {
+  // ES: 2,10 € en 3 cuotas de 0,70: en coma flotante quedaba un residuo que
+  //     daba una 4.ª cuota de 0,00 € (y su aviso).
+  // EN: 2.10 € in 3 installments of 0.70: in floating point a residue was left
+  //     that gave a 4th installment of 0.00 € (and its reminder).
+  const d = deuda({ total: 2.1, cuotaMensual: 0.7, pagadoInicial: 0, inicioMes: "2026-01" });
+
+  it("salda en la 3.ª cuota y no deja residuo / settles on the 3rd installment with no residue", () => {
+    expect(["2026-01", "2026-02", "2026-03"].map((m) => estadoDeuda(d, m).cuotaDelMes)).toEqual([
+      0.7, 0.7, 0.7,
+    ]);
+    const marzo = estadoDeuda(d, "2026-03");
+    expect(marzo.terminada).toBe(true);
+    expect(marzo.pendiente).toBe(0);
+    expect(marzo.pagado).toBe(2.1);
+    expect(seSaldaEnMes(d, "2026-03")).toBe(true);
+    const abril = estadoDeuda(d, "2026-04");
+    expect(abril.cuotaDelMes).toBe(0);
+    expect(seSaldaEnMes(d, "2026-04")).toBe(false);
+  });
+
+  it("los meses restantes no cuentan un residuo / remaining months do not count a residue", () => {
+    expect(estadoDeuda(d, "2026-01").mesesRestantes).toBe(2);
+    expect(estadoDeuda(deuda({ total: 0.3, cuotaMensual: 0.1, pagadoInicial: 0 }), "2025-12").mesesRestantes).toBe(3);
+  }); // prettier-ignore
+});
