@@ -75,7 +75,8 @@ export interface Puntual {
   fecha: string; // ES: "YYYY-MM-DD" / EN: "YYYY-MM-DD"
   comercio?: string; // ES: dónde se hizo (Mercadona, Amazon…); opcional / EN: where it happened (Mercadona, Amazon…); optional
   tags?: string[]; // ES: etiquetas transversales (#vacaciones…); opcional / EN: cross-cutting tags (#holidays…); optional
-  recibo?: string; // ES: imagen del recibo en base64 (data URL); opcional / EN: receipt image as base64 (data URL); optional
+  recibo?: string; // ES: imagen del recibo en base64 (data URL), solo en memoria y en copias; opcional / EN: receipt image as base64 (data URL), only in memory and backups; optional
+  reciboId?: string; // ES: id del recibo guardado aparte, cifrado (v3); opcional / EN: id of the receipt stored separately, encrypted (v3); optional
   cuenta?: string; // ES: id de la cuenta a la que pertenece; opcional / EN: id of the owning account; optional
   subdivisiones?: Subdivision[]; // ES: gasto dividido en varias categorías; opcional / EN: expense split into several categories; optional
 }
@@ -212,11 +213,42 @@ export interface Plan {
 //     `version` (todo lo anterior a la 1.2.0) son la versión 1; utils/migraciones.ts
 //     los lleva paso a paso hasta esta versión antes de validarlos. Súbela (y
 //     añade su migración) cada vez que cambie la forma de DatosBolsillo.
+//     v3 (1.2.0): `reciboId` (el recibo va cifrado en su propio fichero) y
+//     calendario estricto en meses y fechas.
 // EN: CURRENT data schema version. Data saved without a `version` field
 //     (everything before 1.2.0) is version 1; utils/migraciones.ts upgrades it
 //     step by step to this version before validating it. Bump it (and add its
 //     migration) every time the shape of DatosBolsillo changes.
-export const VERSION_DATOS = 2;
+//     v3 (1.2.0): `reciboId` (the receipt is encrypted in its own file) and a
+//     strict calendar for months and dates.
+export const VERSION_DATOS = 3;
+
+// ES: ¿"AAAA-MM" con un mes real (01-12)? Exacto: nada de texto detrás.
+// EN: "YYYY-MM" with a real month (01-12)? Exact: no trailing text.
+export function esMesValido(x: unknown): x is string {
+  return typeof x === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(x);
+}
+
+// ES: Días que tiene un mes (mes 1-12), bisiestos incluidos.
+// EN: Days in a month (month 1-12), leap years included.
+export function diasDelMes(año: number, mes: number): number {
+  return new Date(Date.UTC(año, mes, 0)).getUTCDate();
+}
+
+// ES: ¿"AAAA-MM-DD" con un día que existe en ese mes? Exacto.
+// EN: "YYYY-MM-DD" with a day that exists in that month? Exact.
+export function esFechaValida(x: unknown): x is string {
+  if (typeof x !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(x)) return false;
+  if (!esMesValido(x.slice(0, 7))) return false;
+  const dia = Number(x.slice(8, 10));
+  return dia >= 1 && dia <= diasDelMes(Number(x.slice(0, 4)), Number(x.slice(5, 7)));
+}
+
+// ES: Id de recibo seguro (también es nombre de fichero en Rust).
+// EN: Safe receipt id (it is also a file name in Rust).
+export function esIdReciboValido(x: unknown): x is string {
+  return typeof x === "string" && /^[A-Za-z0-9-]{1,64}$/.test(x);
+}
 
 // ES: Estructura completa que se persiste (y se cifra) en disco. Es el objeto
 //     raíz que se carga al arrancar y se guarda en cada cambio.
@@ -258,10 +290,10 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
   const str = (x: unknown) => typeof x === "string";
   const signo = (x: unknown) => x === "ingreso" || x === "gasto";
-  // ES: Formato de mes/fecha real (blinda los cálculos de fechas aguas abajo).
-  // EN: Real month/date format checks (shield the downstream date math).
-  const mesOk = (x: unknown) => typeof x === "string" && /^\d{4}-\d{2}$/.test(x);
-  const fechaOk = (x: unknown) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}/.test(x);
+  // ES: Mes y fecha de calendario real, exactos (blinda los cálculos de fechas).
+  // EN: Real calendar month and date, exact (shields the date math).
+  const mesOk = esMesValido;
+  const fechaOk = esFechaValida;
   // ES: Campos opcionales: o no están (undefined) o tienen el tipo correcto.
   // EN: Optional fields: either absent (undefined) or of the right type.
   const opt = (x: unknown, ok: (v: unknown) => boolean) => x === undefined || ok(x);
@@ -314,6 +346,7 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
       opt(p.comercio, str) &&
       opt(p.tags, tagsOk) &&
       opt(p.recibo, str) &&
+      opt(p.reciboId, esIdReciboValido) &&
       opt(p.cuenta, str) &&
       opt(p.subdivisiones, subOk)
   );
