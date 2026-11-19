@@ -36,12 +36,8 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
-import {
-  MENSAJE_IMPORTE_MAX,
-  importeDentroDeRango,
-  importeDesdeTexto,
-  redondear2,
-} from "../utils/importe";
+import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
+import { totalPartes, validarPartes } from "../utils/partes";
 import { crearT } from "../i18n";
 import type { Signo, Subdivision } from "../types";
 
@@ -107,9 +103,18 @@ const t = crearT({
     en: "The amount must be greater than 0",
   },
   errFecha: { es: "Pon una fecha válida", en: "Enter a valid date" },
-  // ES: Importe por encima del tope (texto común de utils/importe.ts).
-  // EN: Amount above the cap (shared text from utils/importe.ts).
+  // ES: Importe por encima del tope o que no es un número (textos comunes de
+  //     utils/importe.ts).
+  // EN: Amount above the cap or not a number (shared texts from
+  //     utils/importe.ts).
   errImporteMax: MENSAJE_IMPORTE_MAX,
+  errImporteInvalido: MENSAJE_IMPORTE_INVALIDO,
+  // ES: Una parte del gasto dividido con importe negativo.
+  // EN: A split-expense part with a negative amount.
+  errParteNegativa: {
+    es: "Las partes no pueden tener importe negativo",
+    en: "Parts cannot have a negative amount",
+  },
 });
 
 // ── 3. Props y emits (contrato del componente) / Props & emits (component contract) ─
@@ -307,14 +312,6 @@ const cajaModal = ref<HTMLElement | null>(null);
 const idTitulo = useId();
 useFocoAtrapado(cajaModal, { alEscape: () => emit("cerrar") });
 
-// ES: Convierte un texto con coma/punto decimal a número redondeado a céntimos.
-//     Devuelve 0 si no es un número válido.
-// EN: Turns a text with comma/dot decimal into a number rounded to cents.
-//     Returns 0 if it is not a valid number.
-function aImporte(txt: string): number {
-  return importeDesdeTexto(String(txt));
-}
-
 // ES: Añade una parte vacía al gasto dividido.
 // EN: Adds an empty part to the split expense.
 function anadirParte() {
@@ -327,11 +324,11 @@ function quitarParte(i: number) {
   if (partes.length > 2) partes.splice(i, 1);
 }
 
-// ES: Suma de las partes del gasto dividido (number, céntimos).
-// EN: Sum of the split-expense parts (number, in cents).
-const sumaPartes = computed(() =>
-  redondear2(partes.reduce((acc, p) => acc + aImporte(p.importe), 0))
-);
+// ES: Suma de las partes del gasto dividido (number, céntimos). Solo cuenta las
+//     partes que se guardarían (utils/partes.ts), igual que al guardar.
+// EN: Sum of the split-expense parts (number, in cents). It only counts the
+//     parts that would be saved (utils/partes.ts), the same as on save.
+const sumaPartes = computed(() => totalPartes(partes));
 
 // ── 8. Gestión de imagen del recibo / Receipt image handling ──────────────────
 // ES: Lee el fichero de imagen elegido, lo REDIMENSIONA con canvas (máx 800px en
@@ -400,45 +397,46 @@ function guardar() {
   // EN: Is split mode active? It only makes sense for one-off expenses.
   const usandoDividido = esGastoPuntual.value && dividido.value;
 
-  // ES: Cálculo del importe:
-  //      - dividido -> es la SUMA de las partes (se ignora el input normal).
-  //      - normal   -> el input de importe (acepta coma decimal).
-  // EN: Amount calculation:
-  //      - split  -> it is the SUM of the parts (the normal input is ignored).
-  //      - normal -> the amount input (accepts a decimal comma).
-  const importe = usandoDividido ? sumaPartes.value : importeDesdeTexto(String(form.importe));
-
-  // ES: Validación del gasto dividido: al menos 2 partes con importe > 0.
-  // EN: Split-expense validation: at least 2 parts with amount > 0.
+  // ES: Cálculo del importe y de las subdivisiones:
+  //      - dividido -> validarPartes (utils/partes.ts) da las partes que se
+  //        guardan y su total, que ES el importe (se ignora el input normal).
+  //        Rechaza partes negativas, inválidas o por encima del tope, y pide
+  //        al menos 2 partes mayores que 0.
+  //      - normal   -> analizarImporte del input (acepta coma decimal); vacío,
+  //        inválido o fuera del tope se rechazan antes de redondear.
+  // EN: Amount and subdivisions calculation:
+  //      - split  -> validarPartes (utils/partes.ts) yields the parts that are
+  //        saved and their total, which IS the amount (the normal input is
+  //        ignored). It rejects negative, invalid or above-cap parts and asks
+  //        for at least 2 parts above 0.
+  //      - normal -> analizarImporte of the input (accepts a decimal comma);
+  //        empty, invalid or above-cap values are rejected before rounding.
+  let importe: number;
+  let subdivisiones: Subdivision[] | undefined;
   if (usandoDividido) {
-    const validas = partes.filter((p) => aImporte(p.importe) > 0);
-    if (validas.length < 2) return (error.value = t("errPartes"));
+    const r = validarPartes(partes);
+    if (!r.ok) {
+      const claves = {
+        pocas: "errPartes",
+        negativa: "errParteNegativa",
+        invalida: "errImporteInvalido",
+        excede: "errImporteMax",
+      } as const;
+      return (error.value = t(claves[r.error]));
+    }
+    importe = r.total;
+    subdivisiones = r.subdivisiones;
+  } else {
+    const a = analizarImporte(form.importe);
+    if (a.tipo === "invalido") return (error.value = t("errImporteInvalido"));
+    if (a.tipo === "excede") return (error.value = t("errImporteMax"));
+    importe = a.valor;
   }
 
   // ES: El importe debe ser positivo. / EN: The amount must be a positive number.
-  if (!importe || importe <= 0) return (error.value = t("errImporte"));
-  // ES: Ni el importe (o la suma de las partes) ni ninguna parte pueden pasar
-  //     del tope; si no, los totales dejarían de redondearse bien.
-  // EN: Neither the amount (or the sum of the parts) nor any part may exceed
-  //     the cap; otherwise totals would stop rounding correctly.
-  if (
-    !importeDentroDeRango(importe) ||
-    (usandoDividido && partes.some((p) => !importeDentroDeRango(aImporte(p.importe))))
-  ) {
-    return (error.value = t("errImporteMax"));
-  }
+  if (importe <= 0) return (error.value = t("errImporte"));
   // ES: Los puntuales exigen fecha. / EN: One-off transactions require a date.
   if (!esRecurrente.value && !form.fecha) return (error.value = t("errFecha"));
-
-  // ES: Subdivisiones: solo si está activo el modo dividido (gasto puntual).
-  //     Normaliza cada parte a number y descarta las que queden a 0.
-  // EN: Subdivisions: only when split mode is active (one-off expense).
-  //     Normalize each part to a number and drop the ones left at 0.
-  const subdivisiones = usandoDividido
-    ? partes
-        .map((p) => ({ categoria: p.categoria, importe: aImporte(p.importe) }))
-        .filter((p) => p.importe > 0)
-    : undefined;
 
   // ES: FIX — Día de pago: solo para fijos y ACOTADO a 1-31. Truncamos a entero y
   //     rechazamos valores fuera de rango (a mano se podría teclear 99);
