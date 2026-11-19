@@ -6,6 +6,8 @@
 //       - el almacén cifrado en fichero (boveda.rs): estado, abrir, guardar,
 //         crear, migrar desde localStorage, bloqueo, recuperación y copias;
 //       - las copias cifradas exportadas (diálogo nativo abierto desde Rust);
+//       - elegir_extracto: diálogo para abrir un extracto bancario (CSV/XLSX)
+//         cuyos bytes lee el frontend;
 //       - guardar_archivo: Rust abre el diálogo de guardar y escribe los bytes
 //         (el frontend ya no elige rutas).
 //     Los datos viven en el directorio de datos de la app
@@ -18,6 +20,8 @@
 //       - the encrypted file store (boveda.rs): state, open, save, create,
 //         migrate from localStorage, lock, recovery and backups;
 //       - exported encrypted backups (native dialog opened from Rust);
+//       - elegir_extracto: dialog to open a bank statement (CSV/XLSX)
+//         whose bytes the frontend reads;
 //       - guardar_archivo: Rust opens the save dialog and writes the bytes
 //         (the frontend no longer picks paths).
 //     The data lives in the app data directory (`app.path().app_data_dir()`:
@@ -29,7 +33,7 @@
 //   1. Módulos e importaciones / Modules & imports
 //   2. Estado compartido / Shared state
 //   3. Comandos del almacén / Store commands
-//   4. Copias cifradas exportadas / Exported encrypted backups
+//   4. Copias cifradas exportadas y extractos / Exported encrypted backups & statements
 //   5. guardar_archivo — diálogo y escritura / dialog & write
 //   6. run() — arranque de la app Tauri / Tauri app bootstrap
 // =============================================================================
@@ -281,7 +285,7 @@ struct Restaurada {
     estado: boveda::Estado,
 }
 
-// ── 4. Copias cifradas exportadas / Exported encrypted backups ────────────────
+// ── 4. Copias cifradas exportadas y extractos / Exported encrypted backups & statements ─
 // ES: Escribe una exportación en la ruta elegida sin poder caer nunca dentro
 //     del almacén: se comprueba la ruta pedida y, ya creado el temporal, su
 //     ruta real (por si una unión de directorio cambió entre medias), justo
@@ -405,6 +409,47 @@ async fn elegir_copia(app: AppHandle, s: State<'_, EstadoBoveda>) -> Res<Option<
 #[tauri::command]
 async fn descifrar_copia(s: State<'_, EstadoBoveda>, contrasena: String) -> Res<String> {
     con(&s, move |b| b.descifrar_copia(&contrasena)).await
+}
+
+// ES: Tope de un extracto bancario (igual que MAX_BYTES de xlsx.ts): se lee
+//     como mucho esto + 1 byte del fichero ya abierto.
+// EN: Cap for a bank statement (same as MAX_BYTES in xlsx.ts): at most this
+//     + 1 byte is read from the already open file.
+const MAX_EXTRACTO: u64 = 20 * 1024 * 1024;
+
+// ES: Abre el diálogo para elegir un extracto (CSV, TXT o XLSX) y devuelve
+//     sus bytes en crudo (ArrayBuffer en JS, sin pasar por JSON). Cancelar
+//     devuelve 0 bytes. La ruta nunca sale de Rust y el fichero no se guarda:
+//     el frontend lo lee, enseña la vista previa y crea los apuntes.
+// EN: Opens the dialog to pick a statement (CSV, TXT or XLSX) and returns its
+//     raw bytes (an ArrayBuffer in JS, without going through JSON).
+//     Cancelling returns 0 bytes. The path never leaves Rust and the file is
+//     not stored: the frontend reads it, shows the preview and creates the
+//     entries.
+#[tauri::command]
+async fn elegir_extracto(app: AppHandle) -> Res<tauri::ipc::Response> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || -> Res<Vec<u8>> {
+        let ruta = app
+            .dialog()
+            .file()
+            .add_filter("Extracto", &["csv", "txt", "tsv", "xlsx"])
+            .blocking_pick_file();
+        let Some(ruta) = ruta else {
+            return Ok(Vec::new());
+        };
+        let ruta = ruta.into_path().map_err(|e| e.to_string())?;
+        let mut b = Vec::new();
+        std::fs::File::open(&ruta)
+            .and_then(|f| f.take(MAX_EXTRACTO + 1).read_to_end(&mut b))
+            .map_err(|e| format!("io:{e}"))?;
+        if b.len() as u64 > MAX_EXTRACTO {
+            return Err("extracto-grande".into());
+        }
+        Ok(b)
+    })
+    .await
+    .map_err(|_| "interno".to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 // ── 5. guardar_archivo — diálogo y escritura / dialog & write ─────────────────
@@ -534,6 +579,7 @@ pub fn run() {
             exportar_copia_cifrada,
             elegir_copia,
             descifrar_copia,
+            elegir_extracto,
             guardar_archivo
         ])
         // ES: Ejecuta la app con el contexto generado en build.

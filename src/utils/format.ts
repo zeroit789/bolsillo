@@ -106,6 +106,14 @@ export function mesActual(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// ES: Fecha de hoy en "YYYY-MM-DD" (hora local), de un solo instante.
+// EN: Today's date as "YYYY-MM-DD" (local time), from a single instant.
+export function hoyISO(): string {
+  const d = new Date();
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
+
 // ES: Nº de meses entre dos "YYYY-MM" (b - a). Ej: ("2026-01","2026-04") = 3.
 // EN: Number of months between two "YYYY-MM" (b - a). Ex: ("2026-01","2026-04") = 3.
 export function diffMeses(a: string, b: string): number {
