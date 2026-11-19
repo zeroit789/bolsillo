@@ -25,7 +25,7 @@ import { ref, computed, onMounted, onUnmounted, useId } from "vue";
 import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
-import { importeDesdeTexto } from "../utils/importe";
+import { importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
 import { categoriasPorGrupo } from "../data/categorias";
 import type { LineaMes, Signo, Plantilla, Subdivision } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
@@ -402,9 +402,11 @@ function cerrarFormPlantilla(): void {
 function guardarPlantilla(): void {
   const concepto = formConcepto.value.trim();
   const importe = importeDesdeTexto(formImporte.value);
-  // ES: Validación mínima: concepto, importe válido (>0) y categoría elegida.
-  // EN: Minimal validation: concept, valid amount (>0) and a chosen category.
-  if (!concepto || !Number.isFinite(importe) || importe <= 0 || !formCategoria.value) return;
+  // ES: Validación mínima: concepto, importe válido (>0 y dentro del tope) y
+  //     categoría elegida. Como antes, si algo falla no se guarda.
+  // EN: Minimal validation: concept, valid amount (>0 and within the cap) and
+  //     a chosen category. As before, if anything fails nothing is saved.
+  if (!concepto || importe <= 0 || !importeDentroDeRango(importe) || !formCategoria.value) return;
   f.addPlantilla({
     concepto,
     importe,

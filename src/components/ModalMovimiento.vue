@@ -36,7 +36,12 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
-import { importeDesdeTexto, redondear2 } from "../utils/importe";
+import {
+  MENSAJE_IMPORTE_MAX,
+  importeDentroDeRango,
+  importeDesdeTexto,
+  redondear2,
+} from "../utils/importe";
 import { crearT } from "../i18n";
 import type { Signo, Subdivision } from "../types";
 
@@ -102,6 +107,9 @@ const t = crearT({
     en: "The amount must be greater than 0",
   },
   errFecha: { es: "Pon una fecha válida", en: "Enter a valid date" },
+  // ES: Importe por encima del tope (texto común de utils/importe.ts).
+  // EN: Amount above the cap (shared text from utils/importe.ts).
+  errImporteMax: MENSAJE_IMPORTE_MAX,
 });
 
 // ── 3. Props y emits (contrato del componente) / Props & emits (component contract) ─
@@ -409,6 +417,16 @@ function guardar() {
 
   // ES: El importe debe ser positivo. / EN: The amount must be a positive number.
   if (!importe || importe <= 0) return (error.value = t("errImporte"));
+  // ES: Ni el importe (o la suma de las partes) ni ninguna parte pueden pasar
+  //     del tope; si no, los totales dejarían de redondearse bien.
+  // EN: Neither the amount (or the sum of the parts) nor any part may exceed
+  //     the cap; otherwise totals would stop rounding correctly.
+  if (
+    !importeDentroDeRango(importe) ||
+    (usandoDividido && partes.some((p) => !importeDentroDeRango(aImporte(p.importe))))
+  ) {
+    return (error.value = t("errImporteMax"));
+  }
   // ES: Los puntuales exigen fecha. / EN: One-off transactions require a date.
   if (!esRecurrente.value && !form.fecha) return (error.value = t("errFecha"));
 

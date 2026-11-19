@@ -24,7 +24,7 @@ import { ref, reactive, computed, useId } from "vue";
 import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
-import { importeDesdeTexto } from "../utils/importe";
+import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
 import type { Cuenta } from "../types";
 import { crearT } from "../i18n";
 
@@ -68,6 +68,9 @@ const t = crearT({
   guardar: { es: "Guardar", en: "Save" },
   // ES: Mensajes de validación y confirmación / EN: Validation & confirmation messages
   errNombre: { es: "El nombre no puede estar vacío.", en: "The name cannot be empty." },
+  // ES: Saldo inicial por encima del tope (texto común de utils/importe.ts).
+  // EN: Initial balance above the cap (shared text from utils/importe.ts).
+  errImporteMax: MENSAJE_IMPORTE_MAX,
   confirmEliminar: { es: "¿Eliminar la cuenta", en: "Delete account" },
 });
 
@@ -145,6 +148,13 @@ function guardar() {
   // EN: Validation: the name cannot be empty.
   if (!form.nombre.trim()) {
     error.value = t("errNombre");
+    return;
+  }
+
+  // ES: El saldo inicial puede ser negativo o 0, pero no pasar del tope.
+  // EN: The initial balance may be negative or 0, but not exceed the cap.
+  if (!importeDentroDeRango(saldoInicial)) {
+    error.value = t("errImporteMax");
     return;
   }
 

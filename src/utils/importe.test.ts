@@ -13,7 +13,13 @@
  *     Math.round(x * 100) / 100.
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
-import { importeDesdeTexto, redondear2 } from "./importe";
+import {
+  IMPORTE_MAX,
+  MENSAJE_IMPORTE_MAX,
+  importeDentroDeRango,
+  importeDesdeTexto,
+  redondear2,
+} from "./importe";
 
 // ES: Fórmula que había repartida por el código antes de este módulo.
 // EN: Formula that was scattered across the code before this module.
@@ -88,5 +94,107 @@ describe("importeDesdeTexto", () => {
     expect(importeDesdeTexto("abc")).toBe(0);
     expect(importeDesdeTexto("")).toBe(0);
     expect(importeDesdeTexto("1e999")).toBe(0);
+  });
+});
+
+describe("redondear2 con importes enormes / redondear2 with huge amounts", () => {
+  it("nunca devuelve un número no finito aunque el ×100 desborde / never returns a non-finite number even if ×100 overflows", () => {
+    // ES: 1e307 es finito, pero 1e307 * 100 es Infinity.
+    // EN: 1e307 is finite, but 1e307 * 100 is Infinity.
+    for (const n of [1e307, -1e307, Number.MAX_VALUE, -Number.MAX_VALUE]) {
+      expect(Number.isFinite(redondear2(n))).toBe(true);
+      expect(redondear2(n)).toBe(0);
+    }
+    expect(importeDesdeTexto("1e307")).toBe(0);
+  });
+});
+
+describe("IMPORTE_MAX e importeDentroDeRango / IMPORTE_MAX and importeDentroDeRango", () => {
+  it("el tope es 999.999.999,99 / the cap is 999,999,999.99", () => {
+    expect(IMPORTE_MAX).toBe(999_999_999.99);
+  });
+
+  it("acepta de -IMPORTE_MAX a IMPORTE_MAX, cero incluido / accepts -IMPORTE_MAX to IMPORTE_MAX, zero included", () => {
+    expect(importeDentroDeRango(0)).toBe(true);
+    expect(importeDentroDeRango(12.5)).toBe(true);
+    expect(importeDentroDeRango(IMPORTE_MAX)).toBe(true);
+    expect(importeDentroDeRango(-IMPORTE_MAX)).toBe(true);
+  });
+
+  it("rechaza lo que pasa del tope y lo no finito / rejects what exceeds the cap and non-finite values", () => {
+    expect(importeDentroDeRango(1_000_000_000)).toBe(false);
+    expect(importeDentroDeRango(-1_000_000_000)).toBe(false);
+    expect(importeDentroDeRango(1e12)).toBe(false);
+    expect(importeDentroDeRango(Number.NaN)).toBe(false);
+    expect(importeDentroDeRango(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(importeDentroDeRango(Number.NEGATIVE_INFINITY)).toBe(false);
+  });
+
+  it("se valida el importe ya redondeado / the already rounded amount is validated", () => {
+    // ES: 999.999.999,995 redondea a 1.000.000.000, que pasa del tope.
+    // EN: 999,999,999.995 rounds to 1,000,000,000, which exceeds the cap.
+    expect(importeDentroDeRango(importeDesdeTexto("999999999,995"))).toBe(false);
+    expect(importeDentroDeRango(importeDesdeTexto("999999999,994"))).toBe(true);
+  });
+
+  it("el mensaje de error muestra el tope en los dos idiomas / the error message shows the cap in both languages", () => {
+    expect(MENSAJE_IMPORTE_MAX.es).toContain("999.999.999,99");
+    expect(MENSAJE_IMPORTE_MAX.en).toContain("999,999,999.99");
+  });
+});
+
+describe("redondear2 cerca del tope y casos límite de toPrecision(15) / redondear2 near the cap and toPrecision(15) edge cases", () => {
+  it("los céntimos exactos junto al tope no cambian / exact cents near the cap stay the same", () => {
+    // ES: Los últimos 2.000 € antes del tope, céntimo a céntimo, en ambos signos.
+    // EN: The last 2,000 € below the cap, cent by cent, for both signs.
+    const tope = Math.round(IMPORTE_MAX * 100);
+    for (let c = tope - 200_000; c <= tope; c++) {
+      const x = c / 100;
+      if (redondear2(x) !== x) throw new Error(`${x} -> ${redondear2(x)}`);
+      if (redondear2(-x) !== -x) throw new Error(`${-x} -> ${redondear2(-x)}`);
+    }
+  });
+
+  it("junto al tope el medio céntimo sube y el resto baja / near the cap half a cent goes up and the rest goes down", () => {
+    expect(redondear2(999_999_999.985)).toBe(999_999_999.99);
+    expect(redondear2(999_999_999.984)).toBe(999_999_999.98);
+    expect(redondear2(-999_999_999.985)).toBe(-999_999_999.99);
+    expect(redondear2(-999_999_999.984)).toBe(-999_999_999.98);
+    expect(redondear2(123_456_789.125)).toBe(123_456_789.13);
+    expect(redondear2(123_456_789.124)).toBe(123_456_789.12);
+  });
+
+  it("un valor a menos de 15 cifras del empate cuenta como empate (decisión aceptada) / a value within 15 digits of a tie counts as a tie (accepted decision)", () => {
+    // ES: 1.004999999999999 (16 cifras) no se distingue del ruido binario de
+    //     1,005 con 15 cifras: se trata como 1,005 y sube. Es el precio de
+    //     arreglar los empates calculados (ver la cabecera de importe.ts).
+    // EN: 1.004999999999999 (16 digits) can't be told apart from the binary
+    //     noise of 1.005 with 15 digits: it is treated as 1.005 and goes up.
+    //     That is the price of fixing computed ties (see importe.ts header).
+    expect(redondear2(1.004999999999999)).toBe(1.01);
+    // ES: Con 15 cifras o menos sí se distingue y baja.
+    // EN: With 15 digits or fewer it is told apart and goes down.
+    expect(redondear2(1.00499999999999)).toBe(1);
+    expect(redondear2(1.0049)).toBe(1);
+  });
+
+  it("los empates que salen de una cuenta suben / ties produced by arithmetic go up", () => {
+    // ES: 3,35 × 1,5 = 5,025 exacto, pero en binario sale 5,0249999…; con
+    //     String(x) bajaría a 5,02. toPrecision(15) lo deja en 5,03.
+    // EN: 3.35 × 1.5 = 5.025 exactly, but in binary it is 5.0249999…; with
+    //     String(x) it would go down to 5.02. toPrecision(15) gives 5.03.
+    expect(redondear2(3.35 * 1.5)).toBe(5.03);
+    // ES: Barrido: productos importe × porcentaje cuyo valor exacto es un empate.
+    // EN: Sweep: amount × percentage products whose exact value is a tie.
+    for (let a = 1; a < 20_000; a += 7) {
+      for (let p = 1; p < 400; p += 3) {
+        const exacto = a * p; // ES: en diezmilésimas / EN: in ten-thousandths
+        if (exacto % 100 !== 50) continue;
+        const esperado = (Math.floor(exacto / 100) + 1) / 100;
+        const obtenido = redondear2((a / 100) * (p / 100));
+        if (obtenido !== esperado)
+          throw new Error(`${a}/100 × ${p}/100: ${obtenido} != ${esperado}`);
+      }
+    }
   });
 });

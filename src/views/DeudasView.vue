@@ -26,7 +26,7 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { TIPOS_DEUDA, type Deuda, type TipoDeuda } from "../types";
 import { euro, mesActual } from "../utils/format";
-import { redondear2 } from "../utils/importe";
+import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, redondear2 } from "../utils/importe";
 import { crearT } from "../i18n";
 
 // ES: Store central de finanzas (ya inicializado en la app).
@@ -96,6 +96,9 @@ const t = crearT({
     en: "The amount already paid cannot exceed the total.",
   },
   errMes: { es: "Indica un mes de inicio válido.", en: "Enter a valid start month." },
+  // ES: Algún importe por encima del tope (texto común de utils/importe.ts).
+  // EN: Some amount above the cap (shared text from utils/importe.ts).
+  errImporteMax: MENSAJE_IMPORTE_MAX,
   // ES: Confirmación de borrado (con interpolación del concepto)
   // EN: Delete confirmation (with the concept interpolated)
   confirmBorrarPre: { es: '¿Eliminar la deuda "', en: 'Delete the debt "' },
@@ -214,6 +217,12 @@ function guardar() {
   }
   if (pagado > total) {
     error.value = t("errPagadoTotal");
+    return;
+  }
+  // ES: Total, cuota y lo pagado no pueden pasar del tope.
+  // EN: Total, payment and amount paid cannot exceed the cap.
+  if (![total, cuota, pagado].every(importeDentroDeRango)) {
+    error.value = t("errImporteMax");
     return;
   }
   if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) {

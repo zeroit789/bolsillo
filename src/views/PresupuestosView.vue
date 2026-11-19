@@ -31,7 +31,7 @@
 import { ref, computed, useId } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
-import { importeDesdeTexto } from "../utils/importe";
+import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
 import { NOMBRES_CATEGORIA, colorCategoria } from "../data/categorias";
 import { crearT } from "../i18n";
 
@@ -58,6 +58,9 @@ const t = crearT({
   guardarTope: { es: "Guardar tope", en: "Save cap" },
   errorCategoria: { es: "Elige una categoría.", en: "Choose a category." },
   errorImporte: { es: "Pon un importe mayor que 0 €.", en: "Enter an amount greater than €0." },
+  // ES: Límite por encima del tope (texto común de utils/importe.ts).
+  // EN: Cap above the maximum amount (shared text from utils/importe.ts).
+  errorImporteMax: MENSAJE_IMPORTE_MAX,
   vacioTitulo: { es: "Aún no tienes ningún tope", en: "You don't have any caps yet" },
   vacioTexto: {
     es: "Define un límite mensual por categoría para vigilar tus gastos del mes.",
@@ -183,6 +186,12 @@ function guardarTope(): void {
   // EN: Cap must be > 0 (a 0 would delete it; here we require a valid one).
   if (limite <= 0) {
     error.value = t("errorImporte");
+    return;
+  }
+  // ES: Tampoco puede pasar del tope de importe.
+  // EN: It cannot exceed the amount cap either.
+  if (!importeDentroDeRango(limite)) {
+    error.value = t("errorImporteMax");
     return;
   }
   // ES: El store hace el upsert: si ya existe la categoría la reemplaza.

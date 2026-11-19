@@ -42,7 +42,7 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import type { Plan } from "../types";
 import { euro } from "../utils/format";
-import { importeDesdeTexto } from "../utils/importe";
+import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
 import { r2, progreso, restante, conseguido } from "../utils/plan";
 import { crearT } from "../i18n";
 
@@ -108,6 +108,9 @@ const t = crearT({
     es: "Introduce una cantidad válida mayor que 0.",
     en: "Enter a valid amount greater than 0.",
   },
+  // ES: Importe por encima del tope (texto común de utils/importe.ts).
+  // EN: Amount above the cap (shared text from utils/importe.ts).
+  errImporteMax: MENSAJE_IMPORTE_MAX,
   confirmarEliminar: { es: "¿Eliminar el plan", en: "Delete the plan" },
 });
 
@@ -214,6 +217,12 @@ function guardar() {
     error.value = t("errAportado");
     return;
   }
+  // ES: Ni el objetivo ni lo aportado pueden pasar del tope.
+  // EN: Neither the goal nor the amount saved can exceed the cap.
+  if (!importeDentroDeRango(objetivo) || !importeDentroDeRango(aportado)) {
+    error.value = t("errImporteMax");
+    return;
+  }
 
   // ES: Objeto saneado a partir del formulario.
   // EN: Sanitized object built from the form.
@@ -272,6 +281,12 @@ function confirmarAporte() {
   // EN: Only valid positive amounts are added.
   if (!c || c <= 0) {
     errorAportar.value = t("errCantidad");
+    return;
+  }
+  // ES: La cantidad tampoco puede pasar del tope.
+  // EN: The amount cannot exceed the cap either.
+  if (!importeDentroDeRango(c)) {
+    errorAportar.value = t("errImporteMax");
     return;
   }
 
