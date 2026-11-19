@@ -127,16 +127,21 @@ export function aplicarReglas<T extends { concepto: string; signo: SignoMovimien
 
 // ── 3. Sugerir reglas / Suggesting rules ─────────────────────────────────────
 
-// ES: Palabras vacías (ya normalizadas): artículos y preposiciones, y la jerga
-//     de los extractos que sale en casi todos los conceptos.
-// EN: Stop words (already normalised): articles and prepositions, and the
-//     statement jargon that shows up in almost every concept.
+// ES: Palabras vacías (ya normalizadas): artículos y preposiciones, la jerga
+//     de los extractos que sale en casi todos los conceptos y los meses (con
+//     sus abreviaturas), que son fechas.
+// EN: Stop words (already normalised): articles and prepositions, the
+//     statement jargon that shows up in almost every concept and the months
+//     (with their abbreviations), which are dates.
 const VACIAS = new Set([
   "del", "las", "los", "por", "para", "con", "sin", "sus", "una", "uno",
   "compra", "compras", "tarj", "tarjeta", "pago", "pagos", "recibo", "recibos",
   "cargo", "abono", "adeudo", "transferencia", "transf", "trf", "operacion",
   "ref", "referencia", "num", "fecha", "concepto", "slu", "cia", "eur", "euros",
   "internet", "online", "web", "cajero", "comision", "favor",
+  "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+  "septiembre", "setiembre", "octubre", "noviembre", "diciembre",
+  "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "sept", "oct", "nov", "dic",
 ]); // prettier-ignore
 
 // ES: Palabras significativas de un concepto, en orden y sin repetir: 3 o más

@@ -141,6 +141,15 @@ describe("sugerirReglas", () => {
     ).toEqual([["endesa", 3]]);
   });
 
+  it("los nombres de mes cuentan como fechas y no se proponen / month names count as dates and are not proposed", () => {
+    expect(tokensSignificativos("RECIBO LUZ ENE 2026")).toEqual(["luz"]);
+    const correcciones: Correccion[] = [
+      { concepto: "RECIBO LUZ ENERO", categoria: "Suministros" },
+      { concepto: "RECIBO AGUA ENERO", categoria: "Suministros" },
+    ];
+    expect(sugerirReglas(correcciones, [])).toEqual([]);
+  });
+
   it("hacen falta al menos minVeces correcciones / at least minVeces corrections are needed", () => {
     const una: Correccion[] = [{ concepto: "LIBRERIA CENTRAL", categoria: "Libros" }];
     expect(sugerirReglas(una, [])).toEqual([]);
