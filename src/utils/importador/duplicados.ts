@@ -8,7 +8,7 @@
  *          con compararConcepto: false) y fechas a no más de `toleranciaDias`
  *          días. El emparejamiento es 1 a 1 y máximo: cada fila y cada
  *          apunte se usan una sola vez, se busca el mayor número de parejas
- *          y, a igualdad, se prefieren las más cercanas. Así un café apuntado
+ *          y, entre ellos, la menor suma de días. Así un café apuntado
  *          no tapa los dos cafés del extracto.
  *       2. "fichero": fila idéntica (fecha, céntimos, signo y concepto
  *          normalizado) a otra anterior del mismo fichero. Es solo un aviso:
@@ -28,7 +28,7 @@
  *          compararConcepto: false) and dates no more than `toleranciaDias`
  *          days apart. Pairing is 1 to 1 and maximum: every row and entry is
  *          used only once, the largest number of pairs is sought and, if
- *          tied, closer ones are preferred. So one entered coffee does not
+ *          tied, the smallest sum of days. So one entered coffee does not
  *          hide the two coffees in the statement.
  *       2. "fichero": row identical (date, cents, sign and normalised concept)
  *          to an earlier one in the same file. Only a warning: two equal
@@ -103,48 +103,40 @@ export function detectarDuplicados(
     lista.push({ indice, dia: diaUTC(a.fecha) });
     grupos.set(k, lista);
   });
-  // ES: Candidatos de cada fila dentro de la tolerancia, del más cercano al
-  //     más lejano (a igualdad, por posición del apunte).
-  // EN: Each row's candidates within tolerance, closest first (if tied, by
-  //     entry position).
-  const opciones1a1 = filas.map((f) => {
-    const dia = diaUTC(f.fecha);
-    return (grupos.get(clave(f.signo, f.centimos, f.concepto)) ?? [])
-      .map((c) => ({ apunte: c.indice, dias: Math.abs(dia - c.dia) }))
-      .filter((c) => c.dias <= tolerancia)
-      .sort((a, b) => a.dias - b.dias || a.apunte - b.apunte);
+  // ES: Filas agrupadas por clave (solo pueden casar con apuntes de su grupo).
+  // EN: Rows grouped by key (they can only match entries of their own group).
+  const filasPorClave = new Map<string, number[]>();
+  filas.forEach((f, posicion) => {
+    const k = clave(f.signo, f.centimos, f.concepto);
+    if (!grupos.has(k)) return;
+    const lista = filasPorClave.get(k) ?? [];
+    lista.push(posicion);
+    filasPorClave.set(k, lista);
   });
 
-  // ES: Emparejamiento máximo (caminos de aumento de Kuhn): primero se busca
-  //     el MAYOR número de parejas; se prueba antes cada fila con la pareja
-  //     más cercana y las filas con coincidencias exactas van primero, así que
-  //     a igualdad de parejas se prefieren las cercanas.
-  // EN: Maximum matching (Kuhn's augmenting paths): the LARGEST number of
-  //     pairs is sought first; each row tries its closest pair first and rows
-  //     with exact matches go first, so with equal pair counts close ones win.
-  const parejaDeApunte = new Map<number, number>(); // ES: apunte -> fila / EN: entry -> row
-  const intentar = (fila: number, visitados: Set<number>): boolean => {
-    for (const { apunte } of opciones1a1[fila]) {
-      if (visitados.has(apunte)) continue;
-      visitados.add(apunte);
-      const ocupante = parejaDeApunte.get(apunte);
-      if (ocupante === undefined || intentar(ocupante, visitados)) {
-        parejaDeApunte.set(apunte, fila);
-        return true;
-      }
+  // ES: En cada grupo, emparejamiento de coste mínimo entre los de tamaño
+  //     máximo: el mayor número de parejas y, entre ellos, la menor suma de
+  //     días de diferencia.
+  // EN: In each group, minimum-cost matching among the maximum-size ones: the
+  //     largest number of pairs and, among those, the smallest sum of days apart.
+  for (const [k, filasGrupo] of filasPorClave) {
+    const apuntesGrupo = grupos.get(k) ?? [];
+    const pares: { fila: number; apunte: number; coste: number }[] = [];
+    filasGrupo.forEach((posicion, f) => {
+      const dia = diaUTC(filas[posicion].fecha);
+      apuntesGrupo.forEach((c, a) => {
+        const dias = Math.abs(dia - c.dia);
+        if (dias <= tolerancia) pares.push({ fila: f, apunte: a, coste: dias });
+      });
+    });
+    for (const [f, a] of emparejarCosteMinimo(filasGrupo.length, apuntesGrupo.length, pares)) {
+      const posicion = filasGrupo[f];
+      const indice = apuntesGrupo[a].indice;
+      const linea = filas[posicion].linea;
+      const dias = Math.abs(diaUTC(filas[posicion].fecha) - apuntesGrupo[a].dia);
+      const id = apuntados[indice].id ?? String(indice);
+      marcas.set(linea, { linea, tipo: "apuntado", id, dias });
     }
-    return false;
-  };
-  const orden = filas
-    .map((f, i) => ({ i, cerca: opciones1a1[i][0]?.dias ?? Infinity, linea: f.linea }))
-    .filter((x) => x.cerca !== Infinity)
-    .sort((a, b) => a.cerca - b.cerca || a.linea - b.linea);
-  for (const { i } of orden) intentar(i, new Set());
-  for (const [apunte, fila] of parejaDeApunte) {
-    const linea = filas[fila].linea;
-    const dias = Math.abs(diaUTC(filas[fila].fecha) - diaUTC(apuntados[apunte].fecha));
-    const id = apuntados[apunte].id ?? String(apunte);
-    marcas.set(linea, { linea, tipo: "apuntado", id, dias });
   }
 
   // ── 2. Dentro del fichero / Within the file ────────────────────────────────
@@ -161,4 +153,82 @@ export function detectarDuplicados(
   }
 
   return [...marcas.values()].sort((a, b) => a.linea - b.linea);
+}
+
+// ES: Emparejamiento bipartito de coste mínimo entre los de tamaño máximo,
+//     con caminos más cortos sucesivos (flujo de coste mínimo, capacidad 1):
+//     cada vuelta añade una pareja por el camino más barato del grafo
+//     residual (SPFA, admite los costes negativos de las aristas de vuelta).
+//     Devuelve pares [fila, apunte] con índices locales del grupo. Los grupos
+//     son pequeños (mismo signo, céntimos y concepto dentro de la tolerancia).
+// EN: Minimum-cost bipartite matching among the maximum-size ones, with
+//     successive shortest paths (min-cost flow, capacity 1): each round adds
+//     one pair through the cheapest path of the residual graph (SPFA, which
+//     handles the negative costs of the backward edges). Returns [row, entry]
+//     pairs with group-local indexes. Groups are small (same sign, cents and
+//     concept within tolerance).
+function emparejarCosteMinimo(
+  nFilas: number,
+  nApuntes: number,
+  pares: { fila: number; apunte: number; coste: number }[]
+): [number, number][] {
+  // ES: Nodos: filas, apuntes, origen y destino. / EN: Nodes: rows, entries, source and sink.
+  const total = nFilas + nApuntes + 2;
+  const origen = total - 2;
+  const destino = total - 1;
+  type Arista = { a: number; capacidad: number; coste: number; inversa: number };
+  const grafo: Arista[][] = Array.from({ length: total }, () => []);
+  const unir = (u: number, v: number, coste: number) => {
+    grafo[u].push({ a: v, capacidad: 1, coste, inversa: grafo[v].length });
+    grafo[v].push({ a: u, capacidad: 0, coste: -coste, inversa: grafo[u].length - 1 });
+  };
+  for (let f = 0; f < nFilas; f++) unir(origen, f, 0);
+  for (const p of pares) unir(p.fila, nFilas + p.apunte, p.coste);
+  for (let a = 0; a < nApuntes; a++) unir(nFilas + a, destino, 0);
+
+  for (;;) {
+    // ES: Camino más barato del origen al destino (SPFA).
+    // EN: Cheapest path from source to sink (SPFA).
+    const distancia = new Array<number>(total).fill(Number.POSITIVE_INFINITY);
+    const previo = new Array<number>(total).fill(-1);
+    const aristaPrevia = new Array<number>(total).fill(-1);
+    const enCola = new Array<boolean>(total).fill(false);
+    const cola: number[] = [origen];
+    distancia[origen] = 0;
+    enCola[origen] = true;
+    for (let i = 0; i < cola.length; i++) {
+      const u = cola[i];
+      enCola[u] = false;
+      grafo[u].forEach((e, j) => {
+        if (e.capacidad > 0 && distancia[u] + e.coste < distancia[e.a]) {
+          distancia[e.a] = distancia[u] + e.coste;
+          previo[e.a] = u;
+          aristaPrevia[e.a] = j;
+          if (!enCola[e.a]) {
+            enCola[e.a] = true;
+            cola.push(e.a);
+          }
+        }
+      });
+    }
+    if (distancia[destino] === Number.POSITIVE_INFINITY) break;
+    // ES: Se empuja una unidad por el camino encontrado.
+    // EN: One unit is pushed along the path found.
+    for (let v = destino; v !== origen; v = previo[v]) {
+      const e = grafo[previo[v]][aristaPrevia[v]];
+      e.capacidad -= 1;
+      grafo[v][e.inversa].capacidad += 1;
+    }
+  }
+
+  // ES: Parejas = aristas fila -> apunte agotadas. / EN: Pairs = used row -> entry edges.
+  const resultado: [number, number][] = [];
+  for (let f = 0; f < nFilas; f++) {
+    for (const e of grafo[f]) {
+      if (e.a >= nFilas && e.a < nFilas + nApuntes && e.capacidad === 0) {
+        resultado.push([f, e.a - nFilas]);
+      }
+    }
+  }
+  return resultado;
 }

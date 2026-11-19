@@ -124,6 +124,22 @@ describe("detectarDuplicados contra lo apuntado / against what is entered", () =
     ]);
   });
 
+  it("con el máximo de parejas, la menor distancia total / with the maximum of pairs, the smallest total distance", () => {
+    // ES: Filas de los días 1 y 2; apuntes de los días 1 y 3; tolerancia 2.
+    //     1↔1 y 2↔3 suman 1 día; 1↔3 y 2↔1 sumarían 3.
+    // EN: Rows on days 1 and 2; entries on days 1 and 3; tolerance 2.
+    //     1↔1 and 2↔3 add up to 1 day; 1↔3 and 2↔1 would add up to 3.
+    const marcas = detectarDuplicados(
+      [fila(2, "2026-02-01", "PAN", 100), fila(3, "2026-02-02", "PAN", 100)],
+      [apunte("dia1", "2026-02-01", "pan", 1), apunte("dia3", "2026-02-03", "pan", 1)],
+      { toleranciaDias: 2 }
+    );
+    expect(marcas).toEqual([
+      { linea: 2, tipo: "apuntado", id: "dia1", dias: 0 },
+      { linea: 3, tipo: "apuntado", id: "dia3", dias: 1 },
+    ]);
+  });
+
   it("distinto signo, importe o concepto no casan / different sign, amount or concept do not match", () => {
     const filas = [fila(2, "2026-02-03", "BIZUM", 1500, "ingreso")];
     expect(detectarDuplicados(filas, [apunte("a", "2026-02-03", "Bizum", 15, "gasto")])).toEqual(
