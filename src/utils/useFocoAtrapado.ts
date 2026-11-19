@@ -68,6 +68,14 @@ function enfocables(caja: HTMLElement): HTMLElement[] {
 //     and the only one that handles the keyboard.
 const pila: symbol[] = [];
 
+// ES: true si hay algún diálogo con foco atrapado abierto. Lo usan los atajos
+//     globales de teclado para no actuar por debajo de un diálogo.
+// EN: true if any focus-trapped dialog is open. Global keyboard shortcuts use
+//     it so they don't act underneath a dialog.
+export function hayDialogoAbierto(): boolean {
+  return pila.length > 0;
+}
+
 // ── 3. Composable / Composable ────────────────────────────────────────────────
 // ES: Activa el foco atrapado sobre el contenedor de la ref mientras exista.
 // EN: Enables the focus trap on the ref's container while it exists.

@@ -23,6 +23,7 @@
 // ── 1. Imports y traducciones / Imports & translations ────────────────────────
 import { ref, computed, onMounted, onUnmounted, useId } from "vue";
 import { useFocoAtrapado } from "../utils/useFocoAtrapado";
+import { puedeUsarAtajo } from "../utils/atajos";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
 import { importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
@@ -417,36 +418,23 @@ function guardarPlantilla(): void {
 }
 
 // ── 7. Atajos de teclado / Keyboard shortcuts ─────────────────────────────────
-// ES: Manejador global de teclas: "n" abre el modal de nuevo movimiento (solo si
-//     NO se está escribiendo en un campo de formulario), y "Escape" cierra el
-//     modal si está abierto. Se registra en onMounted y se quita en onUnmounted
-//     para no dejar listeners colgando.
-// EN: Global key handler: "n" opens the new-movement modal (only when not typing
-//     in a form field), and "Escape" closes the modal if it is open. Registered
-//     in onMounted and removed in onUnmounted to avoid leaks.
+// ES: Manejador global de teclas: "n" abre el modal de nuevo movimiento. Solo
+//     actúa si puedeUsarAtajo lo permite (no se escribe en un campo, sin
+//     modificadores y sin ningún diálogo abierto). Escape NO se trata aquí:
+//     cada diálogo lo atiende con useFocoAtrapado y solo responde el de
+//     arriba (antes, con dos diálogos abiertos, este manejador podía cerrar
+//     también el formulario de debajo). Se registra en onMounted y se quita
+//     en onUnmounted para no dejar listeners colgando.
+// EN: Global key handler: "n" opens the new-movement modal. It only acts if
+//     puedeUsarAtajo allows it (not typing in a field, no modifiers and no
+//     dialog open). Escape is NOT handled here: each dialog handles it with
+//     useFocoAtrapado and only the top one responds (before, with two
+//     dialogs open, this handler could also close the form underneath).
+//     Registered in onMounted and removed in onUnmounted to avoid leaks.
 function onTecla(e: KeyboardEvent): void {
-  // ES: Elemento con foco; nos saltamos el atajo "n" si se escribe en un campo.
-  // EN: Element with focus; we skip the "n" shortcut while typing in a field.
-  const destino = e.target as HTMLElement | null;
-  const enCampo =
-    !!destino &&
-    (destino.tagName === "INPUT" ||
-      destino.tagName === "TEXTAREA" ||
-      destino.tagName === "SELECT" ||
-      destino.isContentEditable);
-
-  // ES: "n" (sin modificadores, fuera de un campo) -> abre el modal de alta.
-  // EN: "n" (no modifiers, not in a field) -> open the add-movement modal.
-  if ((e.key === "n" || e.key === "N") && !enCampo && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  if ((e.key === "n" || e.key === "N") && puedeUsarAtajo(e)) {
     e.preventDefault();
     abrirAlta();
-    return;
-  }
-
-  // ES: "Escape" cierra el modal si está abierto (el mini-form tiene el suyo propio).
-  // EN: "Escape" closes the modal if it is open (the mini-form has its own handler).
-  if (e.key === "Escape" && modal.value) {
-    cerrarModal();
   }
 }
 
