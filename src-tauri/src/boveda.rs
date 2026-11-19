@@ -1404,10 +1404,20 @@ impl Boveda {
     pub fn restaurar_copia(&mut self, nombre: &str, credencial: Option<&str>) -> R<String> {
         let (mut bytes, mut f, dek, texto) = self.abrir_copia(nombre, credencial)?;
         let actual = self.dir.leer(PRINCIPAL)?;
-        let dek_actual = actual
-            .as_ref()
-            .and_then(|b| desde_bytes(b).ok())
-            .map(|f| f.dek_id);
+        let cab_actual = actual.as_ref().and_then(|b| desde_bytes(b).ok());
+        // ES: Una copia sin protección no sustituye a un almacén protegido si
+        //     no está abierto: si no, restaurarla saltaría el PIN.
+        // EN: An unprotected backup does not replace a protected store that is
+        //     not open: otherwise restoring it would skip the PIN.
+        if f.bloqueo == Bloqueo::Ninguno
+            && self.abierta.is_none()
+            && cab_actual
+                .as_ref()
+                .is_some_and(|c| c.bloqueo != Bloqueo::Ninguno)
+        {
+            return Err(ErrorAlmacen::Bloqueado);
+        }
+        let dek_actual = cab_actual.map(|f| f.dek_id);
         let pendientes = self.resolver_pendientes(dek_actual.as_deref())?;
         // ES: Si esta copia tiene una clave de recuperación ya revocada (una
         //     regeneración publicada que no llegó a reenvolverla), se le quita
@@ -2154,6 +2164,31 @@ mod tests {
         let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
         assert!(f.envolturas.recuperacion.is_none());
         assert_eq!(b.estado().copias_pendientes, 0);
+    }
+
+    #[test]
+    fn una_copia_sin_proteccion_no_salta_el_pin_de_un_almacen_cerrado() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let bytes = b.dir.leer_copia(&copia).unwrap();
+        b.configurar_bloqueo(Bloqueo::Pin, "4831").unwrap();
+        // ES: Como si esa copia no se hubiera llegado a proteger.
+        // EN: As if that backup had never been protected.
+        b.dir.escribir_copia(&copia, &bytes).unwrap();
+        b.bloquear();
+        assert_eq!(
+            b.restaurar_copia(&copia, None).unwrap_err(),
+            ErrorAlmacen::Bloqueado
+        );
+        let f = desde_bytes(&b.dir.leer(PRINCIPAL).unwrap().unwrap()).unwrap();
+        assert_eq!(f.bloqueo, Bloqueo::Pin);
+        // ES: Con el almacén abierto sí se puede (decisión del usuario).
+        // EN: With the store open it is allowed (the user's decision).
+        b.abrir(Some("4831")).unwrap();
+        b.dir.escribir_copia(&copia, &bytes).unwrap();
+        assert!(b.restaurar_copia(&copia, None).is_ok());
     }
 
     #[test]
