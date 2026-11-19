@@ -30,6 +30,12 @@ describe("detectarSeparador", () => {
     ]);
   });
 
+  it("una sola celda rara con comillas no cambia el separador del fichero / a single odd quoted cell does not change the file separator", () => {
+    const texto =
+      'Fecha;Concepto;Importe\n01/02/2026;PAN;-1,20\n02/02/2026;"EL RINCON" BAR;-2,50\n03/02/2026;LECHE;-0,95\n';
+    expect(detectarSeparador(texto)).toBe(";");
+  });
+
   it("tabulador / tab", () => {
     expect(detectarSeparador("Fecha\tConcepto\tImporte\n01/02/2026\tPan\t-1,20")).toBe("\t");
   });

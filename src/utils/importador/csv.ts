@@ -143,28 +143,30 @@ function recorrer(
   return { filas, comillaSinCerrar, sueltas };
 }
 
-// ES: Elige el separador mirando las primeras 20 filas. Primero, el que deja
-//     menos comillas fuera de sitio (el que respeta las celdas
-//     entrecomilladas; una comilla sin cerrar pesa mucho); luego, el que da
-//     el mismo número de celdas (más de una) en más filas y, a igualdad, el
-//     que más celdas da. Los extractos con líneas de preámbulo (titular,
+// ES: Elige el separador mirando las primeras 20 filas: primero, el que no
+//     deja una comilla sin cerrar; luego, el que da el mismo número de
+//     celdas (más de una) en más filas; a igualdad, el que deja menos
+//     comillas fuera de sitio (el que respeta las celdas entrecomilladas) y,
+//     al final, el que más celdas da. Los extractos con líneas de preámbulo (titular,
 //     periodo…) solo restan algo de constancia, no cambian el ganador. Si
 //     ninguno aparece, `;`.
-// EN: Chooses the separator looking at the first 20 rows. First, the one
-//     leaving the fewest out-of-place quotes (the one respecting quoted cells;
-//     an unclosed quote weighs a lot); then, the one giving the same number of
-//     cells (more than one) in the most rows and, when tied, the one giving
-//     more cells. Statements with preamble lines (holder, period…) only lose a
+// EN: Chooses the separator looking at the first 20 rows: first, the one
+//     leaving no unclosed quote; then, the one giving the same number of
+//     cells (more than one) in the most rows; when tied, the one leaving the
+//     fewest out-of-place quotes (the one respecting quoted cells) and, last,
+//     the one giving more cells. Statements with preamble lines (holder, period…) only lose a
 //     bit of steadiness, they do not change the winner. If none appears, `;`.
 export function detectarSeparador(texto: string): SeparadorCSV {
   const fuente = texto.replace(/^\ufeff/, "");
   let mejor: SeparadorCSV = ";";
+  let mejorSinCerrar = Number.POSITIVE_INFINITY;
   let mejorSueltas = Number.POSITIVE_INFINITY;
   let mejorFilas = 0;
   let mejorCeldas = 0;
   for (const sep of CANDIDATOS) {
     const recorrido = recorrer(fuente, sep, 20);
-    const sueltas = recorrido.sueltas + (recorrido.comillaSinCerrar !== null ? 1000 : 0);
+    const sinCerrar = recorrido.comillaSinCerrar !== null ? 1 : 0;
+    const sueltas = recorrido.sueltas;
     const anchos = recorrido.filas.map((f) => f.length).filter((n) => n > 1);
     // ES: Moda: el ancho más repetido y en cuántas filas sale.
     // EN: Mode: the most repeated width and in how many rows it shows.
@@ -181,12 +183,17 @@ export function detectarSeparador(texto: string): SeparadorCSV {
     // ES: Un separador que no aparece no compite.
     // EN: A separator that does not appear does not compete.
     if (filas === 0) continue;
-    const gana =
-      sueltas < mejorSueltas ||
-      (sueltas === mejorSueltas &&
-        (filas > mejorFilas || (filas === mejorFilas && moda > mejorCeldas)));
+    // ES: Orden: sin comilla abierta, más filas constantes, menos comillas
+    //     sueltas y más celdas.
+    // EN: Order: no open quote, more steady rows, fewer stray quotes and more
+    //     cells.
+    const clave = [-sinCerrar, filas, -sueltas, moda];
+    const mejorClave = [-mejorSinCerrar, mejorFilas, -mejorSueltas, mejorCeldas];
+    const i = clave.findIndex((v, j) => v !== mejorClave[j]);
+    const gana = i >= 0 && clave[i] > mejorClave[i];
     if (gana) {
       mejor = sep;
+      mejorSinCerrar = sinCerrar;
       mejorSueltas = sueltas;
       mejorFilas = filas;
       mejorCeldas = moda;
