@@ -309,16 +309,19 @@ function revisarPagosProximos() {
   //     id + fecha de vencimiento, distinta de las de los fijos.
   // EN: Installments of active debts (skip debts with no installment this
   //     month). Key "d" + id + due date, distinct from fixed-item keys.
+  //     La cuota se mira en el mes en que vence (puede ser el siguiente).
+  // EN: The installment is checked in the month it falls due (it may be the next one).
   for (const d of f.deudas) {
-    if (estadoDeuda(d, mes).cuotaDelMes <= 0) continue;
     const vence = enRango(d.diaPago);
-    if (vence && !set.has("d" + d.id + vence)) {
+    if (!vence) continue;
+    const cuota = estadoDeuda(d, vence.slice(0, 7)).cuotaDelMes;
+    if (cuota > 0 && !set.has("d" + d.id + vence)) {
       set.add("d" + d.id + vence);
       void notificar(
         t("notifCuotaTitulo"),
         t("notifPagoCuerpo")
           .replace("@c", d.concepto)
-          .replace("@i", euro(d.cuotaMensual))
+          .replace("@i", euro(cuota))
           .replace("@d", String(d.diaPago))
       );
     }

@@ -78,7 +78,7 @@ interface EntradaZip {
 //     the directory must fit before that record and every entry, with its
 //     name, extra and comment, must fit in the directory. ZIP64 (0xFFFFFFFF
 //     sizes) is not supported.
-function entradasZip(datos: Uint8Array): EntradaZip[] | null {
+function entradasZip(datos: Uint8Array): { entradas: EntradaZip[]; inicioDir: number } | null {
   const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
   let fin = -1;
   for (let i = datos.length - 22; i >= Math.max(0, datos.length - 65557); i--) {
@@ -94,7 +94,13 @@ function entradasZip(datos: Uint8Array): EntradaZip[] | null {
   const total = v.getUint16(fin + 10, true);
   const tamDir = v.getUint32(fin + 12, true);
   const inicioDir = v.getUint32(fin + 16, true);
-  if (total === 0xffff || inicioDir === 0xffffffff || inicioDir + tamDir > fin) return null;
+  // ES: El directorio va justo antes del registro de fin, sin hueco: así no
+  //     puede haber cabeceras centrales de más que otro lector (JSZip recorre
+  //     mientras encuentra firmas) leería y esta cuenta no.
+  // EN: The directory sits right before the end record, with no gap: so there
+  //     cannot be extra central headers that another reader (JSZip walks
+  //     while it finds signatures) would read and this count would not.
+  if (total === 0xffff || inicioDir === 0xffffffff || inicioDir + tamDir !== fin) return null;
   const finDir = inicioDir + tamDir;
   const entradas: EntradaZip[] = [];
   let pos = inicioDir;
@@ -113,7 +119,9 @@ function entradasZip(datos: Uint8Array): EntradaZip[] | null {
     entradas.push(e);
     pos += largo;
   }
-  return entradas;
+  // ES: Las entradas declaradas llenan el directorio entero. / EN: The declared entries fill the whole directory.
+  if (pos !== finDir) return null;
+  return { entradas, inicioDir };
 }
 
 // ES: Suma de los tamaños descomprimidos que DECLARA el directorio central,
@@ -123,48 +131,60 @@ function entradasZip(datos: Uint8Array): EntradaZip[] | null {
 //     if the ZIP is not consistent (see entradasZip). First, cheap filter
 //     before decompressing anything.
 export function tamanoDescomprimido(datos: Uint8Array): number | null {
-  const entradas = entradasZip(datos);
-  return entradas ? entradas.reduce((a, e) => a + e.descomprimido, 0) : null;
+  const zip = entradasZip(datos);
+  return zip ? zip.entradas.reduce((a, e) => a + e.descomprimido, 0) : null;
 }
 
 // ES: Bytes que salen DE VERDAD al descomprimir todas las entradas, cortando
-//     en cuanto se pasa de `max` (null si se pasa, si el ZIP no es coherente
-//     o si usa un método que no es "sin comprimir" ni deflate). Así un ZIP que
+//     en cuanto se pasa de `max` ("excede"); null si el ZIP no es coherente,
+//     sus datos invaden el directorio, usa un método que no es "sin
+//     comprimir" ni deflate o falla al descomprimir. Así un ZIP que
 //     miente en sus tamaños tampoco llega a ExcelJS. Usa DecompressionStream
 //     ("deflate-raw"), que tienen WebView2 y Node.
 // EN: Bytes that REALLY come out when decompressing every entry, stopping as
-//     soon as `max` is passed (null if passed, if the ZIP is not consistent
-//     or if it uses a method other than stored or deflate). So a ZIP lying
+//     soon as `max` is passed ("excede"); null if the ZIP is not consistent,
+//     its data overlaps the directory, it uses a method other than stored or
+//     deflate or decompression fails. So a ZIP lying
 //     about its sizes does not reach ExcelJS either. Uses DecompressionStream
 //     ("deflate-raw"), available in WebView2 and Node.
-export async function descomprimidoReal(datos: Uint8Array, max: number): Promise<number | null> {
-  const entradas = entradasZip(datos);
-  if (!entradas) return null;
+export async function descomprimidoReal(
+  datos: Uint8Array,
+  max: number
+): Promise<number | "excede" | null> {
+  const zip = entradasZip(datos);
+  if (!zip) return null;
+  // ES: Los datos de cada entrada tienen que ir antes del directorio central.
+  // EN: Each entry's data must sit before the central directory.
+  const { entradas, inicioDir: finDatos } = zip;
   const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
   let total = 0;
   for (const e of entradas) {
-    if (e.local + 30 > datos.length || v.getUint32(e.local, true) !== 0x04034b50) return null;
+    if (e.local + 30 > finDatos || v.getUint32(e.local, true) !== 0x04034b50) return null;
     const inicio = e.local + 30 + v.getUint16(e.local + 26, true) + v.getUint16(e.local + 28, true);
-    if (inicio + e.comprimido > datos.length) return null;
+    if (inicio + e.comprimido > finDatos) return null;
     const trozo = datos.subarray(inicio, inicio + e.comprimido);
     if (e.metodo === 0) {
       total += trozo.length;
-      if (total > max) return null;
+      if (total > max) return "excede";
       continue;
     }
     if (e.metodo !== 8) return null;
-    const lector = new Blob([trozo as BlobPart])
-      .stream()
-      .pipeThrough(new DecompressionStream("deflate-raw"))
-      .getReader();
+    // ES: Crear el flujo y leerlo, todo dentro del try: cualquier fallo es un
+    //     ZIP no válido (null), distinto de pasarse del tope ("excede").
+    // EN: Creating and reading the stream, all inside the try: any failure is
+    //     an invalid ZIP (null), unlike going over the cap ("excede").
     try {
+      const lector = new Blob([trozo as BlobPart])
+        .stream()
+        .pipeThrough(new DecompressionStream("deflate-raw"))
+        .getReader();
       for (;;) {
         const { done, value } = await lector.read();
         if (done) break;
         total += value.length;
         if (total > max) {
-          await lector.cancel();
-          return null;
+          await lector.cancel().catch(() => {});
+          return "excede";
         }
       }
     } catch {
@@ -237,7 +257,9 @@ export async function leerXLSX(
   if (descomprimido > MAX_DESCOMPRIMIDO) throw new ErrorXLSX("bytes");
   // ES: Y lo que sale de verdad al descomprimir, con el mismo tope.
   // EN: And what really comes out when decompressing, with the same cap.
-  if ((await descomprimidoReal(bytes, MAX_DESCOMPRIMIDO)) === null) throw new ErrorXLSX("bytes");
+  const real = await descomprimidoReal(bytes, MAX_DESCOMPRIMIDO);
+  if (real === "excede") throw new ErrorXLSX("bytes");
+  if (real === null) throw new Error("ZIP no válido / Invalid ZIP");
   const ExcelJS = await cargarExcelJS();
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(bytes as unknown as ArrayBuffer);

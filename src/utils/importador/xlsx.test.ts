@@ -201,7 +201,7 @@ describe("descompresión real / real decompression", () => {
     const zip = await zipDeflate(new Uint8Array(200_000), 10);
     expect(tamanoDescomprimido(zip)).toBe(10);
     expect(await descomprimidoReal(zip, 1_000_000)).toBe(200_000);
-    expect(await descomprimidoReal(zip, 100_000)).toBeNull();
+    expect(await descomprimidoReal(zip, 100_000)).toBe("excede");
   });
 
   it("un libro real pasa los dos topes / a real workbook passes both caps", async () => {
@@ -213,6 +213,20 @@ describe("descompresión real / real decompression", () => {
     const trampa = "PK\u0005\u0006" + "x".repeat(30);
     const zip = await zipDeflate(new Uint8Array(1000), 1000, trampa);
     expect(tamanoDescomprimido(zip)).toBe(1000);
+  });
+
+  it("datos deflate rotos dan null, no exceso / broken deflate data gives null, not excess", async () => {
+    const zip = await zipDeflate(new Uint8Array(1000), 1000);
+    zip.fill(0xff, 31, 40);
+    expect(await descomprimidoReal(zip, 1_000_000)).toBeNull();
+  });
+
+  it("un directorio que no llega al registro de fin no vale / a directory not reaching the end record is rejected", async () => {
+    const zip = await zipDeflate(new Uint8Array(1000), 1000);
+    const v = new DataView(zip.buffer);
+    const fin = zip.length - 22;
+    v.setUint32(fin + 12, v.getUint32(fin + 12, true) - 1, true);
+    expect(tamanoDescomprimido(zip)).toBeNull();
   });
 
   it("una entrada que se sale del directorio no vale / an entry overflowing the directory is rejected", () => {
