@@ -81,6 +81,8 @@ export class ErrorBoveda extends Error {
 }
 
 // ── 2. Llamar a Rust / Calling Rust ──────────────────────────────────────────
+let simuladorPersistente = false;
+
 // ES: Llama a un comando de Rust; sin Tauri, al simulador (solo en desarrollo
 //     y tests). Los errores de Rust llegan como texto y se envuelven.
 // EN: Calls a Rust command; without Tauri, the simulator (development and
@@ -89,7 +91,15 @@ async function invocar<T>(cmd: string, args?: Record<string, unknown>): Promise<
   try {
     if (isTauri()) return await invoke<T>(cmd, args);
     if (import.meta.env.DEV || import.meta.env.MODE === "test") {
-      const { simularInvoke } = await import("./rustSimulado");
+      const { simularInvoke, simulador } = await import("./rustSimulado");
+      // ES: En `pnpm dev` (no en tests) el simulador guarda en el localStorage
+      //     del navegador de desarrollo para sobrevivir a una recarga.
+      // EN: In `pnpm dev` (not in tests) the simulator saves to the development
+      //     browser's localStorage to survive a reload.
+      if (!simuladorPersistente && import.meta.env.MODE !== "test") {
+        simulador.activarPersistencia();
+        simuladorPersistente = true;
+      }
       return await simularInvoke<T>(cmd, args);
     }
   } catch (e) {
