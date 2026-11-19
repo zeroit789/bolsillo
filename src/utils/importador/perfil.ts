@@ -172,10 +172,22 @@ export function resolverColumna(cabecera: Celda[] | null, ref: ColumnaRef): numb
 
 // ── 4. Firma y detección de perfil / Signature & profile detection ───────────
 
-// ES: Firma de una cabecera: sus nombres normalizados, sin los vacíos.
-// EN: Signature of a header: its normalised names, without empty ones.
+// ES: Firma de una cabecera: sus nombres normalizados EN ORDEN, con "" en los
+//     huecos (para poder comparar posiciones) y sin los huecos del final.
+// EN: Signature of a header: its normalised names IN ORDER, with "" for the
+//     gaps (so positions can be compared) and without trailing gaps.
 export function crearFirma(cabecera: Celda[]): string[] {
-  return cabecera.map(textoCabecera).filter((t) => t !== "");
+  const firma = cabecera.map(textoCabecera);
+  while (firma.length && firma[firma.length - 1] === "") firma.pop();
+  return firma;
+}
+
+// ES: ¿El mapeo usa alguna columna por índice? / EN: Does the mapping use any index column?
+function usaIndices(m: MapeoColumnas): boolean {
+  const refs = [m.fecha, m.importe, m.cargo, m.abono].concat(
+    Array.isArray(m.concepto) ? m.concepto : [m.concepto]
+  );
+  return refs.some((r) => typeof r === "number");
 }
 
 // ES: Nombres de columna que usa el mapeo de un perfil (los índices no cuentan).
@@ -189,15 +201,30 @@ function nombresDelMapeo(m: MapeoColumnas): string[] {
 // ES: Reconoce el banco: un perfil encaja si TODOS los nombres de su firma (o,
 //     sin firma, los de su mapeo) están en la cabecera. Gana el que más
 //     nombres exige (el más concreto); a igualdad, el primero de la lista.
+//     Si el perfil usa columnas por ÍNDICE, la cabecera tiene que ser su firma
+//     exacta y en el mismo orden (si el banco cambia el orden, un índice
+//     apuntaría a otra columna, p. ej. al saldo); sin firma no se detecta solo.
 // EN: Recognises the bank: a profile fits if ALL the names of its signature
 //     (or, without one, those of its mapping) are in the header. The one
 //     requiring the most names (the most specific) wins; if tied, the first.
+//     If the profile uses INDEX columns, the header must be its exact
+//     signature in the same order (if the bank reorders columns, an index
+//     would point elsewhere, e.g. at the balance); without a signature it is
+//     not auto-detected.
 export function detectarPerfil(cabecera: Celda[], perfiles: PerfilBanco[]): PerfilBanco | null {
-  const presentes = new Set(crearFirma(cabecera));
+  const firmaCabecera = crearFirma(cabecera);
+  const presentes = new Set(firmaCabecera.filter((n) => n !== ""));
   let mejor: PerfilBanco | null = null;
   let mejorTam = 0;
   for (const p of perfiles) {
-    const exigidos = p.firma?.length ? p.firma : nombresDelMapeo(p.columnas);
+    if (usaIndices(p.columnas)) {
+      const f = p.firma ?? [];
+      const igual = f.length === firmaCabecera.length && f.every((n, i) => n === firmaCabecera[i]);
+      if (!f.length || !igual) continue;
+    }
+    const exigidos = (p.firma?.length ? p.firma : nombresDelMapeo(p.columnas)).filter(
+      (n) => n !== ""
+    );
     if (!exigidos.length || !exigidos.every((n) => presentes.has(n))) continue;
     if (exigidos.length > mejorTam) {
       mejor = p;

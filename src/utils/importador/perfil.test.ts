@@ -98,11 +98,33 @@ describe("sugerirMapeo", () => {
 
 describe("crearFirma y detectarPerfil / crearFirma and detectarPerfil", () => {
   it("la firma son las cabeceras normalizadas / the signature is the normalised headers", () => {
-    expect(crearFirma(["Fecha operación", " Concepto ", "", null, "IMPORTE"])).toEqual([
+    expect(crearFirma(["Fecha operación", " Concepto ", "", null, "IMPORTE", "", null])).toEqual([
       "fecha operacion",
       "concepto",
+      "",
+      "",
       "importe",
     ]);
+  });
+
+  it("un perfil por índices exige la cabecera en el mismo orden / an index profile requires the header in the same order", () => {
+    const porIndices: PerfilBanco = {
+      ...PERFIL_A,
+      id: "indices",
+      columnas: { fecha: 0, concepto: 1, importe: 2 },
+      firma: ["fecha", "concepto", "importe", "", "saldo"],
+    };
+    expect(detectarPerfil(["Fecha", "Concepto", "Importe", "", "Saldo"], [porIndices])?.id).toBe(
+      "indices"
+    );
+    // ES: Importe y Saldo cambiados de sitio: importaría el saldo. No vale.
+    // EN: Amount and Balance swapped: it would import the balance. Not valid.
+    expect(detectarPerfil(["Fecha", "Concepto", "Saldo", "", "Importe"], [porIndices])).toBeNull();
+    // ES: Sin firma no hay forma de comprobar el orden: no se detecta solo.
+    // EN: Without a signature the order cannot be checked: not auto-detected.
+    expect(
+      detectarPerfil(["Fecha", "Concepto", "Importe"], [{ ...porIndices, firma: undefined }])
+    ).toBeNull();
   });
 
   it("reconoce el banco por su cabecera / recognises the bank by its header", () => {
