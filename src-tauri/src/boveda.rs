@@ -1017,18 +1017,18 @@ impl Boveda {
     //     depending on it: what was not published (previous DEK equal to the
     //     current one) is removed and the rest is marked as published. If it
     //     cannot be written, nothing is restored.
-    //     Devuelve el registro ya resuelto. Un error al leerlo se propaga
-    //     (solo un registro mal formado, irrecuperable, se ignora).
-    // EN: Returns the resolved record. An error while reading it is
-    //     propagated (only a malformed, unrecoverable record is ignored).
-    fn resolver_pendientes(&self, dek_actual: Option<&str>) -> R<Vec<Reenvoltura>> {
+    //     Devuelve el registro ya resuelto, o None si está mal formado (no se
+    //     puede saber qué había pendiente). Un error de lectura se propaga.
+    // EN: Returns the resolved record, or None if it is malformed (what was
+    //     pending cannot be known). A read error is propagated.
+    fn resolver_pendientes(&self, dek_actual: Option<&str>) -> R<Option<Vec<Reenvoltura>>> {
         let v = match self.leer_pendientes_estricto() {
             Ok(v) => v,
-            Err(ErrorAlmacen::Danado) => return Ok(Vec::new()),
+            Err(ErrorAlmacen::Danado) => return Ok(None),
             Err(e) => return Err(e),
         };
         if v.is_empty() {
-            return Ok(v);
+            return Ok(Some(v));
         }
         let v: Vec<Reenvoltura> = v
             .into_iter()
@@ -1041,7 +1041,7 @@ impl Boveda {
             })
             .collect();
         self.escribir_pendientes(&v)?;
-        Ok(v)
+        Ok(Some(v))
     }
 
     // ES: Deriva una KEK con sal nueva (para envolver varias cosas con una sola
@@ -1307,14 +1307,21 @@ impl Boveda {
         // EN: If this backup has an already revoked recovery key (a published
         //     regeneration that did not get to rewrap it), it is removed before
         //     publishing: restoring does not reactivate it.
-        let ruta = format!("copias/{nombre}");
+        //     Se busca por DEK y sal, no por nombre (da igual cómo se llame la
+        //     copia). Con el registro ilegible no se sabe qué está revocado:
+        //     la copia se publica sin recuperación (se puede generar otra).
+        // EN: It is looked up by DEK and salt, not by name (whatever the
+        //     backup is called). With an unreadable record it is unknown what
+        //     is revoked: the backup is published without recovery (another
+        //     one can be generated).
         let revocada = f.envolturas.credencial.is_some()
             && f.envolturas.recuperacion.as_ref().is_some_and(|rec| {
-                pendientes.iter().any(|p| {
-                    p.accion == "recuperacion"
-                        && p.ruta == ruta
-                        && p.dek_id.as_deref() == Some(f.dek_id.as_str())
-                        && p.sal.as_ref() == Some(&rec.kdf.sal)
+                pendientes.as_ref().is_none_or(|v| {
+                    v.iter().any(|p| {
+                        p.accion == "recuperacion"
+                            && p.dek_id.as_deref() == Some(f.dek_id.as_str())
+                            && p.sal.as_ref() == Some(&rec.kdf.sal)
+                    })
                 })
             });
         if revocada {
@@ -1870,6 +1877,19 @@ mod tests {
         b.abrir(Some("4831")).unwrap();
         let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
         assert!(f.envolturas.recuperacion.is_none());
+    }
+
+    #[test]
+    fn con_el_registro_ilegible_la_copia_restaurada_no_trae_recuperacion() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        b.dir.escribir(PENDIENTES, b"{roto").unwrap();
+        b.restaurar_copia(&copia, Some("4831")).unwrap();
+        assert!(!b.estado().tiene_recuperacion);
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
     }
 
     #[test]
