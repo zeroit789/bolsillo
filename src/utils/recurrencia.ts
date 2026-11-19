@@ -112,8 +112,15 @@ function leerMes(texto: string): { anio: number; mes: number } | null {
 
 // ES: Lee "AAAA-MM-DD…" a días UTC o null. / EN: Reads "YYYY-MM-DD…" into UTC days or null.
 function leerFecha(texto: string | undefined): number | null {
-  const m = texto ? /^(\d{4})-(\d{2})-(\d{2})/.exec(texto) : null;
-  return m ? dia(Number(m[1]), Number(m[2]), Number(m[3])) : null;
+  // ES: Cadena completa y calendario real: Date.UTC convertiría el 30-2 en
+  //     el 2-3 sin avisar y movería el inicio o alargaría el fin.
+  // EN: Whole string and real calendar: Date.UTC would silently turn 30-2
+  //     into 2-3 and move the start or extend the end.
+  const m = texto ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto) : null;
+  if (!m) return null;
+  const [anio, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (mes < 1 || mes > 12 || d < 1 || d > diasDelMes(anio, mes)) return null;
+  return dia(anio, mes, d);
 }
 
 // ── 3. Ocurrencias / Occurrences ─────────────────────────────────────────────
@@ -168,6 +175,19 @@ export function ocurrenciasEnMes(r: RecurrenteProgramable, mes: string): Ocurren
   const m = leerMes(mes);
   if (!m) return vacio;
   if (r.cuotas !== undefined && !(Number.isInteger(r.cuotas) && r.cuotas > 0)) return vacio;
+  // ES: Datos mal formados: no se adivina, no toca (la validación al cargar
+  //     ya debería haberlos parado).
+  // EN: Malformed data: no guessing, never due (load-time validation should
+  //     already have stopped it).
+  if (!leerMes(r.desde) || (r.hasta !== null && !leerMes(r.hasta))) return vacio;
+  if (r.fechaInicio !== undefined && leerFecha(r.fechaInicio) === null) return vacio;
+  if (r.fechaFin !== undefined && leerFecha(r.fechaFin) === null) return vacio;
+  if (
+    r.diaPago !== undefined &&
+    !(Number.isInteger(r.diaPago) && r.diaPago >= 1 && r.diaPago <= 31)
+  ) {
+    return vacio;
+  }
   if (r.hasta !== null && mes > r.hasta) return vacio;
   const fin = leerFecha(r.fechaFin);
 

@@ -293,4 +293,19 @@ describe("fin por fecha o por cuotas / end by date or by instalments", () => {
     expect(ocurrenciasEnMes(base, "2026-13").veces).toBe(0);
     expect(ocurrenciasEnMes(base, "enero").veces).toBe(0);
   });
+
+  it("fechas imposibles o día de pago fuera de rango: nada, sin adivinar / impossible dates or out-of-range payment day: nothing, no guessing", () => {
+    const base: RecurrenteProgramable = { importe: 5, desde: "2026-01", hasta: null };
+    // ES: Date.UTC llevaría el 30-2 al 2-3 y movería el inicio o alargaría el fin.
+    // EN: Date.UTC would turn 30-2 into 2-3 and move the start or extend the end.
+    for (const mes of ["2026-02", "2026-03", "2026-04"]) {
+      expect(ocurrenciasEnMes({ ...base, fechaInicio: "2026-02-30" }, mes).veces).toBe(0);
+      expect(ocurrenciasEnMes({ ...base, fechaFin: "2026-02-30" }, mes).veces).toBe(0);
+      expect(ocurrenciasEnMes({ ...base, fechaInicio: "2026-02-03x" }, mes).veces).toBe(0);
+    }
+    for (const diaPago of [0, 32, 1.5, -1]) {
+      expect(ocurrenciasEnMes({ ...base, diaPago }, "2026-02").veces).toBe(0);
+    }
+    expect(ocurrenciasEnMes({ ...base, desde: "2026-1" }, "2026-02").veces).toBe(0);
+  });
 });
