@@ -68,7 +68,7 @@ Respecto a la 1.1.0 (que carga las fuentes desde Google Fonts, no tiene CSP y me
 - **Fuentes locales**: Syne y DM Sans van dentro de la app, así que no hay ninguna petición a Google Fonts. Sus licencias OFL 1.1 están en [`src/assets/fonts/`](src/assets/fonts/) y el build las copia a `dist/licencias/`.
 - **CSP** definida en `src-tauri/tauri.conf.json` (en la 1.1.0 era `null`).
 - **Accesibilidad**: se puede usar con el teclado, el foco se ve en los dos temas, los diálogos tienen `role="dialog"`, título asociado, foco atrapado y se cierran con `Esc`, los botones de icono y los campos tienen nombre accesible, y se respeta `prefers-reduced-motion`.
-- **Exportación bajo demanda**: ExcelJS y jsPDF solo se cargan al exportar o al importar un Excel. El bundle principal pasa de unos 1.612 kB a unos 380 kB.
+- **Exportación bajo demanda**: ExcelJS y jsPDF solo se cargan al exportar o al importar un Excel. El bundle principal pasa de unos 1.612 kB a unos 390 kB.
 - **Otros**: identificadores con `crypto.randomUUID()`, un único redondeo de importes (`utils/importe.ts`), dependencias al día y `cargo clippy` en la CI.
 
 ### Funcionalidades
@@ -293,7 +293,7 @@ Compared with 1.1.0 (which loads its fonts from Google Fonts, has no CSP and loa
 - **Local fonts**: Syne and DM Sans ship inside the app, so there are no requests to Google Fonts. Their OFL 1.1 licenses are in [`src/assets/fonts/`](src/assets/fonts/) and the build copies them to `dist/licencias/`.
 - **CSP** set in `src-tauri/tauri.conf.json` (in 1.1.0 it was `null`).
 - **Accessibility**: usable from the keyboard, visible focus in both themes, dialogs with `role="dialog"`, a linked title, trapped focus and `Esc` to close, accessible names on icon buttons and fields, and `prefers-reduced-motion` is respected.
-- **On-demand export**: ExcelJS and jsPDF only load when you export or import an Excel file. The main bundle drops from about 1,612 kB to about 380 kB.
+- **On-demand export**: ExcelJS and jsPDF only load when you export or import an Excel file. The main bundle drops from about 1,612 kB to about 390 kB.
 - **Other**: IDs from `crypto.randomUUID()`, a single place for rounding amounts (`utils/importe.ts`), updated dependencies and `cargo clippy` in CI.
 
 ### Features
