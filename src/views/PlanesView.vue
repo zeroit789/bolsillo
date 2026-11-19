@@ -55,6 +55,9 @@ const finanzas = useFinanzas();
 //     Contiene todos los textos visibles de la vista de Planes.
 // EN: Component translation function (ES/EN). Reactive to the active language.
 //     Holds every visible text of the Plans view.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   // ES: Cabecera
   // EN: Header
@@ -432,8 +435,11 @@ function borrar(plan: Plan) {
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
           <!-- ES: Nombre del plan / EN: Plan name -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("nombre") }}</label>
+            <label :for="`${uid}-nombre`" class="mb-1 block text-sm text-muted">{{
+              t("nombre")
+            }}</label>
             <input
+              :id="`${uid}-nombre`"
               v-model="form.nombre"
               type="text"
               :placeholder="t('nombrePlaceholder')"
@@ -445,8 +451,11 @@ function borrar(plan: Plan) {
           <!-- EN: Goal and already-saved in two columns -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-sm text-muted">{{ t("objetivo") }}</label>
+              <label :for="`${uid}-objetivo`" class="mb-1 block text-sm text-muted">{{
+                t("objetivo")
+              }}</label>
               <input
+                :id="`${uid}-objetivo`"
                 v-model.number="form.objetivo"
                 type="number"
                 min="0"
@@ -455,8 +464,11 @@ function borrar(plan: Plan) {
               />
             </div>
             <div>
-              <label class="mb-1 block text-sm text-muted">{{ t("yaAportado") }}</label>
+              <label :for="`${uid}-yaAportado`" class="mb-1 block text-sm text-muted">{{
+                t("yaAportado")
+              }}</label>
               <input
+                :id="`${uid}-yaAportado`"
                 v-model.number="form.aportado"
                 type="number"
                 min="0"
@@ -512,8 +524,11 @@ function borrar(plan: Plan) {
         <form class="mt-4 space-y-4" @submit.prevent="confirmarAporte">
           <!-- ES: Cantidad a aportar / EN: Amount to add -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("cantidad") }}</label>
+            <label :for="`${uid}-cantidad`" class="mb-1 block text-sm text-muted">{{
+              t("cantidad")
+            }}</label>
             <input
+              :id="`${uid}-cantidad`"
               v-model="cantidadAportar"
               type="text"
               inputmode="decimal"

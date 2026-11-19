@@ -35,6 +35,9 @@ const finanzas = useFinanzas();
 // ── 2. Traducciones (i18n) / Translations (i18n) ─────────────────────────────
 // ES: Función de traducción (ES/EN) con todos los textos visibles de la vista.
 // EN: Translation function (ES/EN) holding every visible text of the view.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   // ES: Cabecera y botón de alta / EN: Header & create button
   titulo: { es: "Cuentas", en: "Accounts" },
@@ -298,8 +301,11 @@ function borrar(cuenta: Cuenta) {
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
           <!-- ES: Nombre de la cuenta / EN: Account name -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("labelNombre") }}</label>
+            <label :for="`${uid}-labelNombre`" class="mb-1 block text-sm text-muted">{{
+              t("labelNombre")
+            }}</label>
             <input
+              :id="`${uid}-labelNombre`"
               v-model="form.nombre"
               type="text"
               :placeholder="t('phNombre')"
@@ -310,8 +316,11 @@ function borrar(cuenta: Cuenta) {
           <!-- ES: Saldo inicial (acepta coma decimal; se redondea a céntimos al guardar) -->
           <!-- EN: Initial balance (accepts a decimal comma; rounded to cents on save) -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("labelSaldoInicial") }}</label>
+            <label :for="`${uid}-labelSaldoInicial`" class="mb-1 block text-sm text-muted">{{
+              t("labelSaldoInicial")
+            }}</label>
             <input
+              :id="`${uid}-labelSaldoInicial`"
               v-model="form.saldoInicial"
               type="text"
               inputmode="decimal"

@@ -36,6 +36,9 @@ const finanzas = useFinanzas();
 // ── 2. Traducciones (i18n) / Translations (i18n) ──────────────────────────────
 // ES: Función de traducción (ES/EN) con todos los textos visibles de la vista.
 // EN: Translation function (ES/EN) holding every visible text in the view.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   // ES: Cabecera y botones de alta
   // EN: Header and create buttons
@@ -403,8 +406,11 @@ function borrar(deuda: Deuda) {
         <form class="mt-4 space-y-4" @submit.prevent="guardar">
           <!-- ES: Concepto / EN: Concept -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("labelConcepto") }}</label>
+            <label :for="`${uid}-labelConcepto`" class="mb-1 block text-sm text-muted">{{
+              t("labelConcepto")
+            }}</label>
             <input
+              :id="`${uid}-labelConcepto`"
               v-model="form.concepto"
               type="text"
               :placeholder="t('phConcepto')"
@@ -414,8 +420,11 @@ function borrar(deuda: Deuda) {
 
           <!-- ES: Tipo de deuda / EN: Debt type -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("labelTipo") }}</label>
+            <label :for="`${uid}-labelTipo`" class="mb-1 block text-sm text-muted">{{
+              t("labelTipo")
+            }}</label>
             <select
+              :id="`${uid}-labelTipo`"
               v-model="form.tipo"
               class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             >
@@ -428,8 +437,11 @@ function borrar(deuda: Deuda) {
           <!-- ES: Total y cuota mensual en dos columnas / EN: Total and monthly payment in two columns -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-sm text-muted">{{ t("labelTotal") }}</label>
+              <label :for="`${uid}-labelTotal`" class="mb-1 block text-sm text-muted">{{
+                t("labelTotal")
+              }}</label>
               <input
+                :id="`${uid}-labelTotal`"
                 v-model.number="form.total"
                 type="number"
                 min="0"
@@ -438,8 +450,11 @@ function borrar(deuda: Deuda) {
               />
             </div>
             <div>
-              <label class="mb-1 block text-sm text-muted">{{ t("labelCuotaMensual") }}</label>
+              <label :for="`${uid}-labelCuotaMensual`" class="mb-1 block text-sm text-muted">{{
+                t("labelCuotaMensual")
+              }}</label>
               <input
+                :id="`${uid}-labelCuotaMensual`"
                 v-model.number="form.cuotaMensual"
                 type="number"
                 min="0"
@@ -452,8 +467,11 @@ function borrar(deuda: Deuda) {
           <!-- ES: Ya pagado y mes de inicio en dos columnas / EN: Already paid and start month in two columns -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-sm text-muted">{{ t("labelYaPagado") }}</label>
+              <label :for="`${uid}-labelYaPagado`" class="mb-1 block text-sm text-muted">{{
+                t("labelYaPagado")
+              }}</label>
               <input
+                :id="`${uid}-labelYaPagado`"
                 v-model.number="form.pagadoInicial"
                 type="number"
                 min="0"
@@ -462,8 +480,11 @@ function borrar(deuda: Deuda) {
               />
             </div>
             <div>
-              <label class="mb-1 block text-sm text-muted">{{ t("labelMesInicio") }}</label>
+              <label :for="`${uid}-labelMesInicio`" class="mb-1 block text-sm text-muted">{{
+                t("labelMesInicio")
+              }}</label>
               <input
+                :id="`${uid}-labelMesInicio`"
                 v-model="form.inicioMes"
                 type="month"
                 class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
@@ -474,8 +495,11 @@ function borrar(deuda: Deuda) {
           <!-- ES: Día de cobro (opcional): día del mes en que se cobra la cuota (1-31) -->
           <!-- EN: Charge day (optional): day of the month the payment is charged (1-31) -->
           <div>
-            <label class="mb-1 block text-sm text-muted">{{ t("labelDiaCobro") }}</label>
+            <label :for="`${uid}-labelDiaCobro`" class="mb-1 block text-sm text-muted">{{
+              t("labelDiaCobro")
+            }}</label>
             <input
+              :id="`${uid}-labelDiaCobro`"
               v-model.number="form.diaPago"
               type="number"
               min="1"

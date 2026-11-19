@@ -45,6 +45,9 @@ import type { Signo, Subdivision } from "../types";
 //     según la store de ajustes; la UI se re-renderiza al cambiarlo.
 // EN: Visible texts of the modal (ES/EN). t("key") returns the active language
 //     from the settings store; the UI re-renders when the language changes.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   tituloEditar: { es: "Editar movimiento", en: "Edit transaction" },
   tituloNuevo: { es: "Nuevo movimiento", en: "New transaction" },
@@ -71,6 +74,11 @@ const t = crearT({
   sinCuenta: { es: "— Sin cuenta —", en: "— No account —" },
   dividirEnCategorias: { es: "Dividir en categorías", en: "Split into categories" },
   quitarParte: { es: "Quitar parte", en: "Remove part" },
+  // ES: Nombres accesibles de cada fila del reparto ("@n" = número de parte).
+  // EN: Accessible names of each split row ("@n" = part number).
+  categoriaParte: { es: "Categoría de la parte @n", en: "Category of part @n" },
+  importeParte: { es: "Importe de la parte @n", en: "Amount of part @n" },
+  quitarParteN: { es: "Quitar la parte @n", en: "Remove part @n" },
   anadirParte: { es: "+ añadir parte", en: "+ add part" },
   totalDividido: { es: "Total dividido", en: "Split total" },
   recibo: { es: "Recibo (opcional)", en: "Receipt (optional)" },
@@ -496,8 +504,9 @@ function guardar() {
         <!-- ES: Selector de clase del movimiento (controla recurrente + signo). -->
         <!-- EN: Transaction class selector (drives recurrente + signo). -->
         <div>
-          <label class="text-muted text-sm">{{ t("tipo") }}</label>
+          <label :for="`${uid}-tipo`" class="text-muted text-sm">{{ t("tipo") }}</label>
           <select
+            :id="`${uid}-tipo`"
             v-model="form.clase"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -509,8 +518,9 @@ function guardar() {
 
         <!-- ES: Concepto — obligatorio. / EN: Description (concepto) — mandatory. -->
         <div>
-          <label class="text-muted text-sm">{{ t("concepto") }}</label>
+          <label :for="`${uid}-concepto`" class="text-muted text-sm">{{ t("concepto") }}</label>
           <input
+            :id="`${uid}-concepto`"
             v-model="form.concepto"
             type="text"
             :placeholder="t('conceptoPlaceholder')"
@@ -522,12 +532,13 @@ function guardar() {
              EN: Row with amount + (date OR payment day depending on the class). -->
         <div class="flex gap-3">
           <div class="flex-1">
-            <label class="text-muted text-sm">{{ t("importe") }}</label>
+            <label :for="`${uid}-importe`" class="text-muted text-sm">{{ t("importe") }}</label>
             <!-- ES: Si el gasto está dividido, el importe es la SUMA de las partes:
                  mostramos esa suma y deshabilitamos el input manual. -->
             <!-- EN: If the expense is split, the amount is the SUM of the parts:
                  we show that sum and disable the manual input. -->
             <input
+              :id="`${uid}-importe`"
               v-if="esGastoPuntual && dividido"
               :value="euro(sumaPartes)"
               type="text"
@@ -538,6 +549,7 @@ function guardar() {
                  EN: Normal amount input (accepts decimals). -->
             <input
               v-else
+              :id="`${uid}-importe`"
               v-model="form.importe"
               type="number"
               min="0"
@@ -549,8 +561,9 @@ function guardar() {
           <!-- ES: La fecha solo importa en los movimientos puntuales. -->
           <!-- EN: The date only matters for one-off transactions. -->
           <div v-if="!esRecurrente" class="flex-1">
-            <label class="text-muted text-sm">{{ t("fecha") }}</label>
+            <label :for="`${uid}-fecha`" class="text-muted text-sm">{{ t("fecha") }}</label>
             <input
+              :id="`${uid}-fecha`"
               v-model="form.fecha"
               type="date"
               class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
@@ -559,8 +572,9 @@ function guardar() {
           <!-- ES: Día de pago: solo para fijos (recurrentes), opcional. -->
           <!-- EN: Payment day: only for fixed (recurring) transactions, optional. -->
           <div v-if="esRecurrente" class="flex-1">
-            <label class="text-muted text-sm">{{ t("diaPago") }}</label>
+            <label :for="`${uid}-diaPago`" class="text-muted text-sm">{{ t("diaPago") }}</label>
             <input
+              :id="`${uid}-diaPago`"
               v-model="form.diaPago"
               type="number"
               min="1"
@@ -574,8 +588,9 @@ function guardar() {
         <!-- ES: Selector de categoría agrupado con <optgroup>.
              EN: Category selector grouped with <optgroup>. -->
         <div>
-          <label class="text-muted text-sm">{{ t("categoria") }}</label>
+          <label :for="`${uid}-categoria`" class="text-muted text-sm">{{ t("categoria") }}</label>
           <select
+            :id="`${uid}-categoria`"
             v-model="form.categoria"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -588,8 +603,9 @@ function guardar() {
         <!-- ES: Comercio: texto libre opcional (Mercadona, Amazon…). -->
         <!-- EN: Merchant: optional free text (Mercadona, Amazon…). -->
         <div>
-          <label class="text-muted text-sm">{{ t("comercio") }}</label>
+          <label :for="`${uid}-comercio`" class="text-muted text-sm">{{ t("comercio") }}</label>
           <input
+            :id="`${uid}-comercio`"
             v-model="form.comercio"
             type="text"
             :placeholder="t('comercioPlaceholder')"
@@ -600,8 +616,9 @@ function guardar() {
         <!-- ES: Etiquetas: texto separado por comas; se convierte a array al guardar. -->
         <!-- EN: Tags: comma-separated text; converted to an array on save. -->
         <div>
-          <label class="text-muted text-sm">{{ t("etiquetas") }}</label>
+          <label :for="`${uid}-etiquetas`" class="text-muted text-sm">{{ t("etiquetas") }}</label>
           <input
+            :id="`${uid}-etiquetas`"
             v-model="form.tagsTexto"
             type="text"
             :placeholder="t('etiquetasPlaceholder')"
@@ -613,8 +630,9 @@ function guardar() {
         <!-- ES: Cuenta/monedero: opcional, para puntuales y recurrentes. -->
         <!-- EN: Account/wallet: optional, for both one-off and recurring. -->
         <div>
-          <label class="text-muted text-sm">{{ t("cuenta") }}</label>
+          <label :for="`${uid}-cuenta`" class="text-muted text-sm">{{ t("cuenta") }}</label>
           <select
+            :id="`${uid}-cuenta`"
             v-model="form.cuenta"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -644,6 +662,7 @@ function guardar() {
               <!-- ES: Categoría de la parte. / EN: Category of the part. -->
               <select
                 v-model="p.categoria"
+                :aria-label="t('categoriaParte').replace('@n', String(i + 1))"
                 class="flex-1 rounded-lg bg-surface-2 border border-border px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
               >
                 <option v-for="n in nombresCategoria" :key="n" :value="n">{{ n }}</option>
@@ -652,6 +671,7 @@ function guardar() {
               <!-- EN: Amount of the part (accepts a decimal comma). -->
               <input
                 v-model="p.importe"
+                :aria-label="t('importeParte').replace('@n', String(i + 1))"
                 type="text"
                 inputmode="decimal"
                 placeholder="0,00"
@@ -663,10 +683,11 @@ function guardar() {
                 type="button"
                 class="px-2 text-faint hover:text-danger transition-colors disabled:opacity-30"
                 :disabled="partes.length <= 2"
-                :title="t('quitarParte')"
+                :title="t('quitarParteN').replace('@n', String(i + 1))"
+                :aria-label="t('quitarParteN').replace('@n', String(i + 1))"
                 @click="quitarParte(i)"
               >
-                ✕
+                <span aria-hidden="true">✕</span>
               </button>
             </div>
 
@@ -688,10 +709,11 @@ function guardar() {
         <!-- ES: Recibo: SOLO para puntuales (no recurrentes). Imagen redimensionada.
              EN: Receipt: ONLY for one-off (non-recurring) transactions. Resized image. -->
         <div v-if="!esRecurrente">
-          <label class="text-muted text-sm">{{ t("recibo") }}</label>
+          <label :for="`${uid}-recibo`" class="text-muted text-sm">{{ t("recibo") }}</label>
           <!-- ES: Si aún no hay imagen, mostramos el selector de fichero. -->
           <!-- EN: If there is no image yet, show the file picker. -->
           <input
+            :id="`${uid}-recibo`"
             v-if="!form.recibo"
             type="file"
             accept="image/*"

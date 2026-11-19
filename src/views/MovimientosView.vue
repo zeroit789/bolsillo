@@ -33,6 +33,9 @@ import { crearT } from "../i18n";
 
 // ES: Diccionario de traducciones de esta vista (ES/EN). Claves cortas en camelCase.
 // EN: Translation dictionary of this view (ES/EN). Short camelCase keys.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   titulo: { es: "Movimientos", en: "Transactions" },
   anadir: { es: "+ Añadir", en: "+ Add" },
@@ -54,6 +57,7 @@ const t = crearT({
   eligeCategoria: { es: "Elige categoría…", en: "Choose category…" },
   cancelar: { es: "Cancelar", en: "Cancel" },
   guardar: { es: "Guardar", en: "Save" },
+  filtrarTipo: { es: "Filtrar por tipo", en: "Filter by type" },
   buscarPlaceholder: {
     es: "Buscar por concepto o categoría…",
     en: "Search by description or category…",
@@ -525,8 +529,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
 
         <!-- ES: Concepto / EN: Concept -->
         <div>
-          <label class="text-faint text-xs">{{ t("concepto") }}</label>
+          <label :for="`${uid}-concepto`" class="text-faint text-xs">{{ t("concepto") }}</label>
           <input
+            :id="`${uid}-concepto`"
             v-model="formConcepto"
             type="text"
             :placeholder="t('conceptoPlaceholder')"
@@ -536,8 +541,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
 
         <!-- ES: Importe (acepta coma decimal, se redondea al guardar) / EN: Amount (accepts a decimal comma, rounded on save) -->
         <div>
-          <label class="text-faint text-xs">{{ t("importe") }}</label>
+          <label :for="`${uid}-importe`" class="text-faint text-xs">{{ t("importe") }}</label>
           <input
+            :id="`${uid}-importe`"
             v-model="formImporte"
             type="text"
             inputmode="decimal"
@@ -548,8 +554,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
 
         <!-- ES: Signo: gasto por defecto / EN: Sign: expense by default -->
         <div>
-          <label class="text-faint text-xs">{{ t("tipo") }}</label>
+          <label :for="`${uid}-tipo`" class="text-faint text-xs">{{ t("tipo") }}</label>
           <select
+            :id="`${uid}-tipo`"
             v-model="formSigno"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
           >
@@ -560,8 +567,9 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
 
         <!-- ES: Categoría: select con optgroups por grupo / EN: Category: select with one optgroup per group -->
         <div>
-          <label class="text-faint text-xs">{{ t("categoria") }}</label>
+          <label :for="`${uid}-categoria`" class="text-faint text-xs">{{ t("categoria") }}</label>
           <select
+            :id="`${uid}-categoria`"
             v-model="formCategoria"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
           >
@@ -600,10 +608,12 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
           v-model="busqueda"
           type="text"
           :placeholder="t('buscarPlaceholder')"
+          :aria-label="t('buscarPlaceholder')"
           class="flex-1 min-w-40 rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
         />
         <select
           v-model="filtroTipo"
+          :aria-label="t('filtrarTipo')"
           class="rounded-lg bg-surface-2 border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
         >
           <option value="todos">{{ t("todos") }}</option>

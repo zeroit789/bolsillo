@@ -23,7 +23,7 @@
  * ===========================================================================*/
 
 // ── 1. Imports y stores / Imports & stores ────────────────────────────────────
-import { ref, computed } from "vue";
+import { ref, computed, useId } from "vue";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
 import { useAjustes } from "../stores/ajustes";
@@ -50,12 +50,16 @@ const ajustes = useAjustes();
 // EN: Dictionary of all visible onboarding texts (ES/EN). crearT returns a
 //     reactive translator, so reading t("clave") tracks the active language and
 //     the whole screen re-renders when it changes.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   titulo: { es: "Bienvenido a Bolsillo", en: "Welcome to Bolsillo" },
   subtitulo: { es: "Configúralo en 10 segundos.", en: "Set it up in 10 seconds." },
   etiquetaNombre: { es: "¿Cómo te llamas?", en: "What's your name?" },
   placeholderNombre: { es: "Tu nombre", en: "Your name" },
   etiquetaFecha: { es: "Fecha", en: "Date" },
+  mesManual: { es: "Mes de inicio", en: "Starting month" },
   fechaSistema: {
     es: "Usar la fecha de mi PC (recomendado)",
     en: "Use my computer's date (recommended)",
@@ -233,8 +237,11 @@ async function empezar() {
       <div class="space-y-4">
         <!-- ES: Campo de nombre (texto libre). / EN: Name field (free text). -->
         <div>
-          <label class="text-muted text-sm">{{ t("etiquetaNombre") }}</label>
+          <label :for="`${uid}-etiquetaNombre`" class="text-muted text-sm">{{
+            t("etiquetaNombre")
+          }}</label>
           <input
+            :id="`${uid}-etiquetaNombre`"
             v-model="nombre"
             type="text"
             :placeholder="t('placeholderNombre')"
@@ -245,8 +252,11 @@ async function empezar() {
         <!-- ES: Campo de fecha: elegir entre la fecha del PC o un mes manual.
              EN: Date field: choose between the PC's date or a manual month. -->
         <div>
-          <label class="text-muted text-sm">{{ t("etiquetaFecha") }}</label>
+          <label :for="`${uid}-etiquetaFecha`" class="text-muted text-sm">{{
+            t("etiquetaFecha")
+          }}</label>
           <select
+            :id="`${uid}-etiquetaFecha`"
             v-model="modoFecha"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -258,6 +268,7 @@ async function empezar() {
           <input
             v-if="modoFecha === 'manual'"
             v-model="mesElegido"
+            :aria-label="t('mesManual')"
             type="month"
             class="mt-2 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
@@ -266,8 +277,11 @@ async function empezar() {
         <!-- ES: Datos iniciales: vacío o ejemplo. Nada se guarda hasta "Empezar".
              EN: Initial data: empty or samples. Nothing is saved until "Get started". -->
         <div>
-          <label class="text-muted text-sm">{{ t("etiquetaDatos") }}</label>
+          <label :for="`${uid}-etiquetaDatos`" class="text-muted text-sm">{{
+            t("etiquetaDatos")
+          }}</label>
           <select
+            :id="`${uid}-etiquetaDatos`"
             v-model="datosIniciales"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -282,8 +296,11 @@ async function empezar() {
              EN: Optional lock: none, PIN or password. When set, two credential
              fields and a warning note appear below. -->
         <div>
-          <label class="text-muted text-sm">{{ t("etiquetaBloqueo") }}</label>
+          <label :for="`${uid}-etiquetaBloqueo`" class="text-muted text-sm">{{
+            t("etiquetaBloqueo")
+          }}</label>
           <select
+            :id="`${uid}-etiquetaBloqueo`"
             v-model="tipoBloqueo"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -300,6 +317,7 @@ async function empezar() {
             <!-- ES: Introducción de la credencial. / EN: Credential entry. -->
             <input
               v-model="credencial"
+              :aria-label="tipoBloqueo === 'pin' ? t('placeholderPin') : t('placeholderPassword')"
               :type="tipoBloqueo === 'pin' ? 'tel' : 'password'"
               :inputmode="tipoBloqueo === 'pin' ? 'numeric' : 'text'"
               :maxlength="tipoBloqueo === 'pin' ? 6 : undefined"
@@ -310,6 +328,7 @@ async function empezar() {
                  EN: Credential confirmation (must match the one above). -->
             <input
               v-model="credencialRep"
+              :aria-label="t('placeholderRepetir')"
               :type="tipoBloqueo === 'pin' ? 'tel' : 'password'"
               :inputmode="tipoBloqueo === 'pin' ? 'numeric' : 'text'"
               :maxlength="tipoBloqueo === 'pin' ? 6 : undefined"

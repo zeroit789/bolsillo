@@ -21,7 +21,7 @@
  *   5. Copia: exportar/importar (.json) / Backup: export/import (.json)
  *   6. Categorías personalizadas / Custom categories
  * ===========================================================================*/
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, useId } from "vue";
 import { useAjustes } from "../stores/ajustes";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
@@ -54,6 +54,9 @@ const finanzas = useFinanzas();
        (reactive) makes the UI re-render itself when the language changes.
        Not translated: category names (data) and currency/ISO codes.
    --------------------------------------------------------------------------- */
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   // ES: Título general de la vista
   // EN: General title of the view
@@ -608,9 +611,10 @@ function quitarCategoria(nombre: string): void {
 
       <!-- ES: Conmutador de tema: el botón activo se resalta con bg-brand.
            EN: Theme switch: the active button is highlighted with bg-brand. -->
-      <div class="flex gap-3 mt-4">
+      <div class="flex gap-3 mt-4" role="group" :aria-label="t('apariencia')">
         <button
           class="flex-1 rounded-lg px-4 py-2 font-medium border transition-colors"
+          :aria-pressed="ajustes.tema === 'oscuro'"
           :class="
             ajustes.tema === 'oscuro'
               ? 'bg-brand border-brand text-white'
@@ -622,6 +626,7 @@ function quitarCategoria(nombre: string): void {
         </button>
         <button
           class="flex-1 rounded-lg px-4 py-2 font-medium border transition-colors"
+          :aria-pressed="ajustes.tema === 'claro'"
           :class="
             ajustes.tema === 'claro'
               ? 'bg-brand border-brand text-white'
@@ -640,8 +645,9 @@ function quitarCategoria(nombre: string): void {
            watch syncs the formatter, so the whole UI (amounts via euro())
            updates itself when it changes. -->
       <div class="mt-5">
-        <label class="text-muted text-sm">{{ t("moneda") }}</label>
+        <label :for="`${uid}-moneda`" class="text-muted text-sm">{{ t("moneda") }}</label>
         <select
+          :id="`${uid}-moneda`"
           v-model="ajustes.moneda"
           class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
         >
@@ -661,10 +667,13 @@ function quitarCategoria(nombre: string): void {
            like the theme switch. Header styled with the same label style as
            the currency selector. -->
       <div class="mt-5">
-        <label class="text-muted text-sm">{{ t("idioma") }}</label>
-        <div class="flex gap-3 mt-1">
+        <!-- ES: Encabezado del grupo de botones (no es un <label>: no hay un control único).
+             EN: Heading of the button group (not a <label>: there is no single control). -->
+        <p :id="`${uid}-idioma`" class="text-muted text-sm">{{ t("idioma") }}</p>
+        <div class="flex gap-3 mt-1" role="group" :aria-labelledby="`${uid}-idioma`">
           <button
             class="flex-1 rounded-lg px-4 py-2 font-medium border transition-colors"
+            :aria-pressed="ajustes.idioma === 'es'"
             :class="
               ajustes.idioma === 'es'
                 ? 'bg-brand border-brand text-white'
@@ -676,6 +685,7 @@ function quitarCategoria(nombre: string): void {
           </button>
           <button
             class="flex-1 rounded-lg px-4 py-2 font-medium border transition-colors"
+            :aria-pressed="ajustes.idioma === 'en'"
             :class="
               ajustes.idioma === 'en'
                 ? 'bg-brand border-brand text-white'
@@ -705,8 +715,11 @@ function quitarCategoria(nombre: string): void {
       <div v-if="!ajustes.bloqueoActivo" class="mt-4 space-y-3">
         <!-- ES: Selector del tipo de credencial. / EN: Credential type selector. -->
         <div>
-          <label class="text-muted text-sm">{{ t("tipoBloqueo") }}</label>
+          <label :for="`${uid}-tipoBloqueo`" class="text-muted text-sm">{{
+            t("tipoBloqueo")
+          }}</label>
           <select
+            :id="`${uid}-tipoBloqueo`"
             v-model="tipoBloqueo"
             class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -718,10 +731,11 @@ function quitarCategoria(nombre: string): void {
         <!-- ES: Campo de credencial (PIN o contraseña según el tipo).
              EN: Credential field (PIN or password depending on the type). -->
         <div>
-          <label class="text-muted text-sm">
+          <label :for="`${uid}-labelPin`" class="text-muted text-sm">
             {{ tipoBloqueo === "pin" ? t("labelPin") : t("labelPassword") }}
           </label>
           <input
+            :id="`${uid}-labelPin`"
             v-model="credencial"
             :type="tipoBloqueo === 'pin' ? 'tel' : 'password'"
             :inputmode="tipoBloqueo === 'pin' ? 'numeric' : 'text'"
@@ -733,10 +747,11 @@ function quitarCategoria(nombre: string): void {
 
         <!-- ES: Repetir credencial para confirmar. / EN: Repeat credential to confirm. -->
         <div>
-          <label class="text-muted text-sm">
+          <label :for="`${uid}-repetirPin`" class="text-muted text-sm">
             {{ tipoBloqueo === "pin" ? t("repetirPin") : t("repetirPassword") }}
           </label>
           <input
+            :id="`${uid}-repetirPin`"
             v-model="credencialRepetir"
             :type="tipoBloqueo === 'pin' ? 'tel' : 'password'"
             :inputmode="tipoBloqueo === 'pin' ? 'numeric' : 'text'"
@@ -778,8 +793,9 @@ function quitarCategoria(nombre: string): void {
         <div class="mt-2 border-t border-border pt-4 space-y-3">
           <p class="text-sm font-medium text-ink">{{ t("cambiarCredencial") }}</p>
           <div>
-            <label class="text-muted text-sm">{{ t("tipoNuevo") }}</label>
+            <label :for="`${uid}-tipoNuevo`" class="text-muted text-sm">{{ t("tipoNuevo") }}</label>
             <select
+              :id="`${uid}-tipoNuevo`"
               v-model="tipoNuevo"
               class="mt-1 w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
             >
@@ -791,6 +807,7 @@ function quitarCategoria(nombre: string): void {
             v-model="credActual"
             type="password"
             :placeholder="t('phCredActual')"
+            :aria-label="t('phCredActual')"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
           <input
@@ -799,6 +816,7 @@ function quitarCategoria(nombre: string): void {
             :inputmode="tipoNuevo === 'pin' ? 'numeric' : 'text'"
             :maxlength="tipoNuevo === 'pin' ? 6 : undefined"
             :placeholder="tipoNuevo === 'pin' ? t('phNuevoPin') : t('phNuevaPassword')"
+            :aria-label="tipoNuevo === 'pin' ? t('phNuevoPin') : t('phNuevaPassword')"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
           <input
@@ -807,6 +825,7 @@ function quitarCategoria(nombre: string): void {
             :inputmode="tipoNuevo === 'pin' ? 'numeric' : 'text'"
             :maxlength="tipoNuevo === 'pin' ? 6 : undefined"
             :placeholder="t('phRepetirNueva')"
+            :aria-label="t('phRepetirNueva')"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           />
           <button
@@ -911,6 +930,7 @@ function quitarCategoria(nombre: string): void {
           v-model="nuevaCategoria"
           type="text"
           :placeholder="t('phNuevaCategoria')"
+          :aria-label="t('phNuevaCategoria')"
           class="flex-1 rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           @keyup.enter="anadirCategoria"
         />

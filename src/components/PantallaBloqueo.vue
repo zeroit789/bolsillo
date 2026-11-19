@@ -110,6 +110,7 @@ async function entrar() {
       <!-- EN: Credential input; Enter triggers the unlock action -->
       <input
         v-model="credencial"
+        :aria-label="esPin ? t('introducePin') : t('introducePassword')"
         type="password"
         :inputmode="esPin ? 'numeric' : 'text'"
         :maxlength="esPin ? 6 : undefined"

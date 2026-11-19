@@ -225,6 +225,7 @@ async function descargar() {
           v-model="credencial"
           type="password"
           :placeholder="t('phCredencial')"
+          :aria-label="t('phCredencial')"
           class="flex-1 rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
         />
         <button

@@ -74,6 +74,8 @@ const t = crearT({
   ajustes: { es: "Ajustes", en: "Settings" },
   hola: { es: "Hola", en: "Hi" },
   cargando: { es: "Cargando…", en: "Loading…" },
+  navegacion: { es: "Secciones", en: "Sections" },
+  mesSeleccionado: { es: "Mes", en: "Month" },
   // ES: Textos de las notificaciones nativas. "@x/@c/@i/@d" son marcadores que se
   //     sustituyen al llamar por el valor dinámico (concepto, importe, día) —
   //     crearT no interpola, así que sustituimos a mano tras traducir.
@@ -435,6 +437,7 @@ onMounted(async () => {
         </p>
         <select
           v-if="mostrarMes"
+          :aria-label="t('mesSeleccionado')"
           :value="f.mesSeleccionado"
           @change="f.seleccionarMes(($event.target as HTMLSelectElement).value)"
           class="rounded-lg bg-surface border border-border px-3 py-2 text-ink outline-none focus:border-brand no-select"

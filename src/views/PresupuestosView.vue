@@ -28,7 +28,7 @@
 //     catálogo de categorías (nombres + colores) y la fábrica del helper i18n.
 // EN: Vue reactivity, central finanzas store, currency formatter, category
 //     catalogue (names + colours) and the i18n helper factory.
-import { ref, computed } from "vue";
+import { ref, computed, useId } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
 import { importeDesdeTexto } from "../utils/importe";
@@ -42,6 +42,9 @@ const finanzas = useFinanzas();
 // ── 2. Traducciones (textos de UI) / Translations (UI texts) ──────────────────
 // ES: Función de traducción del componente (ES/EN). Reúne todos los textos visibles.
 // EN: Component translation function (ES/EN). Gathers every visible text.
+// ES: Prefijo único del componente para enlazar cada <label for> con su control.
+// EN: Unique component prefix to link each <label for> to its control.
+const uid = useId();
 const t = crearT({
   titulo: { es: "Presupuestos", en: "Budgets" },
   subtitulo: {
@@ -221,8 +224,11 @@ function borrarTope(categoria: string): void {
       >
         <!-- ES: Selector de categoría / EN: Category selector -->
         <div>
-          <label class="mb-1 block text-sm text-muted">{{ t("categoria") }}</label>
+          <label :for="`${uid}-categoria`" class="mb-1 block text-sm text-muted">{{
+            t("categoria")
+          }}</label>
           <select
+            :id="`${uid}-categoria`"
             v-model="categoriaSel"
             class="w-full rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
           >
@@ -234,8 +240,11 @@ function borrarTope(categoria: string): void {
 
         <!-- ES: Importe del tope (€) / EN: Cap amount (€) -->
         <div>
-          <label class="mb-1 block text-sm text-muted">{{ t("topeMensual") }}</label>
+          <label :for="`${uid}-topeMensual`" class="mb-1 block text-sm text-muted">{{
+            t("topeMensual")
+          }}</label>
           <input
+            :id="`${uid}-topeMensual`"
             v-model="limiteTexto"
             type="text"
             inputmode="decimal"
