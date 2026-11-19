@@ -2,7 +2,7 @@
 # EN: Cargo manifest of Bolsillo's Rust backend (Tauri 2).
 [package]
 name = "bolsillo"
-version = "1.1.0"
+version = "1.2.0"
 description = "Bolsillo - personal finance manager / gestor de gastos personales"
 authors = ["Daniel Castanos"]
 edition = "2021"
