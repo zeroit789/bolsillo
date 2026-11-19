@@ -214,6 +214,25 @@ describe("H1 en el fichero cifrado / H1 in the encrypted file", () => {
     expect(antes).not.toBeNull();
   });
 
+  it("sin bloqueo y contenido alterado: error y rescate, no una pantalla vacía / no lock, altered content", async () => {
+    await primerArranque();
+    simulador.estado.cifradoAlterado = true;
+    const s = await reabrir();
+    expect(s.fallo).toBe("danado");
+    expect(s.rescate).toMatch(/^rescate\/datos-/);
+    expect(s.desbloqueado).toBe(false);
+  });
+
+  it("con PIN y contenido alterado: error de daño, no PIN incorrecto / with a PIN, altered content", async () => {
+    await primerArranque();
+    await useSesion().configurarBloqueo("pin", "4831");
+    simulador.estado.cifradoAlterado = true;
+    const s = await reabrir();
+    expect(await s.desbloquear("4831")).toBe(false);
+    expect(s.fallo).toBe("danado");
+    expect(s.error).not.toBe("credIncorrecta");
+  });
+
   it("fichero de una versión más nueva: error version / file from a newer version", async () => {
     await primerArranque();
     simulador.estado.principalRoto = "version";
@@ -376,6 +395,19 @@ describe("copias / backups", () => {
     expect(s.desbloqueado).toBe(true);
     expect(useFinanzas().planes).toEqual([]);
     expect((await s.listarCopias()).some((c) => c.nombre.startsWith("antes-"))).toBe(true);
+  });
+
+  it("no restaura si no se puede guardar lo pendiente / does not restore if pending changes cannot be saved", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    const vieja = (await s.listarCopias())[0].nombre;
+    useFinanzas().addPlan({ nombre: "Sin guardar", objetivo: 10, aportado: 0 });
+    simulador.estado.fallarGuardado = true;
+    await expect(s.restaurarCopia(vieja)).rejects.toThrow("guardado-pendiente");
+    expect(s.desbloqueado).toBe(true);
+    expect(useFinanzas().planes.map((p) => p.nombre)).toEqual(["Sin guardar"]);
+    simulador.estado.fallarGuardado = false;
   });
 
   it("copia cifrada de ida y vuelta en una instalación limpia / encrypted backup round trip on a clean install", async () => {

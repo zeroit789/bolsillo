@@ -64,6 +64,9 @@ interface EstadoSim {
   // ES: fallos inyectados / EN: injected failures
   fallarGuardado: boolean;
   fallarVerificacion: boolean;
+  // ES: cabecera legible pero contenido que no autentica (Rust: "danado")
+  // EN: readable header but content that does not authenticate (Rust: "danado")
+  cifradoAlterado: boolean;
   proximoArchivo: string | null;
   cancelarDialogo: boolean;
 }
@@ -86,6 +89,7 @@ function vacio(): EstadoSim {
     escrituras: 0,
     fallarGuardado: false,
     fallarVerificacion: false,
+    cifradoAlterado: false,
     proximoArchivo: null,
     cancelarDialogo: false,
   };
@@ -225,6 +229,7 @@ const comandos: Record<string, (a: Args) => unknown> = {
     if (st.principalRoto) err(st.principalRoto);
     const f = st.principal ?? err("vacio");
     if (f.bloqueo !== "ninguno" && a.credencial !== f.credencial) err("credencial");
+    if (st.cifradoAlterado) err("danado");
     st.abierta = { dekId: f.dekId, porRecuperacion: false };
     return f.datos;
   },

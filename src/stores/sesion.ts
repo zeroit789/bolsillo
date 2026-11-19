@@ -461,13 +461,20 @@ export const useSesion = defineStore("sesion", () => {
     if (e.hayFichero) {
       modo.value = "fichero";
       if (!e.legible) {
-        await entrarEnFallo(e.motivo ?? "danado");
+        await entrarEnFallo(e.motivo === "version" ? "version" : "danado");
         return;
       }
       sincronizarAjustes(e.bloqueo);
       await comprobarLegado(e);
-      if (e.bloqueo === "ninguno") await abrirFichero();
-      else desbloqueado.value = false;
+      if (e.bloqueo !== "ninguno") {
+        desbloqueado.value = false;
+        return;
+      }
+      // ES: Sin bloqueo no hay credencial que pedir: si no abre, es la
+      //     pantalla de error (nunca una pantalla vacía).
+      // EN: Without a lock there is no credential to ask for: if it does not
+      //     open, it is the error screen (never a blank screen).
+      if (!(await abrirFichero()) && !fallo.value) await entrarEnFallo("danado");
       return;
     }
     if (e.hayMarca || e.hayCopias || e.hayRescate) {
@@ -806,14 +813,19 @@ export const useSesion = defineStore("sesion", () => {
     return boveda.listarCopias();
   }
 
-  // ES: Restaura una copia automática: guarda antes lo pendiente, Rust deja el
+  // ES: Restaura una copia automática: guarda antes lo pendiente (si no puede,
+  //     lanza "guardado-pendiente" y no toca nada), Rust deja el
   //     principal actual como "antes-…" y el almacén queda bloqueado; después
   //     se vuelve a arrancar (pide la credencial que tuviera esa copia).
   // EN: Restores an automatic backup: first saves what is pending, Rust keeps
   //     the current main file as "antes-…" and the store is left locked; then
   //     it boots again (asks for the credential that backup had).
   async function restaurarCopia(nombre: string) {
-    if (desbloqueado.value) await vaciarGuardado();
+    // ES: Si lo pendiente no se puede guardar, no se restaura: "antes-…" sale
+    //     del disco y esos cambios se perderían.
+    // EN: If what is pending cannot be saved, nothing is restored: "antes-…"
+    //     comes from disk and those changes would be lost.
+    if (desbloqueado.value && !(await vaciarGuardado())) throw new Error("guardado-pendiente");
     await conGuardadoEnPausa(async () => {
       await boveda.restaurarCopia(nombre);
       bloqueando = true;

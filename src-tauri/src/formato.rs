@@ -428,8 +428,12 @@ impl Fichero {
         })
     }
 
-    // ES: Saca la DEK: sin bloqueo, con la ofuscación; con bloqueo, con la llave dada.
-    // EN: Gets the DEK: without a lock, with obfuscation; with a lock, with the given key.
+    // ES: Saca la DEK: sin bloqueo, con la ofuscación; con bloqueo, con la llave
+    //     dada. Sin bloqueo la clave es fija, así que si no abre es daño seguro
+    //     (Danado), nunca una credencial mala.
+    // EN: Gets the DEK: without a lock, with obfuscation; with a lock, with the
+    //     given key. Without a lock the key is fixed, so if it does not open it
+    //     is certain damage (Danado), never a wrong credential.
     pub fn abrir_dek(&self, llave: Option<Llave>) -> Result<Clave, ErrorAlmacen> {
         if self.bloqueo == Bloqueo::Ninguno {
             let e = self
@@ -438,7 +442,8 @@ impl Fichero {
                 .as_ref()
                 .ok_or(ErrorAlmacen::Danado)?;
             let kek = Zeroizing::new(CLAVE_OFUSCACION);
-            return abrir_con_kek(&kek, "ofuscacion", &self.dek_id, e);
+            return abrir_con_kek(&kek, "ofuscacion", &self.dek_id, e)
+                .map_err(|_| ErrorAlmacen::Danado);
         }
         match llave {
             Some(Llave::Credencial(c)) => {
@@ -461,9 +466,21 @@ impl Fichero {
         }
     }
 
-    // ES: Descifra el contenido con la DEK. / EN: Decrypts the content with the DEK.
+    // ES: Descifra el contenido con la DEK. Solo se llama con una DEK que ya
+    //     abrió su envoltura (es la buena), así que si el contenido no
+    //     autentica es daño seguro: Danado, no "credencial incorrecta" (H1).
+    // EN: Decrypts the content with the DEK. It is only called with a DEK that
+    //     already opened its wrapping (it is the right one), so if the content
+    //     does not authenticate it is certain damage: Danado, not "wrong
+    //     credential" (H1).
     pub fn descifrar_datos(&self, dek: &Clave) -> Result<Zeroizing<Vec<u8>>, ErrorAlmacen> {
-        descifrar_b64(dek, &aad_datos(self.tipo, &self.dek_id), &self.datos)
+        descifrar_b64(dek, &aad_datos(self.tipo, &self.dek_id), &self.datos).map_err(|e| {
+            if e == ErrorAlmacen::Credencial {
+                ErrorAlmacen::Danado
+            } else {
+                e
+            }
+        })
     }
 
     // ES: Sustituye el contenido cifrado (misma cabecera y misma DEK).
@@ -610,10 +627,7 @@ mod tests {
     fn cambiar_el_tipo_o_el_dek_id_rompe_el_descifrado() {
         let (mut f, dek) = fichero(Bloqueo::Ninguno);
         f.tipo = TipoFichero::Copia;
-        assert_eq!(
-            f.descifrar_datos(&dek).err(),
-            Some(ErrorAlmacen::Credencial)
-        );
+        assert_eq!(f.descifrar_datos(&dek).err(), Some(ErrorAlmacen::Danado));
     }
 
     #[test]

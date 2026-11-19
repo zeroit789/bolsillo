@@ -1040,6 +1040,48 @@ mod tests {
         assert_eq!(rescatados, 2);
     }
 
+    // ES: Altera un campo base64 del principal en disco (cambia un byte).
+    // EN: Alters a base64 field of the main file on disk (changes one byte).
+    fn alterar(b: &Boveda, puntero: &str) {
+        let mut v: serde_json::Value =
+            serde_json::from_slice(&b.dir.leer(PRINCIPAL).unwrap().unwrap()).unwrap();
+        let campo = v.pointer_mut(puntero).unwrap();
+        let mut bytes = crate::formato::de_b64(campo.as_str().unwrap()).unwrap();
+        bytes[0] ^= 1;
+        *campo = crate::formato::b64(&bytes).into();
+        b.dir
+            .escribir(PRINCIPAL, &serde_json::to_vec(&v).unwrap())
+            .unwrap();
+    }
+
+    #[test]
+    fn contenido_alterado_es_danado_no_credencial() {
+        // ES: Con PIN: el PIN bueno abre la envoltura, el contenido no autentica → dañado.
+        // EN: With a PIN: the right PIN opens the wrapping, the content fails → damaged.
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        b.bloquear();
+        alterar(&b, "/datos/ct");
+        assert!(b.estado().legible);
+        assert_eq!(b.abrir(Some("4831")).err(), Some(ErrorAlmacen::Danado));
+        assert_eq!(b.abrir(Some("0000")).err(), Some(ErrorAlmacen::Credencial));
+        // ES: Sin bloqueo: contenido o envoltura de ofuscación alterados → dañado.
+        // EN: Without a lock: altered content or obfuscation wrapping → damaged.
+        let (_t2, mut c) = boveda();
+        c.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        c.bloquear();
+        alterar(&c, "/datos/ct");
+        assert_eq!(c.abrir(None).err(), Some(ErrorAlmacen::Danado));
+        let (_t3, mut d) = boveda();
+        d.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        d.bloquear();
+        alterar(&d, "/envolturas/ofuscacion/ct");
+        assert_eq!(d.abrir(None).err(), Some(ErrorAlmacen::Danado));
+    }
+
     #[test]
     fn version_nueva_no_se_toca() {
         let (_t, mut b) = boveda();
