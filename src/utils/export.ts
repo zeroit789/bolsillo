@@ -21,14 +21,39 @@
      5. Exportar historial a CSV / Export history to CSV
    =========================================================================== */
 
-import ExcelJS from "exceljs"; // ES: librería para generar hojas de cálculo .xlsx / EN: library to build .xlsx spreadsheets
-import { jsPDF } from "jspdf"; // ES: generador de PDF en cliente / EN: client-side PDF generator
-import autoTable from "jspdf-autotable"; // ES: plugin de tablas para jsPDF (v5: autoTable(doc, opts)) / EN: tables plugin for jsPDF (v5: autoTable(doc, opts))
 import { save } from "@tauri-apps/plugin-dialog"; // ES: diálogo nativo "Guardar como" / EN: native "Save as" dialog
 import { invoke } from "@tauri-apps/api/core"; // ES: puente para llamar comandos Rust / EN: bridge to call Rust commands
 
 import type { LineaMes, EstadoDeuda, Plan } from "../types"; // ES: línea unificada + estado de deuda + plan de ahorro / EN: unified line + debt status + savings plan
 import type { ResumenMes } from "../stores/finanzas"; // ES: totales calculados de un mes / EN: computed totals of a month
+
+/* ---------------------------------------------------------------------------
+   ES: Carga bajo demanda de las librerías pesadas (ExcelJS, jsPDF y su plugin
+       autoTable; jsPDF arrastra además html2canvas y DOMPurify). Con import()
+       dinámico Vite las saca a chunks aparte que solo se descargan al
+       exportar, en vez de ir en el bundle principal que se carga al arrancar.
+       Tras la primera carga el navegador reutiliza el módulo ya cargado.
+   EN: On-demand loading of the heavy libraries (ExcelJS, jsPDF and its
+       autoTable plugin; jsPDF also pulls in html2canvas and DOMPurify). With
+       dynamic import() Vite splits them into separate chunks that are only
+       fetched when exporting, instead of living in the main bundle loaded at
+       startup. After the first load the browser reuses the loaded module.
+   --------------------------------------------------------------------------- */
+// ES: Devuelve ExcelJS (librería para generar hojas .xlsx).
+// EN: Returns ExcelJS (library to build .xlsx sheets).
+async function cargarExcelJS() {
+  return (await import("exceljs")).default;
+}
+
+// ES: Devuelve el constructor jsPDF y autoTable (API v5: autoTable(doc, opts)).
+// EN: Returns the jsPDF constructor and autoTable (v5 API: autoTable(doc, opts)).
+async function cargarPdf() {
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  return { jsPDF, autoTable };
+}
 
 /* ---------------------------------------------------------------------------
    ES: Formateador de moneda en euros con convención española (1.234,56 €).
@@ -131,6 +156,8 @@ export async function exportarMesXLSX(
 ): Promise<void> {
   // ES: Libro y hoja de trabajo.
   // EN: Workbook and worksheet.
+  // ES: Carga ExcelJS solo ahora, al exportar. / EN: Load ExcelJS only now, when exporting.
+  const ExcelJS = await cargarExcelJS();
   const wb = new ExcelJS.Workbook();
   const hoja = wb.addWorksheet("Movimientos");
 
@@ -317,6 +344,8 @@ export async function exportarMesPDF(
 ): Promise<void> {
   // ES: Documento A4 vertical por defecto.
   // EN: A4 portrait document by default.
+  // ES: Carga jsPDF y autoTable solo ahora, al exportar. / EN: Load jsPDF and autoTable only now, when exporting.
+  const { jsPDF, autoTable } = await cargarPdf();
   const doc = new jsPDF();
 
   // ES: Título del documento.
@@ -460,6 +489,8 @@ export async function exportarMesPDF(
 export async function exportarHistorialXLSX(filas: ResumenMes[]): Promise<void> {
   // ES: Libro y hoja del historial.
   // EN: History workbook and sheet.
+  // ES: Carga ExcelJS solo ahora, al exportar. / EN: Load ExcelJS only now, when exporting.
+  const ExcelJS = await cargarExcelJS();
   const wb = new ExcelJS.Workbook();
   const hoja = wb.addWorksheet("Historial");
 
@@ -518,6 +549,8 @@ export async function exportarHistorialXLSX(filas: ResumenMes[]): Promise<void> 
 export async function exportarHistorialPDF(filas: ResumenMes[]): Promise<void> {
   // ES: Documento A4 vertical.
   // EN: A4 portrait document.
+  // ES: Carga jsPDF y autoTable solo ahora, al exportar. / EN: Load jsPDF and autoTable only now, when exporting.
+  const { jsPDF, autoTable } = await cargarPdf();
   const doc = new jsPDF();
 
   // ES: Título.
