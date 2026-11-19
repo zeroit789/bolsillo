@@ -7,7 +7,7 @@
  *       - fórmulas -> su resultado guardado; texto enriquecido -> texto plano;
  *         enlaces -> su texto; errores de celda (#N/A…) -> null;
  *       - filas totalmente vacías, fuera; todas las filas con el mismo ancho
- *         (el número de columnas de la hoja).
+ *         (hasta la última columna con contenido), con topes de tamaño.
  *     ExcelJS es pesado: se carga con import() dinámico, como en export.ts, para
  *     que Vite lo saque a un trozo aparte que solo se descarga al importar.
  *     Las fechas de ExcelJS llegan como Date a medianoche UTC: se devuelven tal
@@ -17,8 +17,8 @@
  *       - trimmed text (or null if it ends up empty), number, Date or null;
  *       - formulas -> their stored result; rich text -> plain text; hyperlinks
  *         -> their text; cell errors (#N/A…) -> null;
- *       - fully empty rows dropped; every row with the same width (the sheet's
- *         column count).
+ *       - fully empty rows dropped; every row with the same width (up to the
+ *         last column with content), with size caps.
  *     ExcelJS is heavy: it is loaded with a dynamic import(), as in export.ts,
  *     so Vite splits it into a separate chunk only fetched when importing.
  *     ExcelJS dates arrive as Date at UTC midnight: they are returned as they
@@ -28,6 +28,24 @@
 // ES: Celda simple de un extracto (CSV da siempre texto; XLSX, de todo).
 // EN: Plain statement cell (CSV always gives text; XLSX, anything).
 export type Celda = string | number | Date | null;
+
+// ES: Topes de tamaño: un extracto real cabe de sobra; una hoja más grande
+//     (o con una celda perdida en la columna XFD) se rechaza en vez de
+//     bloquear la app reservando millones de celdas.
+// EN: Size caps: a real statement fits easily; a bigger sheet (or one with a
+//     stray cell in column XFD) is rejected instead of freezing the app while
+//     allocating millions of cells.
+export const MAX_COLUMNAS = 64;
+export const MAX_FILAS = 50_000;
+
+// ES: Error de hoja demasiado grande (por columnas o por filas).
+// EN: Too-large sheet error (by columns or by rows).
+export class ErrorXLSX extends Error {
+  constructor(public readonly motivo: "columnas" | "filas") {
+    super(`Hoja demasiado grande (${motivo}) / Sheet too large (${motivo})`);
+    this.name = "ErrorXLSX";
+  }
+}
 
 // ES: Opciones: hoja por nombre o por índice (0 = la primera, por defecto).
 // EN: Options: sheet by name or by index (0 = the first one, by default).
@@ -95,15 +113,30 @@ export async function leerXLSX(
   const hoja = typeof pedida === "string" ? libro.getWorksheet(pedida) : libro.worksheets[pedida];
   if (!hoja) throw new Error(`Hoja no encontrada / Sheet not found: ${String(pedida)}`);
 
-  const ancho = hoja.columnCount;
-  const filas: Celda[][] = [];
-  for (let r = 1; r <= hoja.rowCount; r++) {
-    const fila = hoja.getRow(r);
-    const celdas: Celda[] = [];
-    for (let c = 1; c <= ancho; c++) celdas.push(valorCelda(fila.getCell(c).value));
-    // ES: Filas totalmente vacías, fuera (como las líneas vacías del CSV).
-    // EN: Fully empty rows dropped (like empty CSV lines).
-    if (celdas.some((x) => x !== null)) filas.push(celdas);
+  // ES: Solo se recorren filas y celdas CON contenido (eachRow/eachCell), así
+  //     una celda suelta en la fila 900.000 no obliga a recorrer el hueco. Se
+  //     guardan dispersas y luego se rellenan al ancho real con null.
+  // EN: Only rows and cells WITH content are walked (eachRow/eachCell), so a
+  //     stray cell on row 900,000 does not force walking the gap. They are
+  //     stored sparse and then padded with null to the real width.
+  const dispersas: Map<number, Celda>[] = [];
+  let ancho = 0;
+  hoja.eachRow((fila) => {
+    const celdas = new Map<number, Celda>();
+    fila.eachCell((celda, columna) => {
+      const v = valorCelda(celda.value);
+      if (v === null) return;
+      celdas.set(columna, v);
+      ancho = Math.max(ancho, columna);
+    });
+    // ES: Filas sin nada útil, fuera (como las líneas vacías del CSV).
+    // EN: Rows with nothing useful dropped (like empty CSV lines).
+    if (celdas.size) dispersas.push(celdas);
+  });
+  if (ancho > MAX_COLUMNAS || dispersas.length > MAX_FILAS) {
+    throw new ErrorXLSX(ancho > MAX_COLUMNAS ? "columnas" : "filas");
   }
-  return filas;
+  return dispersas.map((celdas) =>
+    Array.from({ length: ancho }, (_, i) => celdas.get(i + 1) ?? null)
+  );
 }

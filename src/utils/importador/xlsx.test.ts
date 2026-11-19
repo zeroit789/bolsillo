@@ -12,7 +12,7 @@
  * ===========================================================================*/
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { leerXLSX, valorCelda } from "./xlsx";
+import { ErrorXLSX, leerXLSX, valorCelda } from "./xlsx";
 
 // ES: Crea un libro con una hoja de extracto inventada y lo devuelve en bytes.
 // EN: Creates a workbook with a made-up statement sheet and returns its bytes.
@@ -59,6 +59,32 @@ describe("leerXLSX", () => {
     const datos = await libroDePrueba();
     expect((await leerXLSX(datos, { hoja: 1 }))[1]).toEqual(["Fecha", "Concepto", "Importe"]);
     await expect(leerXLSX(datos, { hoja: "No existe" })).rejects.toThrow();
+  });
+});
+
+describe("leerXLSX con hojas dispersas o enormes / with sparse or huge sheets", () => {
+  // ES: Libro con datos normales y una celda suelta en `direccion`.
+  // EN: Workbook with normal data and a stray cell at `direccion`.
+  async function conCeldaSuelta(direccion: string): Promise<ArrayBuffer> {
+    const libro = new ExcelJS.Workbook();
+    const hoja = libro.addWorksheet("Movimientos");
+    hoja.addRow(["Fecha", "Concepto", "Importe"]);
+    hoja.addRow(["01/02/2026", "PAN", -1.2]);
+    hoja.getCell(direccion).value = "suelta";
+    return (await libro.xlsx.writeBuffer()) as ArrayBuffer;
+  }
+
+  it("una celda muy abajo no obliga a recorrer el hueco / a cell far down does not force walking the gap", async () => {
+    const filas = await leerXLSX(await conCeldaSuelta("A900000"));
+    expect(filas).toEqual([
+      ["Fecha", "Concepto", "Importe"],
+      ["01/02/2026", "PAN", -1.2],
+      ["suelta", null, null],
+    ]);
+  });
+
+  it("una hoja demasiado ancha se rechaza / a too-wide sheet is rejected", async () => {
+    await expect(leerXLSX(await conCeldaSuelta("XFD1"))).rejects.toBeInstanceOf(ErrorXLSX);
   });
 });
 
