@@ -446,6 +446,27 @@ describe("copias / backups", () => {
     expect(Object.values(simulador.estado.recibos)).toContain("data:image/jpeg;base64,UkVD");
   });
 
+  it("importar con categorías es atómico y valida que sean textos / import with categories is atomic and validated", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    localStorage.setItem("bolsillo.categorias-custom", JSON.stringify(["Previa"]));
+    await expect(
+      s.importarCopiaCompleta({ ...datosV2(), categoriasCustom: ["Bien", 5] })
+    ).rejects.toThrow("copia-invalida");
+    expect(JSON.parse(localStorage.getItem("bolsillo.categorias-custom")!)).toEqual(["Previa"]);
+    // ES: Si guardar los datos falla, vuelven las categorías de antes.
+    // EN: If saving the data fails, the previous categories come back.
+    simulador.estado.fallarGuardado = true;
+    await expect(
+      s.importarCopiaCompleta({ ...datosV2(), categoriasCustom: ["Nueva"] })
+    ).rejects.toThrow();
+    expect(JSON.parse(localStorage.getItem("bolsillo.categorias-custom")!)).toEqual(["Previa"]);
+    simulador.estado.fallarGuardado = false;
+    await s.importarCopiaCompleta({ ...datosV2(), categoriasCustom: ["Nueva"] });
+    expect(JSON.parse(localStorage.getItem("bolsillo.categorias-custom")!)).toEqual(["Nueva"]);
+  });
+
   it("se sigue importando el JSON antiguo por el diálogo / old JSON is still imported through the dialog", async () => {
     const s = useSesion();
     await s.arrancar();

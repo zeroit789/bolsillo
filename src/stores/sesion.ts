@@ -51,7 +51,7 @@ import * as almacen from "../utils/almacen";
 import * as boveda from "../utils/boveda";
 import { ErrorBoveda, type EstadoAlmacen } from "../utils/boveda";
 import { datosDemo, datosVacios } from "../data/demo";
-import { categoriasCustom } from "../data/categorias";
+import { categoriasCustom, setCategoriasCustom } from "../data/categorias";
 import type { DatosBolsillo } from "../types";
 import { prepararDatos, ErrorDatos } from "../utils/migraciones";
 import { validarCredencial } from "../utils/credencial";
@@ -807,6 +807,39 @@ export const useSesion = defineStore("sesion", () => {
     await hidratarYGuardar(datos);
   }
 
+  // ES: Importa una copia con sus categorías propias de forma atómica: si la
+  //     copia trae `categoriasCustom` y no es una lista de textos, se rechaza
+  //     entera ("copia-invalida"); las categorías se ponen antes de importar
+  //     los datos y, si la importación falla, se devuelven las de antes.
+  // EN: Imports a backup with its custom categories atomically: if the backup
+  //     carries `categoriasCustom` and it is not a list of strings, the whole
+  //     backup is rejected ("copia-invalida"); the categories are set before
+  //     importing the data and, if the import fails, the previous ones are
+  //     put back.
+  async function importarCopiaCompleta(crudo: unknown, forzar = false) {
+    const cats =
+      crudo && typeof crudo === "object"
+        ? (crudo as { categoriasCustom?: unknown }).categoriasCustom
+        : undefined;
+    if (cats !== undefined && !(Array.isArray(cats) && cats.every((c) => typeof c === "string"))) {
+      throw new Error("copia-invalida");
+    }
+    const antes = categoriasCustom();
+    if (cats) setCategoriasCustom(cats as string[]);
+    try {
+      await importarDatos(crudo, forzar);
+    } catch (e) {
+      if (cats) {
+        try {
+          setCategoriasCustom(antes);
+        } catch {
+          /* ES: sin espacio: quedan las nuevas / EN: no space: the new ones stay */
+        }
+      }
+      throw e;
+    }
+  }
+
   // ES: Sustituye todos los datos: PRIMERO se guardan y SOLO si va bien se
   //     ponen en pantalla. Si falla, la pantalla y lo pendiente siguen como
   //     estaban y se lanza para que la vista no lo dé por hecho.
@@ -952,6 +985,7 @@ export const useSesion = defineStore("sesion", () => {
     olvidarClaveRecuperacion,
     completarOnboarding,
     importarDatos,
+    importarCopiaCompleta,
     reemplazarDatos,
     listarCopias,
     restaurarCopia,

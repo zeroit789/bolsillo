@@ -5,28 +5,32 @@
  * ES: Pantalla que aparece cuando los datos guardados no se pueden leer (sobre
  *     dañado, credencial que no abre, contenido no válido o versión más nueva).
  *     Nunca se sustituyen por los datos de ejemplo: se informa de la copia de
- *     rescate y se ofrecen tres salidas: probar otra credencial, importar una
- *     copia o empezar de cero (conservando el rescate).
+ *     rescate y se ofrecen salidas: probar otra credencial o la clave de
+ *     recuperación, restaurar una copia automática, importar una copia
+ *     (cifrada o JSON) o empezar de cero (conservando el rescate).
  * EN: Screen shown when the stored data cannot be read (damaged envelope,
  *     credential that does not open it, invalid content or newer version). It
  *     is never replaced by the sample data: it reports the rescue copy and
- *     offers three ways out: try another credential, import a backup or start
- *     from scratch (keeping the rescue copy).
+ *     offers ways out: try another credential or the recovery key, restore an
+ *     automatic backup, import a backup (encrypted or JSON) or start from
+ *     scratch (keeping the rescue copy).
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
  *   1. Importaciones y stores / Imports & stores
  *   2. Textos de UI (i18n) / UI texts (i18n)
  *   3. Probar otra credencial / Try another credential
- *   4. Importar copia / Import backup
+ *   4. Importar o restaurar copia / Import or restore a backup
  *   5. Empezar de cero y descarga del blob / Start from scratch & blob download
  * ===========================================================================*/
 
 // ── 1. Importaciones y stores / Imports & stores ──────────────────────────────
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useSesion } from "../stores/sesion";
-import { setCategoriasCustom } from "../data/categorias";
 import * as almacen from "../utils/almacen";
 import { guardarJson } from "../utils/export";
+import { useImportarCopia } from "../utils/useImportarCopia";
+import { fechaLegibleCopia } from "../utils/copias";
+import type { InfoCopia } from "../utils/boveda";
 import { crearT } from "../i18n";
 
 const sesion = useSesion();
@@ -49,6 +53,14 @@ const t = crearT({
   version: {
     es: "Estos datos los guardó una versión más nueva de Bolsillo. Actualiza la app para abrirlos.",
     en: "This data was saved by a newer version of Bolsillo. Update the app to open it.",
+  },
+  falta: {
+    es: "Falta el fichero de datos, pero aquí ya hubo datos (hay copias o una marca del almacén). No se empieza de cero solo para no pisar nada: restaura una copia automática, importa una copia o empieza de cero.",
+    en: "The data file is missing, but there was data here (there are backups or a store marker). It does not start from scratch by itself so nothing is overwritten: restore an automatic backup, import a backup or start from scratch.",
+  },
+  entorno: {
+    es: "La app no puede acceder a su almacenamiento. Ciérrala y vuelve a abrirla.",
+    en: "The app cannot reach its storage. Close it and open it again.",
   },
   credencial: {
     es: "No se han podido abrir los datos con la configuración actual. Si protegiste la app con un PIN o una contraseña, escríbelo aquí. Si estás seguro de que es correcto, puede que los datos estén alterados: el cifrado no permite distinguir un caso del otro.",
@@ -76,7 +88,46 @@ const t = crearT({
     en: "It does not open the data (wrong credential or altered data).",
   },
   lecturaFallida: { es: "No se pudieron leer los datos.", en: "Could not read the data." },
-  importar: { es: "Importar una copia (.json)", en: "Import a backup (.json)" },
+  usarClave: { es: "Usar la clave de recuperación", en: "Use the recovery key" },
+  phClave: { es: "Clave de recuperación", en: "Recovery key" },
+  recuperacionIncorrecta: {
+    es: "Esa clave de recuperación no abre estos datos.",
+    en: "That recovery key does not open this data.",
+  },
+  recuperacionFormato: {
+    es: "La clave tiene 32 letras y números en 8 grupos de 4.",
+    en: "The key has 32 letters and numbers in 8 groups of 4.",
+  },
+  recuperacionErrata: {
+    es: "Hay una errata en la clave: revisa letra a letra.",
+    en: "There is a typo in the key: check it character by character.",
+  },
+  sinRecuperacion: {
+    es: "Estos datos no tienen clave de recuperación.",
+    en: "This data has no recovery key.",
+  },
+  copiasTitulo: { es: "Restaurar una copia automática", en: "Restore an automatic backup" },
+  restaurar: { es: "Restaurar", en: "Restore" },
+  confirmRestaurar: {
+    es: "Se restaurará esta copia (si tenía PIN, te lo pedirá). ¿Seguir?",
+    en: "This backup will be restored (if it had a PIN, it will be asked). Continue?",
+  },
+  errRestaurar: { es: "No se pudo restaurar.", en: "Could not restore." },
+  contrasenaCopia: { es: "Contraseña de esa copia", en: "That backup's password" },
+  abrir: { es: "Abrir", en: "Open" },
+  cancelar: { es: "Cancelar", en: "Cancel" },
+  "copia-credencial": {
+    es: "Esa contraseña no abre la copia.",
+    en: "That password does not open the backup.",
+  },
+  "no-autosuficiente": {
+    es: "Ese fichero son los datos de la app o una copia automática, sin los recibos dentro. Usa la lista de copias automáticas.",
+    en: "That file is the app data or an automatic backup, without the receipts inside. Use the automatic backups list.",
+  },
+  importar: {
+    es: "Importar una copia (.bolsillo o .json)",
+    en: "Import a backup (.bolsillo or .json)",
+  },
   importarNota: {
     es: "La copia importada se guarda sin PIN; puedes ponerlo después en Ajustes.",
     en: "The imported backup is saved without a PIN; you can set one later in Settings.",
@@ -113,7 +164,9 @@ const probando = ref(false);
 // EN: The ways out are exclusive: while one runs, the others are blocked
 //     (trying a credential and importing at once could mix results).
 const importando = ref(false);
-const ocupado = computed(() => probando.value || importando.value);
+const ocupado = computed(
+  () => probando.value || importando.value || importacion?.ocupado.value === true
+);
 
 // ES: Prueba la credencial con el store (misma lógica que la pantalla de bloqueo).
 // EN: Tries the credential through the store (same logic as the lock screen).
@@ -125,44 +178,62 @@ async function probar() {
   credencial.value = "";
 }
 
-// ── 4. Importar copia / Import backup ─────────────────────────────────────────
-const mensaje = ref("");
-const inputFichero = ref<HTMLInputElement | null>(null);
+// ES: Clave de recuperación (solo con el fichero cifrado y si la tiene).
+// EN: Recovery key (only with the encrypted file and if it has one).
+const conClave = ref(false);
+const clave = ref("");
+async function probarClave() {
+  if (ocupado.value || !clave.value) return;
+  probando.value = true;
+  await sesion.desbloquearConRecuperacion(clave.value);
+  probando.value = false;
+  if (sesion.desbloqueado) clave.value = "";
+}
 
-// ES: Lee la copia elegida y la importa por el camino único (migrar + validar).
-//     Si no hay copia de rescate, pide confirmación expresa antes de seguir.
-// EN: Reads the chosen backup and imports it through the single path
-//     (migrate + validate). Without a rescue copy, asks for explicit
-//     confirmation before going on.
-async function importar(evento: Event) {
+// ── 4. Importar o restaurar copia / Import or restore a backup ────────────────
+const mensaje = ref("");
+
+// ES: Importa una copia (Rust abre el diálogo). Sin copia de rescate pide
+//     confirmación expresa; las categorías se importan de forma atómica.
+// EN: Imports a backup (Rust opens the dialog). Without a rescue copy it asks
+//     for explicit confirmation; categories are imported atomically.
+const contrasenaImportar = ref("");
+const importacion = useImportarCopia({
+  confirmar: () => !sesion.rescateFallido || confirm(t("confirmSinRescate")),
+  forzar: () => sesion.rescateFallido,
+  alTerminar: () => (contrasenaImportar.value = ""),
+});
+// ES: Texto del error de importación. / EN: Import error text.
+const errorImportar = computed(() => {
+  const c = importacion.error.value;
+  if (!c) return "";
+  if (c === "copia-invalida") return t("errCopiaInvalida");
+  if (c === "copia-version") return t("errCopiaVersion");
+  if (c === "sin-rescate") return t("rescateFallido");
+  if (c === "copia-credencial" || c === "no-autosuficiente") return t(c);
+  return t("errGuardar");
+});
+
+// ES: Copias automáticas que se pueden restaurar (solo con el fichero cifrado).
+// EN: Automatic backups that can be restored (only with the encrypted file).
+const copias = ref<InfoCopia[]>([]);
+onMounted(async () => {
+  if (sesion.modo !== "fichero") return;
+  try {
+    copias.value = await sesion.listarCopias();
+  } catch {
+    copias.value = [];
+  }
+});
+async function restaurar(nombre: string) {
+  if (ocupado.value || !confirm(t("confirmRestaurar"))) return;
   mensaje.value = "";
-  const input = evento.target as HTMLInputElement;
-  const fichero = input.files?.[0];
-  if (!fichero || ocupado.value) return;
   importando.value = true;
   try {
-    const datos: unknown = JSON.parse(await fichero.text());
-    const forzar = sesion.rescateFallido ? confirm(t("confirmSinRescate")) : false;
-    if (sesion.rescateFallido && !forzar) return;
-    await sesion.importarDatos(datos, forzar);
-    // ES: Restaura las categorías propias de la copia (si las trae).
-    // EN: Restores the backup's custom categories (if any).
-    const custom = (datos as { categoriasCustom?: unknown }).categoriasCustom;
-    if (Array.isArray(custom)) setCategoriasCustom(custom.filter((c) => typeof c === "string"));
-  } catch (e) {
-    const m = e instanceof Error ? e.message : "";
-    mensaje.value =
-      m === "copia-invalida"
-        ? t("errCopiaInvalida")
-        : m === "copia-version"
-          ? t("errCopiaVersion")
-          : e instanceof SyntaxError
-            ? t("errCopiaInvalida")
-            : m === "sin-rescate"
-              ? t("rescateFallido")
-              : t("errGuardar");
+    await sesion.restaurarCopia(nombre);
+  } catch {
+    mensaje.value = t("errRestaurar");
   } finally {
-    input.value = "";
     importando.value = false;
   }
 }
@@ -206,7 +277,7 @@ async function descargar() {
            de la app (y la única copia si el rescate no cupo).
            EN: The download is always there: it is the only way to get the unreadable
            data out of the app (and the only copy if the rescue did not fit). -->
-      <div class="space-y-2">
+      <div v-if="sesion.modo === 'legado'" class="space-y-2">
         <p v-if="sesion.rescateFallido" class="text-danger text-sm">{{ t("rescateFallido") }}</p>
         <button
           type="button"
@@ -236,29 +307,106 @@ async function descargar() {
           {{ probando ? t("comprobando") : t("probar") }}
         </button>
       </form>
-      <p v-if="sesion.error" class="text-danger text-sm">{{ t(sesion.error) }}</p>
+      <!-- ES: Opción 1b: clave de recuperación / EN: Option 1b: recovery key -->
+      <div
+        v-if="
+          sesion.fallo === 'credencial' && sesion.modo === 'fichero' && sesion.tieneRecuperacion
+        "
+      >
+        <button
+          v-if="!conClave"
+          type="button"
+          class="text-xs text-muted underline hover:text-ink"
+          @click="conClave = true"
+        >
+          {{ t("usarClave") }}
+        </button>
+        <form v-else class="flex gap-2" @submit.prevent="probarClave">
+          <input
+            v-model="clave"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            :placeholder="t('phClave')"
+            :aria-label="t('phClave')"
+            class="flex-1 font-mono uppercase rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <button
+            type="submit"
+            class="rounded-lg bg-brand px-4 py-2 text-white font-medium disabled:opacity-50"
+            :disabled="ocupado || !clave"
+          >
+            {{ probando ? t("comprobando") : t("probar") }}
+          </button>
+        </form>
+      </div>
+      <p v-if="sesion.error" role="alert" class="text-danger text-sm">{{ t(sesion.error) }}</p>
 
-      <!-- ES: Opción 2: importar copia / EN: Option 2: import a backup -->
+      <!-- ES: Opción 2: restaurar una copia automática / EN: Option 2: restore an automatic backup -->
+      <div v-if="copias.length" class="space-y-2">
+        <p class="text-sm font-medium text-ink">{{ t("copiasTitulo") }}</p>
+        <ul class="space-y-2 max-h-48 overflow-y-auto">
+          <li
+            v-for="c in copias"
+            :key="c.nombre"
+            class="flex items-center justify-between gap-3 rounded-lg bg-surface-2 border border-border px-3 py-2"
+          >
+            <span class="text-sm text-ink">{{ fechaLegibleCopia(c.nombre) }}</span>
+            <button
+              type="button"
+              class="rounded-lg border border-border px-3 py-1 text-sm text-ink hover:border-brand disabled:opacity-50"
+              :disabled="ocupado"
+              @click="restaurar(c.nombre)"
+            >
+              {{ t("restaurar") }}
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- ES: Opción 3: importar copia (cifrada o JSON) / EN: Option 3: import a backup (encrypted or JSON) -->
       <div class="space-y-1">
         <button
+          v-if="!importacion.pidiendoContrasena.value"
           type="button"
           class="w-full rounded-lg bg-surface-2 border border-border px-4 py-2.5 text-ink hover:border-brand disabled:opacity-50"
           :disabled="ocupado"
-          @click="inputFichero?.click()"
+          @click="importacion.elegir()"
         >
           {{ t("importar") }}
         </button>
-        <input
-          ref="inputFichero"
-          type="file"
-          accept="application/json,.json"
-          class="hidden"
-          @change="importar"
-        />
+        <form
+          v-else
+          class="flex gap-2"
+          @submit.prevent="importacion.enviarContrasena(contrasenaImportar)"
+        >
+          <input
+            v-model="contrasenaImportar"
+            type="password"
+            :placeholder="t('contrasenaCopia')"
+            :aria-label="t('contrasenaCopia')"
+            class="flex-1 rounded-lg bg-surface-2 border border-border px-3 py-2 text-ink outline-none focus:border-brand"
+          />
+          <button
+            type="submit"
+            class="rounded-lg bg-brand px-4 py-2 text-white font-medium disabled:opacity-50"
+            :disabled="ocupado || !contrasenaImportar"
+          >
+            {{ t("abrir") }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-border px-3 py-2 text-ink"
+            @click="importacion.cancelar()"
+          >
+            {{ t("cancelar") }}
+          </button>
+        </form>
         <p class="text-faint text-xs">{{ t("importarNota") }}</p>
+        <p v-if="errorImportar" role="alert" class="text-danger text-sm">{{ errorImportar }}</p>
       </div>
 
-      <!-- ES: Opción 3: empezar de cero / EN: Option 3: start from scratch -->
+      <!-- ES: Opción 4: empezar de cero / EN: Option 4: start from scratch -->
       <button
         type="button"
         class="w-full rounded-lg border border-danger/60 px-4 py-2.5 text-danger hover:bg-danger/10 disabled:opacity-50"
