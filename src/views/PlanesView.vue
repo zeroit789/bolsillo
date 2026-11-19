@@ -42,8 +42,8 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import type { Plan } from "../types";
 import { euro } from "../utils/format";
-import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
-import { r2, progreso, restante, conseguido } from "../utils/plan";
+import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
+import { progreso, restante, conseguido } from "../utils/plan";
 import { crearT } from "../i18n";
 
 // ES: Store central de finanzas (ya inicializado en la app).
@@ -108,9 +108,18 @@ const t = crearT({
     es: "Introduce una cantidad válida mayor que 0.",
     en: "Enter a valid amount greater than 0.",
   },
-  // ES: Importe por encima del tope (texto común de utils/importe.ts).
-  // EN: Amount above the cap (shared text from utils/importe.ts).
+  // ES: Importe por encima del tope o que no es un número (textos comunes de
+  //     utils/importe.ts).
+  // EN: Amount above the cap or not a number (shared texts from
+  //     utils/importe.ts).
   errImporteMax: MENSAJE_IMPORTE_MAX,
+  errImporteInvalido: MENSAJE_IMPORTE_INVALIDO,
+  // ES: La aportación dejaría lo aportado por encima del tope.
+  // EN: The contribution would push the amount saved above the cap.
+  errAcumuladoMax: {
+    es: "Con esta cantidad lo aportado pasaría de 999.999.999,99.",
+    en: "With this amount the total saved would exceed 999,999,999.99.",
+  },
   confirmarEliminar: { es: "¿Eliminar el plan", en: "Delete the plan" },
 });
 
@@ -158,8 +167,8 @@ const errorAportar = ref("");
 const tituloModal = computed(() => (editandoId.value ? t("editarPlan") : t("nuevoPlanTitulo")));
 
 // ── 5. Helpers de cálculo por plan / Per-plan calculation helpers ─────────────
-// ES: r2, progreso, restante y conseguido viven en utils/plan.ts (con tests).
-// EN: r2, progreso, restante and conseguido live in utils/plan.ts (with tests).
+// ES: progreso, restante y conseguido viven en utils/plan.ts (con tests).
+// EN: progreso, restante and conseguido live in utils/plan.ts (with tests).
 
 // ── 6. Acciones del modal / Modal actions ─────────────────────────────────────
 // ES: Abre el modal en modo "nuevo plan" con valores por defecto.
@@ -198,29 +207,37 @@ function cerrarModal() {
 // ES: Valida y guarda: crea o actualiza el plan según el modo.
 // EN: Validates and saves: creates or updates the plan depending on the mode.
 function guardar() {
-  // ES: Redondeo a céntimos (r2 ya admite coma decimal).
-  // EN: Rounding to cents (r2 already accepts a decimal comma).
-  const objetivo = r2(form.objetivo);
-  const aportado = r2(form.aportado);
+  // ES: Análisis de los importes ANTES de redondear (utils/importe.ts, admite
+  //     coma decimal): así "1e307" no se convierte en un 0 que pise lo aportado.
+  // EN: Analysis of the amounts BEFORE rounding (utils/importe.ts, accepts a
+  //     decimal comma): so "1e307" never becomes a 0 that overwrites the saved amount.
+  const aObjetivo = analizarImporte(form.objetivo);
+  const aAportado = analizarImporte(form.aportado);
 
-  // ES: Validación: nombre no vacío, objetivo > 0, aportado >= 0.
-  // EN: Validation: non-empty name, goal > 0, saved >= 0.
+  // ES: Validación: nombre no vacío, importes que sean números y quepan,
+  //     objetivo > 0 y aportado >= 0 (vacío cuenta como 0).
+  // EN: Validation: non-empty name, amounts that are numbers and fit, goal > 0
+  //     and saved >= 0 (empty counts as 0).
   if (!form.nombre.trim()) {
     error.value = t("errNombre");
     return;
   }
+  if (aObjetivo.tipo === "invalido" || aAportado.tipo === "invalido") {
+    error.value = t("errImporteInvalido");
+    return;
+  }
+  if (aObjetivo.tipo === "excede" || aAportado.tipo === "excede") {
+    error.value = t("errImporteMax");
+    return;
+  }
+  const objetivo = aObjetivo.valor;
+  const aportado = aAportado.valor;
   if (objetivo <= 0) {
     error.value = t("errObjetivo");
     return;
   }
   if (aportado < 0) {
     error.value = t("errAportado");
-    return;
-  }
-  // ES: Ni el objetivo ni lo aportado pueden pasar del tope.
-  // EN: Neither the goal nor the amount saved can exceed the cap.
-  if (!importeDentroDeRango(objetivo) || !importeDentroDeRango(aportado)) {
-    error.value = t("errImporteMax");
     return;
   }
 
@@ -273,26 +290,34 @@ function confirmarAporte() {
   // EN: If for some reason there's no selected plan, do nothing.
   if (!planAportar.value) return;
 
-  // ES: Normaliza la coma decimal a punto y redondea a céntimos.
-  // EN: Normalizes the decimal comma to dot and rounds to cents.
-  const c = importeDesdeTexto(String(cantidadAportar.value));
-
-  // ES: Solo se aportan cantidades positivas válidas.
-  // EN: Only valid positive amounts are added.
-  if (!c || c <= 0) {
-    errorAportar.value = t("errCantidad");
+  // ES: Analiza la cantidad (admite coma decimal) antes de redondear.
+  // EN: Analyzes the amount (accepts a decimal comma) before rounding.
+  const a = analizarImporte(cantidadAportar.value);
+  if (a.tipo === "invalido") {
+    errorAportar.value = t("errImporteInvalido");
     return;
   }
-  // ES: La cantidad tampoco puede pasar del tope.
-  // EN: The amount cannot exceed the cap either.
-  if (!importeDentroDeRango(c)) {
+  // ES: La cantidad sola tampoco puede pasar del tope.
+  // EN: The amount on its own cannot exceed the cap either.
+  if (a.tipo === "excede") {
     errorAportar.value = t("errImporteMax");
     return;
   }
+  // ES: Solo se aportan cantidades positivas (vacío cuenta como 0).
+  // EN: Only positive amounts are added (empty counts as 0).
+  if (a.valor <= 0) {
+    errorAportar.value = t("errCantidad");
+    return;
+  }
 
-  // ES: Aporta al plan y cierra el modal.
-  // EN: Adds funds to the plan and closes the modal.
-  finanzas.aportarAPlan(planAportar.value.id, c);
+  // ES: Aporta al plan; el store la rechaza si lo aportado pasaría del tope,
+  //     y entonces el modal sigue abierto con el error.
+  // EN: Adds funds to the plan; the store rejects it if the saved amount would
+  //     exceed the cap, and then the modal stays open with the error.
+  if (!finanzas.aportarAPlan(planAportar.value.id, a.valor)) {
+    errorAportar.value = t("errAcumuladoMax");
+    return;
+  }
   cerrarModalAportar();
 }
 

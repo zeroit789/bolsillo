@@ -26,7 +26,7 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { puedeUsarAtajo } from "../utils/atajos";
 import { useFinanzas } from "../stores/finanzas";
 import { euro, fechaLegible, mesActual } from "../utils/format";
-import { importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
+import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
 import { categoriasPorGrupo } from "../data/categorias";
 import type { LineaMes, Signo, Plantilla, Subdivision } from "../types";
 import ModalMovimiento from "../components/ModalMovimiento.vue";
@@ -58,6 +58,18 @@ const t = crearT({
   eligeCategoria: { es: "Elige categoría…", en: "Choose category…" },
   cancelar: { es: "Cancelar", en: "Cancel" },
   guardar: { es: "Guardar", en: "Save" },
+  // ES: Errores del mini-formulario de atajo (antes fallaba en silencio). Los
+  //     de importe inválido y tope son los textos comunes de utils/importe.ts.
+  // EN: Shortcut mini-form errors (it used to fail silently). The invalid and
+  //     cap amount ones are the shared texts from utils/importe.ts.
+  errConceptoAtajo: { es: "Pon un concepto.", en: "Enter a description." },
+  errImporteAtajo: {
+    es: "El importe debe ser mayor que 0.",
+    en: "The amount must be greater than 0.",
+  },
+  errImporteInvalido: MENSAJE_IMPORTE_INVALIDO,
+  errImporteMax: MENSAJE_IMPORTE_MAX,
+  errCategoriaAtajo: { es: "Elige una categoría.", en: "Choose a category." },
   filtrarTipo: { es: "Filtrar por tipo", en: "Filter by type" },
   buscarPlaceholder: {
     es: "Buscar por concepto o categoría…",
@@ -373,6 +385,9 @@ const formConcepto = ref("");
 const formImporte = ref(""); // ES: texto, acepta coma decimal / EN: text, accepts decimal comma
 const formSigno = ref<Signo>("gasto"); // ES: gasto por defecto / EN: expense by default
 const formCategoria = ref(""); // ES: nombre de categoría seleccionada / EN: selected category name
+// ES: Error de validación del mini-formulario ("" = ninguno).
+// EN: Mini-form validation error ("" = none).
+const errorPlantilla = ref("");
 
 // ES: Abre el mini-formulario con valores limpios.
 // EN: Opens the mini-form with clean values.
@@ -381,6 +396,7 @@ function abrirFormPlantilla(): void {
   formImporte.value = "";
   formSigno.value = "gasto";
   formCategoria.value = "";
+  errorPlantilla.value = "";
   formAbierto.value = true;
 }
 
@@ -396,21 +412,30 @@ function cerrarFormPlantilla(): void {
   formAbierto.value = false;
 }
 
-// ES: Guarda la nueva plantilla en el store. Normaliza la coma decimal a punto y
-//     redondea el importe a céntimos.
-// EN: Saves the new template into the store. Normalizes the decimal comma to a
-//     dot and rounds the amount to cents.
+// ES: Guarda la nueva plantilla en el store. Analiza el importe (acepta coma
+//     decimal) antes de redondearlo a céntimos.
+// EN: Saves the new template into the store. Analyzes the amount (accepts a
+//     decimal comma) before rounding it to cents.
 function guardarPlantilla(): void {
   const concepto = formConcepto.value.trim();
-  const importe = importeDesdeTexto(formImporte.value);
-  // ES: Validación mínima: concepto, importe válido (>0 y dentro del tope) y
-  //     categoría elegida. Como antes, si algo falla no se guarda.
-  // EN: Minimal validation: concept, valid amount (>0 and within the cap) and
-  //     a chosen category. As before, if anything fails nothing is saved.
-  if (!concepto || importe <= 0 || !importeDentroDeRango(importe) || !formCategoria.value) return;
+  const a = analizarImporte(formImporte.value);
+  // ES: Validación: concepto, importe que sea un número, quepa en el tope y
+  //     sea > 0, y categoría elegida. Si algo falla no se guarda y se dice
+  //     por qué (antes no se decía nada).
+  // EN: Validation: concept, an amount that is a number, fits the cap and is
+  //     > 0, and a chosen category. If anything fails nothing is saved and
+  //     the reason is shown (before, nothing was said).
+  let fallo = "";
+  if (!concepto) fallo = t("errConceptoAtajo");
+  else if (a.tipo === "invalido") fallo = t("errImporteInvalido");
+  else if (a.tipo === "excede") fallo = t("errImporteMax");
+  else if (a.valor <= 0) fallo = t("errImporteAtajo");
+  else if (!formCategoria.value) fallo = t("errCategoriaAtajo");
+  errorPlantilla.value = fallo;
+  if (fallo) return;
   f.addPlantilla({
     concepto,
-    importe,
+    importe: a.valor,
     signo: formSigno.value,
     categoria: formCategoria.value,
   });
@@ -570,6 +595,14 @@ onUnmounted(() => window.removeEventListener("keydown", onTecla));
             </optgroup>
           </select>
         </div>
+
+        <!-- ES: Error de validación del mini-formulario; role="alert" para que el
+             lector de pantalla lo anuncie al aparecer.
+             EN: Mini-form validation error; role="alert" so the screen reader
+             announces it when it shows up. -->
+        <p v-if="errorPlantilla" role="alert" class="text-danger text-sm">
+          {{ errorPlantilla }}
+        </p>
 
         <!-- ES: Acciones del mini-formulario / EN: Mini-form actions -->
         <div class="flex justify-end gap-2 pt-1">

@@ -31,7 +31,7 @@
 import { ref, computed, useId } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
-import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
+import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
 import { NOMBRES_CATEGORIA, colorCategoria } from "../data/categorias";
 import { crearT } from "../i18n";
 
@@ -58,9 +58,12 @@ const t = crearT({
   guardarTope: { es: "Guardar tope", en: "Save cap" },
   errorCategoria: { es: "Elige una categoría.", en: "Choose a category." },
   errorImporte: { es: "Pon un importe mayor que 0 €.", en: "Enter an amount greater than €0." },
-  // ES: Límite por encima del tope (texto común de utils/importe.ts).
-  // EN: Cap above the maximum amount (shared text from utils/importe.ts).
+  // ES: Límite por encima del tope o que no es un número (textos comunes de
+  //     utils/importe.ts).
+  // EN: Cap above the maximum amount or not a number (shared texts from
+  //     utils/importe.ts).
   errorImporteMax: MENSAJE_IMPORTE_MAX,
+  errorImporteInvalido: MENSAJE_IMPORTE_INVALIDO,
   vacioTitulo: { es: "Aún no tienes ningún tope", en: "You don't have any caps yet" },
   vacioTexto: {
     es: "Define un límite mensual por categoría para vigilar tus gastos del mes.",
@@ -90,12 +93,6 @@ const limiteTexto = ref<string>("");
 const error = ref<string>("");
 
 // ── 4. Helpers de cálculo / Calculation helpers ───────────────────────────────
-
-// ES: Normaliza un texto numérico ("12,50" o "12.50") a número con 2 decimales.
-// EN: Normalises a numeric text ("12,50" or "12.50") to a 2-decimal number.
-function aNumero(valor: string): number {
-  return importeDesdeTexto(valor);
-}
 
 // ES: Mapa categoría -> gasto del mes (a partir de finanzas.gastoPorCategoria).
 //     Se recalcula de forma reactiva cuando cambia el gasto del mes.
@@ -181,17 +178,26 @@ function guardarTope(): void {
     error.value = t("errorCategoria");
     return;
   }
-  const limite = aNumero(limiteTexto.value);
-  // ES: El límite debe ser mayor que 0 (un 0 lo borraría; aquí pedimos uno válido).
-  // EN: Cap must be > 0 (a 0 would delete it; here we require a valid one).
-  if (limite <= 0) {
-    error.value = t("errorImporte");
+  // ES: Análisis del texto ("12,50" o "12.50") antes de redondear: lo que no
+  //     es un número o pasa del tope se rechaza con su propio mensaje.
+  // EN: Text analysis ("12,50" or "12.50") before rounding: anything that is
+  //     not a number or exceeds the cap is rejected with its own message.
+  const a = analizarImporte(limiteTexto.value);
+  if (a.tipo === "invalido") {
+    error.value = t("errorImporteInvalido");
     return;
   }
-  // ES: Tampoco puede pasar del tope de importe.
-  // EN: It cannot exceed the amount cap either.
-  if (!importeDentroDeRango(limite)) {
+  if (a.tipo === "excede") {
     error.value = t("errorImporteMax");
+    return;
+  }
+  const limite = a.valor;
+  // ES: El límite debe ser mayor que 0 (vacío o 0 lo borrarían; aquí pedimos
+  //     uno válido).
+  // EN: Cap must be > 0 (empty or 0 would delete it; here we require a valid
+  //     one).
+  if (limite <= 0) {
+    error.value = t("errorImporte");
     return;
   }
   // ES: El store hace el upsert: si ya existe la categoría la reemplaza.

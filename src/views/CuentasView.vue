@@ -24,7 +24,7 @@ import { ref, reactive, computed, useId } from "vue";
 import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
-import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, importeDesdeTexto } from "../utils/importe";
+import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
 import type { Cuenta } from "../types";
 import { crearT } from "../i18n";
 
@@ -68,9 +68,12 @@ const t = crearT({
   guardar: { es: "Guardar", en: "Save" },
   // ES: Mensajes de validación y confirmación / EN: Validation & confirmation messages
   errNombre: { es: "El nombre no puede estar vacío.", en: "The name cannot be empty." },
-  // ES: Saldo inicial por encima del tope (texto común de utils/importe.ts).
-  // EN: Initial balance above the cap (shared text from utils/importe.ts).
+  // ES: Saldo inicial por encima del tope o que no es un número (textos
+  //     comunes de utils/importe.ts).
+  // EN: Initial balance above the cap or not a number (shared texts from
+  //     utils/importe.ts).
   errImporteMax: MENSAJE_IMPORTE_MAX,
+  errImporteInvalido: MENSAJE_IMPORTE_INVALIDO,
   confirmEliminar: { es: "¿Eliminar la cuenta", en: "Delete account" },
 });
 
@@ -138,11 +141,13 @@ function cerrarModal() {
 // ES: Valida y guarda: crea o actualiza la cuenta según el modo.
 // EN: Validates and saves: creates or updates the account depending on the mode.
 function guardar() {
-  // ES: Redondeo a céntimos (utils/importe.ts): acepta coma decimal (Intl/teclado
-  //     ES) y sanea NaN. String(...) cubre el caso en que el input devuelva número.
-  // EN: Round to cents (utils/importe.ts): accepts a decimal comma (Intl/ES
-  //     keyboard) and sanitizes NaN. String(...) covers the input returning a number.
-  const saldoInicial = importeDesdeTexto(String(form.saldoInicial));
+  // ES: Análisis del saldo (utils/importe.ts): acepta coma decimal (Intl/teclado
+  //     ES) y distingue vacío, inválido y fuera del tope ANTES de redondear,
+  //     para que "1e307" o "abc" no pisen el saldo con un 0.
+  // EN: Balance analysis (utils/importe.ts): accepts a decimal comma (Intl/ES
+  //     keyboard) and tells apart empty, invalid and above-cap values BEFORE
+  //     rounding, so "1e307" or "abc" never overwrite the balance with a 0.
+  const saldo = analizarImporte(form.saldoInicial);
 
   // ES: Validación: el nombre no puede estar vacío.
   // EN: Validation: the name cannot be empty.
@@ -151,12 +156,19 @@ function guardar() {
     return;
   }
 
-  // ES: El saldo inicial puede ser negativo o 0, pero no pasar del tope.
-  // EN: The initial balance may be negative or 0, but not exceed the cap.
-  if (!importeDentroDeRango(saldoInicial)) {
+  // ES: El saldo inicial puede ser negativo o 0 (vacío cuenta como 0), pero
+  //     tiene que ser un número y no pasar del tope.
+  // EN: The initial balance may be negative or 0 (empty counts as 0), but it
+  //     must be a number and not exceed the cap.
+  if (saldo.tipo === "invalido") {
+    error.value = t("errImporteInvalido");
+    return;
+  }
+  if (saldo.tipo === "excede") {
     error.value = t("errImporteMax");
     return;
   }
+  const saldoInicial = saldo.valor;
 
   // ES: Objeto saneado a partir del formulario.
   // EN: Sanitized object built from the form.

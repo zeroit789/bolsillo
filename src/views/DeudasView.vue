@@ -26,7 +26,12 @@ import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { useFinanzas } from "../stores/finanzas";
 import { TIPOS_DEUDA, type Deuda, type TipoDeuda } from "../types";
 import { euro, mesActual } from "../utils/format";
-import { MENSAJE_IMPORTE_MAX, importeDentroDeRango, redondear2 } from "../utils/importe";
+import {
+  MENSAJE_IMPORTE_INVALIDO,
+  MENSAJE_IMPORTE_MAX,
+  analizarImporte,
+  type AnalisisImporte,
+} from "../utils/importe";
 import { crearT } from "../i18n";
 
 // ES: Store central de finanzas (ya inicializado en la app).
@@ -96,9 +101,12 @@ const t = crearT({
     en: "The amount already paid cannot exceed the total.",
   },
   errMes: { es: "Indica un mes de inicio válido.", en: "Enter a valid start month." },
-  // ES: Algún importe por encima del tope (texto común de utils/importe.ts).
-  // EN: Some amount above the cap (shared text from utils/importe.ts).
+  // ES: Algún importe por encima del tope o que no es un número (textos
+  //     comunes de utils/importe.ts).
+  // EN: Some amount above the cap or not a number (shared texts from
+  //     utils/importe.ts).
   errImporteMax: MENSAJE_IMPORTE_MAX,
+  errImporteInvalido: MENSAJE_IMPORTE_INVALIDO,
   // ES: Confirmación de borrado (con interpolación del concepto)
   // EN: Delete confirmation (with the concept interpolated)
   confirmBorrarPre: { es: '¿Eliminar la deuda "', en: 'Delete the debt "' },
@@ -192,17 +200,35 @@ function cerrarModal() {
 // ES: Valida y guarda: crea o actualiza la deuda según el modo.
 // EN: Validates and saves: creates or updates the debt depending on the mode.
 function guardar() {
-  // ES: Redondeo a céntimos y saneo (evita NaN/negativos que contaminarían los KPIs).
-  // EN: Round to cents and sanitize (avoids NaN/negatives polluting the KPIs).
-  const r2 = (n: number) => redondear2(Number(n));
-  const total = r2(form.total);
-  const cuota = r2(form.cuotaMensual);
-  const pagado = r2(form.pagadoInicial);
+  // ES: Análisis de los tres importes ANTES de redondear (utils/importe.ts):
+  //     así "1e307" no se convierte en un 0 que pise lo pagado.
+  // EN: Analysis of the three amounts BEFORE rounding (utils/importe.ts): so
+  //     "1e307" never becomes a 0 that overwrites the amount paid.
+  const analisis: AnalisisImporte[] = [
+    analizarImporte(form.total),
+    analizarImporte(form.cuotaMensual),
+    analizarImporte(form.pagadoInicial),
+  ];
 
   if (!form.concepto.trim()) {
     error.value = t("errConcepto");
     return;
   }
+  // ES: Ninguno puede ser texto inválido ni pasar del tope.
+  // EN: None of them may be invalid text or exceed the cap.
+  if (analisis.some((a) => a.tipo === "invalido")) {
+    error.value = t("errImporteInvalido");
+    return;
+  }
+  if (analisis.some((a) => a.tipo === "excede")) {
+    error.value = t("errImporteMax");
+    return;
+  }
+  // ES: Valores ya redondeados a céntimos. Vacío cuenta como 0: el total y la
+  //     cuota lo rechazan abajo (> 0) y lo pagado sí puede ser 0.
+  // EN: Values already rounded to cents. Empty counts as 0: total and payment
+  //     reject it below (> 0) and the amount paid may well be 0.
+  const [total, cuota, pagado] = analisis.map((a) => a.valor);
   if (total <= 0) {
     error.value = t("errTotal");
     return;
@@ -217,12 +243,6 @@ function guardar() {
   }
   if (pagado > total) {
     error.value = t("errPagadoTotal");
-    return;
-  }
-  // ES: Total, cuota y lo pagado no pueden pasar del tope.
-  // EN: Total, payment and amount paid cannot exceed the cap.
-  if (![total, cuota, pagado].every(importeDentroDeRango)) {
-    error.value = t("errImporteMax");
     return;
   }
   if (!/^\d{4}-\d{2}$/.test(form.inicioMes)) {
