@@ -425,7 +425,11 @@ const marcaDe = computed(() => new Map(marcas.value.map((m) => [m.linea, m])));
 // ES: Decisiones del usuario por línea (se reinician si cambia la lectura).
 // EN: User decisions per line (reset if the reading changes).
 const decision = ref(new Map<number, boolean>());
-watch(vista, () => (decision.value = new Map()));
+// ES: También al cambiar la cuenta destino o la búsqueda en lo manual: las
+//     marcas cambian y una decisión de antes ya no vale.
+// EN: Also when the destination account or the manual search changes: the
+//     flags change and an earlier decision no longer holds.
+watch([vista, () => conf.cuenta, () => conf.manuales], () => (decision.value = new Map()));
 const seleccionadas = computed(() =>
   filasAImportar(vista.value?.filas ?? [], marcas.value, decision.value)
 );

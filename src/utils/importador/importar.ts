@@ -11,9 +11,10 @@
  *         detectarDuplicados (los importados, con los datos de su huella).
  *       - marcarDuplicados: marcas de duplicado de la vista previa. Con
  *         cuenta destino solo mira esa cuenta y lo que no tiene cuenta (un
- *         cargo igual en otra cuenta es otro movimiento). Si se pide, una
- *         segunda pasada tolerante (±3 días, sin concepto) busca lo apuntado
- *         a mano, sin reutilizar filas ni apuntes ya emparejados. Los
+ *         cargo igual en otra cuenta es otro movimiento). Primero empareja
+ *         lo importado (por su huella), luego lo apuntado a mano exacto y,
+ *         si se pide, una pasada tolerante (±3 días, sin concepto) con lo
+ *         manual que queda, sin reutilizar filas ni apuntes ya emparejados. Los
  *         conceptos se comparan normalizados y recortados a 500 caracteres,
  *         igual que en la huella.
  *       - filasAImportar: qué filas entran. Por defecto se salta la marca
@@ -34,9 +35,10 @@
  *       - marcarDuplicados: duplicate flags for the preview. With a
  *         destination account it only looks at that account and at items
  *         without an account (an equal charge in another account is another
- *         movement). If asked, a second tolerant pass (±3 days, no concept)
- *         looks at hand-entered items, without reusing already paired rows
- *         or entries. Concepts are compared normalised and cut to 500
+ *         movement). It first pairs imported items (by fingerprint), then
+ *         exact hand-entered ones and, if asked, a tolerant pass (±3 days,
+ *         no concept) with the manual ones left, without reusing already
+ *         paired rows or entries. Concepts are compared normalised and cut to 500
  *         characters, the same as in the fingerprint.
  *       - filasAImportar: which rows go in. By default the "apuntado" flag is
  *         skipped (already in the app) and the "fichero" flag goes in (two
@@ -124,25 +126,36 @@ export function marcarDuplicados(
     concepto: conceptoComparable(x.concepto),
   });
   const filasC = filas.map(recortar);
-  const base = detectarDuplicados(filasC, comparablesDe(candidatos).map(recortar));
-  if (!opciones.manuales) return base;
-  // ES: Segunda pasada solo con lo que quedó libre en la primera.
-  // EN: Second pass only with what the first one left free.
-  const usados = new Set<string>();
-  const marcadas = new Set<number>();
-  for (const m of base) {
-    if (m.tipo !== "apuntado") continue;
-    usados.add(m.id);
-    marcadas.add(m.linea);
-  }
-  const manuales = candidatos.filter((p) => p.origen !== "importado" && !usados.has(p.id));
-  const extra = detectarDuplicados(
-    filasC.filter((f) => !marcadas.has(f.linea)),
-    comparablesDe(manuales).map(recortar),
-    { toleranciaDias: 3, compararConcepto: false }
+  const importados = candidatos.filter((p) => p.origen === "importado");
+  const manuales = candidatos.filter((p) => p.origen !== "importado");
+  // ES: Pasada 1: lo importado, por su huella (texto del banco). Da también
+  //     las marcas "fichero" de todas las filas.
+  // EN: Pass 1: imported items, by their fingerprint (bank text). It also
+  //     gives the "fichero" flags of every row.
+  const porLinea = new Map(
+    detectarDuplicados(filasC, comparablesDe(importados).map(recortar)).map((m) => [m.linea, m])
   );
-  const porLinea = new Map(base.map((m) => [m.linea, m]));
-  for (const m of extra) if (m.tipo === "apuntado") porLinea.set(m.linea, m);
+  // ES: Filas aún sin pareja y apuntes ya usados (no se reutilizan).
+  // EN: Rows still unpaired and entries already used (never reused).
+  const libres = () => filasC.filter((f) => porLinea.get(f.linea)?.tipo !== "apuntado");
+  const usados = () =>
+    new Set([...porLinea.values()].flatMap((m) => (m.tipo === "apuntado" ? [m.id] : [])));
+  // ES: Pasada 2: lo apuntado a mano, exacto, con las filas que quedan.
+  // EN: Pass 2: hand-entered items, exact, with the remaining rows.
+  for (const m of detectarDuplicados(libres(), comparablesDe(manuales).map(recortar))) {
+    if (m.tipo === "apuntado") porLinea.set(m.linea, m);
+  }
+  // ES: Pasada 3 (si se pide): tolerante, con lo manual que sigue libre.
+  // EN: Pass 3 (if asked): tolerant, with the manual items still free.
+  if (opciones.manuales) {
+    const usadosYa = usados();
+    const extra = detectarDuplicados(
+      libres(),
+      comparablesDe(manuales.filter((p) => !usadosYa.has(p.id))).map(recortar),
+      { toleranciaDias: 3, compararConcepto: false }
+    );
+    for (const m of extra) if (m.tipo === "apuntado") porLinea.set(m.linea, m);
+  }
   return [...porLinea.values()].sort((a, b) => a.linea - b.linea);
 }
 

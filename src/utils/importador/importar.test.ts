@@ -167,6 +167,17 @@ describe("marcarDuplicados / marcarDuplicados", () => {
     ]);
   });
 
+  it("lo importado se empareja antes que lo manual, que queda para la pasada tolerante / imported items pair first, leaving manual ones for the tolerant pass", () => {
+    const a = fila(1, "CAFE CENTRAL", 250);
+    const b = fila(2, "OTRO TEXTO", 250, "gasto", "2026-02-04");
+    const manual = p("m", "cafe central", 2.5);
+    const importado = p("i", "CAFE CENTRAL", 2.5, { origen: "importado", importId: huellaFila(a) });
+    expect(marcarDuplicados([a, b], [manual, importado], { manuales: true })).toEqual([
+      { linea: 1, tipo: "apuntado", id: "i", dias: 0 },
+      { linea: 2, tipo: "apuntado", id: "m", dias: 1 },
+    ]);
+  });
+
   it("un concepto larguísimo se reconoce al reimportar / a very long concept is recognised on re-import", () => {
     const largo = "COMPRA ".repeat(150);
     const f = fila(1, largo, 999);
