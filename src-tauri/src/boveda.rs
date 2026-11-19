@@ -878,6 +878,15 @@ impl Boveda {
         dek_id: &str,
     ) -> R<Vec<Reenvoltura>> {
         let mut v = Vec::new();
+        // ES: Sal de la recuperación actual del principal (la que se sustituye).
+        // EN: Salt of the main file's current recovery (the one being replaced).
+        let sal_principal = self.abierta().ok().and_then(|a| {
+            a.cabecera
+                .envolturas
+                .recuperacion
+                .as_ref()
+                .map(|e| e.kdf.sal.clone())
+        });
         for r in rutas {
             // ES: El cambio de credencial solo toca copias de su DEK: las de
             //     otras generaciones no se anotan (darían avisos sin arreglo).
@@ -901,7 +910,17 @@ impl Boveda {
             let (sal, dek_copia) = if accion == "recuperacion" {
                 let b = std::fs::read(&r)?;
                 match desde_bytes(&b) {
-                    Ok(f) => (f.envolturas.recuperacion.map(|e| e.kdf.sal), Some(f.dek_id)),
+                    Ok(f) => {
+                        let sal_c = f.envolturas.recuperacion.map(|e| e.kdf.sal);
+                        // ES: Copia de otra generación con otra clave: no es asunto
+                        //     de esta regeneración.
+                        // EN: Backup of another generation with another key: not
+                        //     this regeneration's business.
+                        if f.dek_id != dek_id && (sal_c.is_none() || sal_c != sal_principal) {
+                            continue;
+                        }
+                        (sal_c, Some(f.dek_id))
+                    }
                     Err(_) => (None, None),
                 }
             } else {
@@ -1271,6 +1290,18 @@ impl Boveda {
         let a = self.abierta()?;
         let viejo_id = a.cabecera.dek_id.clone();
         let vieja_dek = Zeroizing::new(*a.dek);
+        // ES: La clave que se sustituye se reconoce por su sal: todas sus
+        //     envolturas la comparten. Las de otra clave (p. ej. de un almacén
+        //     anterior a «Empezar de cero») no se tocan.
+        // EN: The key being replaced is recognised by its salt: all of its
+        //     wrappings share it. Those of another key (e.g. from a store
+        //     before "Start from scratch") are left alone.
+        let sal_vieja = a
+            .cabecera
+            .envolturas
+            .recuperacion
+            .as_ref()
+            .map(|e| e.kdf.sal.clone());
         let clave = recuperacion::generar()?;
         let norm = recuperacion::normalizar(&clave).map_err(|_| ErrorAlmacen::Interno)?;
         let (kek_c, sal_c) = self.kek_nueva(credencial.as_bytes())?;
@@ -1324,7 +1355,10 @@ impl Boveda {
                     &vieja_dek,
                     &kdf,
                 )?);
-            } else if f.envolturas.credencial.is_some() {
+            } else if f.envolturas.credencial.is_some()
+                && sal_vieja.is_some()
+                && f.envolturas.recuperacion.as_ref().map(|e| &e.kdf.sal) == sal_vieja.as_ref()
+            {
                 f.envolturas.recuperacion = None;
             }
             Ok(())
@@ -2080,6 +2114,22 @@ mod tests {
             .unwrap();
         b.restaurar_copia(&copia, Some("4831")).unwrap();
         assert!(b.estado().tiene_recuperacion);
+    }
+
+    #[test]
+    fn regenerar_no_toca_la_recuperacion_de_un_almacen_anterior() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        // ES: «Empezar de cero» con otro PIN; la copia del almacén anterior sigue.
+        // EN: "Start from scratch" with another PIN; the previous store's backup remains.
+        b.crear("{}", &[], Bloqueo::Pin, Some("7391"), true, "t")
+            .unwrap();
+        b.regenerar_recuperacion("7391").unwrap();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        assert!(f.envolturas.recuperacion.is_some());
+        assert_eq!(b.estado().copias_pendientes, 0);
     }
 
     #[test]
