@@ -313,20 +313,26 @@ export const useSesion = defineStore("sesion", () => {
   // EN: Lock request that is not lost: if it cannot be done now (saving
   //     failed), it stays pending (with a warning) and is retried after the
   //     next good save.
+  // ES: El último intento de bloqueo lo rechazó Rust (no fue por guardar).
+  // EN: The last lock attempt was refused by Rust (not because of saving).
+  let bloqueoRechazadoPorRust = false;
+
   async function solicitarBloqueo() {
     if (!desbloqueado.value) {
       bloqueoPendiente.value = false;
       return;
     }
     const ok = await bloquearAhora();
-    // ES: Solo queda pendiente si lo que falló fue guardar (se retoma tras el
-    //     siguiente guardado bueno). Si falló Rust, no se reprograma en bucle:
+    // ES: Queda pendiente si lo que falló fue guardar (error o cambios que
+    //     entraron a la vez; se retoma tras el siguiente guardado bueno). Si
+    //     falló Rust, no se reprograma en bucle:
     //     el autobloqueo vuelve a contar sus minutos y lo intentará entonces.
-    // EN: It only stays pending if saving failed (resumed after the next good
-    //     save). If Rust failed, it is not rescheduled in a loop: the auto-lock
+    // EN: It stays pending if saving failed (error or changes that came in at
+    //     the same time; resumed after the next good save). If Rust failed, it
+    //     is not rescheduled in a loop: the auto-lock
     //     counts its minutes again and will try then.
     bloqueoPendiente.value =
-      !ok && desbloqueado.value && useAjustes().bloqueoActivo && estadoGuardado.value === "error";
+      !ok && desbloqueado.value && useAjustes().bloqueoActivo && !bloqueoRechazadoPorRust;
   }
 
   // ES: La clave de recuperación sin confirmar nunca queda en pantalla ni en
@@ -386,6 +392,7 @@ export const useSesion = defineStore("sesion", () => {
   //     Rust; wipe memory without counting it as a change; and finally show
   //     the lock. Only with a PIN or password and in file mode.
   async function bloquearAhora(): Promise<boolean> {
+    bloqueoRechazadoPorRust = false;
     if (modo.value !== "fichero" || !useAjustes().bloqueoActivo || !desbloqueado.value) {
       return false;
     }
@@ -414,6 +421,7 @@ export const useSesion = defineStore("sesion", () => {
         //     a la app con todo como estaba y se puede reintentar.
         // EN: Rust could not forget the key: no fake lock; back to the app
         //     with everything as it was, and it can be retried.
+        bloqueoRechazadoPorRust = true;
         bloqueando = false;
         cerrandoSesion = false;
         desbloqueado.value = true;

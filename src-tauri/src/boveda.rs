@@ -855,6 +855,19 @@ impl Boveda {
     ) -> R<Vec<Reenvoltura>> {
         let mut v = Vec::new();
         for r in rutas {
+            // ES: El cambio de credencial solo toca copias de su DEK: las de
+            //     otras generaciones no se anotan (darían avisos sin arreglo).
+            // EN: The credential change only touches backups of its DEK: those
+            //     of other generations are not recorded (unfixable warnings).
+            if accion == "credencial" {
+                let otra = std::fs::read(&r)
+                    .ok()
+                    .and_then(|b| desde_bytes(&b).ok())
+                    .is_some_and(|f| f.dek_id != dek_id);
+                if otra {
+                    continue;
+                }
+            }
             // ES: Para quitar la recuperación vieja hace falta saber cuál es
             //     (su sal): si la copia no se puede leer, no se sigue. Una
             //     copia dañada no se abre con nada y se omite.
@@ -1943,6 +1956,27 @@ mod tests {
             .recuperacion
             .is_none_or(|r| r.kdf.sal != sal_r1));
         assert!(f.envolturas.credencial.is_some());
+    }
+
+    #[test]
+    fn el_cambio_de_pin_no_anota_copias_de_otra_generacion() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let actual = b.abierta().unwrap().cabecera.dek_id.clone();
+        // ES: Una copia de otra DEK (como tras una rotación).
+        // EN: A backup of another DEK (as after a rotation).
+        let copia = b.listar_copias()[0].nombre.clone();
+        let mut f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        f.dek_id = "0123456789abcdef".into();
+        b.dir
+            .escribir_copia("antes-000000000001.bolsillo", &a_bytes(&f).unwrap())
+            .unwrap();
+        let (_, nuevas) = b.preanotar("credencial", &actual).unwrap();
+        assert!(nuevas
+            .iter()
+            .all(|n| n.ruta != "copias/antes-000000000001.bolsillo"));
+        assert!(!nuevas.is_empty());
     }
 
     #[test]
