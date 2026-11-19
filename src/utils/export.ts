@@ -70,7 +70,8 @@ function etiquetaTipo(linea: LineaMes): string {
        3. Si elige ruta, envía los bytes al backend Rust para escribirlos en disco.
        `bytes` se convierte a `number[]` porque el comando Rust espera un array
        de enteros (no un Uint8Array, que no es serializable directamente a JSON).
-   EN: Internal save helper.
+       Devuelve true si se escribió y false si el usuario canceló.
+   EN: Internal save helper. Returns true if written, false if cancelled.
        1. Opens the native dialog with a suggested name and an extension filter.
        2. If the user cancels (null path), it does nothing.
        3. If a path is chosen, it sends the bytes to the Rust backend to write
@@ -80,9 +81,9 @@ function etiquetaTipo(linea: LineaMes): string {
    --------------------------------------------------------------------------- */
 async function guardar(
   nombreSugerido: string,
-  ext: "xlsx" | "pdf" | "csv",
+  ext: "xlsx" | "pdf" | "csv" | "json",
   bytes: Uint8Array
-): Promise<void> {
+): Promise<boolean> {
   // ES: Abre el diálogo "Guardar como" con el filtro de extensión correspondiente.
   // EN: Opens the "Save as" dialog with the matching extension filter.
   const ruta = await save({
@@ -92,13 +93,26 @@ async function guardar(
 
   // ES: Usuario canceló el diálogo: salimos sin escribir nada.
   // EN: The user cancelled the dialog: exit without writing anything.
-  if (ruta === null) return;
+  if (ruta === null) return false;
 
   // ES: Llamada al comando Rust que escribe los bytes en la ruta elegida.
   //     Si falla, `invoke` lanza un string de error que el llamador puede capturar.
   // EN: Call the Rust command that writes the bytes to the chosen path. If it fails,
   //     `invoke` throws an error string the caller can catch.
   await invoke("guardar_archivo", { ruta, contenido: Array.from(bytes) });
+  return true;
+}
+
+/* ---------------------------------------------------------------------------
+   ES: Guarda un texto JSON con el diálogo nativo (p. ej. los datos ilegibles
+       que no caben como copia de rescate, para no perderlos).
+   EN: Saves a JSON text with the native dialog (e.g. the unreadable data that
+       does not fit as a rescue copy, so it is not lost).
+   --------------------------------------------------------------------------- */
+//     Devuelve false si el usuario cancela el diálogo.
+// EN: Returns false if the user cancels the dialog.
+export async function guardarJson(nombreSugerido: string, texto: string): Promise<boolean> {
+  return guardar(nombreSugerido, "json", new TextEncoder().encode(texto));
 }
 
 /* ===========================================================================

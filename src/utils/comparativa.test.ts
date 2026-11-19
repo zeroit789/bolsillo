@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useFinanzas } from "../stores/finanzas";
+import { VERSION_DATOS } from "../types";
 import { claseVariacion, construirFila, flecha, porcentajeVariacion } from "./comparativa";
 
 describe("porcentajeVariacion", () => {
@@ -67,6 +68,7 @@ describe("resumenDe del store / store resumenDe", () => {
   it("suma ingresos, gastos y cuotas del mes / adds the month's income, expenses and installments", () => {
     const f = useFinanzas();
     f.hidratar({
+      version: VERSION_DATOS,
       recurrentes: [
         {
           id: "r1",

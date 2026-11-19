@@ -26,6 +26,7 @@
 // ── 1. Imports y tipos / Imports & types ─────────────────────────────────────
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import { VERSION_DATOS } from "../types";
 import type {
   Cuenta,
   DatosBolsillo,
@@ -101,10 +102,13 @@ export const useFinanzas = defineStore("finanzas", () => {
     cuentas.value = datos.cuentas ?? [];
   }
 
-  // ES: Snapshot serializable de todos los datos (para guardar / exportar).
-  // EN: Serializable snapshot of all data (used to save / export).
+  // ES: Snapshot serializable de todos los datos (para guardar / exportar). Lleva
+  //     la versión actual del esquema para que la carga sepa si debe migrar.
+  // EN: Serializable snapshot of all data (used to save / export). It carries
+  //     the current schema version so loading knows whether to migrate.
   function snapshot(): DatosBolsillo {
     return {
+      version: VERSION_DATOS,
       recurrentes: recurrentes.value,
       puntuales: puntuales.value,
       deudas: deudas.value,

@@ -147,6 +147,7 @@ async function empezar() {
     bloqueo: pideCredencial.value
       ? { tipo: tipoBloqueo.value as "pin" | "password", credencial: credencial.value }
       : null,
+    datosIniciales: "ejemplo",
   });
   cargando.value = false;
 }

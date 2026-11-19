@@ -12,7 +12,8 @@
  * ===========================================================================*/
 import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { esDatosValidos, type DatosBolsillo } from "../types";
+import { esDatosValidos, VERSION_DATOS, type DatosBolsillo } from "../types";
+import { prepararDatos } from "../utils/migraciones";
 import * as almacen from "../utils/almacen";
 import { useAjustes } from "./ajustes";
 import { useFinanzas } from "./finanzas";
@@ -21,6 +22,7 @@ import { useSesion } from "./sesion";
 // ES: Copia de seguridad mínima y válida. / EN: Minimal valid backup.
 function copia(): DatosBolsillo {
   return {
+    version: VERSION_DATOS,
     recurrentes: [
       {
         id: "r1",
@@ -86,6 +88,7 @@ describe("bloqueo con PIN / PIN lock", () => {
     await sesion.completarOnboarding({
       nombre: "  Ana  ",
       bloqueo: { tipo: "pin", credencial: "1234" },
+      datosIniciales: "ejemplo",
     });
     expect(useAjustes().nombre).toBe("Ana");
     const planesAntes = useFinanzas().snapshot().planes.length;
@@ -134,7 +137,7 @@ describe("bloqueo con PIN / PIN lock", () => {
     // ES: Los datos siguen legibles con el secreto de ofuscación.
     // EN: The data is still readable with the obfuscation secret.
     almacen.usarOfuscacion();
-    expect(await almacen.cargar()).not.toBeNull();
+    expect((await almacen.leer()).estado).toBe("ok");
   });
 });
 
@@ -145,7 +148,7 @@ describe("importar copia / import backup", () => {
 
     expect(useFinanzas().snapshot()).toEqual(copia());
     // ES: Queda guardada cifrada en disco. / EN: It is saved encrypted on disk.
-    expect(await almacen.cargar()).toEqual(copia());
+    expect(await almacen.leer()).toEqual({ estado: "ok", datos: copia() });
   });
 
   it("rechaza una copia inválida sin tocar los datos / rejects an invalid backup without touching data", async () => {
@@ -154,6 +157,32 @@ describe("importar copia / import backup", () => {
 
     await expect(sesion.importarDatos({ recurrentes: [] })).rejects.toThrow("copia-invalida");
     expect(useFinanzas().snapshot()).toEqual(copia());
+  });
+
+  it("migra una copia antigua sin versión en vez de rechazarla / migrates an old unversioned backup instead of rejecting it", async () => {
+    // ES: Forma de la 1.1.0: sin version, sin colecciones opcionales y con
+    //     descuidos tolerables (comercio null, día de pago como texto).
+    // EN: 1.1.0 shape: no version, no optional collections and tolerable slips
+    //     (null merchant, payment day as text).
+    const { recurrentes, puntuales, deudas } = copia();
+    const antigua = {
+      recurrentes: [{ ...recurrentes[0], comercio: null, diaPago: "5" }],
+      puntuales,
+      deudas,
+      categoriasCustom: ["Mascotas"],
+    };
+    await useSesion().importarDatos(antigua);
+    const s = useFinanzas().snapshot();
+    expect(s.version).toBe(VERSION_DATOS);
+    expect(s.recurrentes[0]).toEqual({ ...recurrentes[0], diaPago: 5 });
+    expect(s.planes).toEqual([]);
+  });
+
+  it("rechaza una copia de una versión más nueva / rejects a backup from a newer version", async () => {
+    const sesion = useSesion();
+    await expect(sesion.importarDatos({ ...copia(), version: VERSION_DATOS + 1 })).rejects.toThrow(
+      "copia-version"
+    );
   });
 
   it("la exportación (snapshot en JSON) se vuelve a importar igual / an export round-trips", async () => {
@@ -174,9 +203,16 @@ describe("esDatosValidos", () => {
     expect(esDatosValidos(copia())).toBe(true);
   });
 
-  it("acepta copias antiguas sin las colecciones opcionales / accepts old backups without optional collections", () => {
+  it("las copias antiguas sin colecciones opcionales pasan tras migrar / old backups without optional collections pass after migrating", () => {
     const { recurrentes, puntuales, deudas } = copia();
-    expect(esDatosValidos({ recurrentes, puntuales, deudas })).toBe(true);
+    expect(esDatosValidos({ recurrentes, puntuales, deudas })).toBe(false);
+    expect(prepararDatos({ recurrentes, puntuales, deudas })).toEqual({
+      ...copia(),
+      planes: [],
+      presupuestos: [],
+      plantillas: [],
+      cuentas: [],
+    });
   });
 
   it("rechaza lo que no es un objeto / rejects non-objects", () => {
@@ -205,6 +241,24 @@ describe("esDatosValidos", () => {
     ["plan sin nombre", (d: DatosBolsillo) => ((d.planes[0] as { nombre: unknown }).nombre = 5)],
     ["cuenta sin saldo", (d: DatosBolsillo) => (d.cuentas[0].saldoInicial = Infinity)],
     ["elemento null", (d: DatosBolsillo) => (d.deudas as unknown[]).push(null)],
+    ["sin versión", (d: DatosBolsillo) => delete (d as { version?: number }).version],
+    [
+      "concepto no texto",
+      (d: DatosBolsillo) => ((d.puntuales[0] as { concepto: unknown }).concepto = 1),
+    ],
+    ["etiqueta no texto", (d: DatosBolsillo) => (d.puntuales[0].tags = [3 as never])],
+    ["recibo que no es imagen", (d: DatosBolsillo) => (d.puntuales[0].recibo = "javascript:x")],
+    [
+      "cuenta no texto",
+      (d: DatosBolsillo) => ((d.recurrentes[0] as { cuenta: unknown }).cuenta = 7),
+    ],
+    [
+      "comercio no texto",
+      (d: DatosBolsillo) => ((d.puntuales[0] as { comercio: unknown }).comercio = {}),
+    ],
+    ["día de pago 40", (d: DatosBolsillo) => (d.deudas[0].diaPago = 40)],
+    ["tipo de deuda raro", (d: DatosBolsillo) => ((d.deudas[0] as { tipo: string }).tipo = "x")],
+    ["falta plantillas", (d: DatosBolsillo) => delete (d as { plantillas?: unknown }).plantillas],
   ])("rechaza: %s / rejects a broken field", (_nombre, romper) => {
     const d = copia();
     romper(d);

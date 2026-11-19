@@ -25,7 +25,7 @@ import { ref, computed, watch } from "vue";
 import { useAjustes } from "../stores/ajustes";
 import { useSesion } from "../stores/sesion";
 import { useFinanzas } from "../stores/finanzas";
-import { esDatosValidos } from "../types";
+import { prepararDatos, ErrorDatos } from "../utils/migraciones";
 import {
   categoriasCustom,
   agregarCategoriaCustom,
@@ -207,6 +207,10 @@ const t = crearT({
   okCopiaImportada: {
     es: "Copia importada correctamente.",
     en: "Backup imported successfully.",
+  },
+  errCopiaVersion: {
+    es: "La copia es de una versión más nueva de Bolsillo. Actualiza la app para importarla.",
+    en: "The backup comes from a newer version of Bolsillo. Update the app to import it.",
   },
   errCopiaLeerJson: {
     es: "No se pudo leer el fichero (JSON inválido).",
@@ -440,11 +444,18 @@ function importarCopia(evento: Event) {
   const lector = new FileReader();
   lector.onload = async () => {
     try {
-      // ES: Parsea el JSON y valida a fondo la forma (cada item), no solo los arrays.
-      // EN: Parse the JSON and deeply validate the shape (each item), not just arrays.
-      const datos = JSON.parse(String(lector.result));
-      if (!esDatosValidos(datos)) {
-        errorCopia.value = t("errCopiaInvalida");
+      // ES: Parsea el JSON y lo pasa por el camino único: migrar (las copias
+      //     antiguas sin versión se actualizan) + validar cada campo.
+      // EN: Parse the JSON and send it through the single path: migrate (old
+      //     unversioned backups are upgraded) + validate every field.
+      const datos: unknown = JSON.parse(String(lector.result));
+      try {
+        prepararDatos(datos);
+      } catch (e) {
+        errorCopia.value =
+          e instanceof ErrorDatos && e.motivo === "version"
+            ? t("errCopiaVersion")
+            : t("errCopiaInvalida");
         return;
       }
 
@@ -476,6 +487,8 @@ function importarCopia(evento: Event) {
       //     so the user sees the precise reason instead of a generic "invalid JSON".
       if (e instanceof Error && e.message === "copia-invalida") {
         errorCopia.value = t("errCopiaInvalida");
+      } else if (e instanceof Error && e.message === "copia-version") {
+        errorCopia.value = t("errCopiaVersion");
       } else {
         errorCopia.value = t("errCopiaLeerJson");
       }

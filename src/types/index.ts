@@ -29,7 +29,7 @@
  *   5. Línea del mes (fila unificada) (LineaMes) / Month line (unified row)
  *   6. Cuentas y subdivisiones   (Cuenta, Subdivision) / Accounts & subdivisions
  *   7. Presupuestos, plantillas y planes (Presupuesto, Plantilla, Plan) / Budgets, templates & plans
- *   8. Raíz persistida y validación (DatosBolsillo, esDatosValidos) / Persisted root & validation
+ *   8. Raíz persistida y validación (VERSION_DATOS, DatosBolsillo, esDatosValidos) / Persisted root & validation
  * ===========================================================================*/
 
 // ── 1. Signo del apunte / Entry sign ─────────────────────────────────────────
@@ -208,11 +208,22 @@ export interface Plan {
 
 // ── 8. Raíz persistida y validación / Persisted root & validation ─────────────
 
+// ES: Versión ACTUAL del esquema de datos. Los datos guardados sin campo
+//     `version` (todo lo anterior a la 1.2.0) son la versión 1; utils/migraciones.ts
+//     los lleva paso a paso hasta esta versión antes de validarlos. Súbela (y
+//     añade su migración) cada vez que cambie la forma de DatosBolsillo.
+// EN: CURRENT data schema version. Data saved without a `version` field
+//     (everything before 1.2.0) is version 1; utils/migraciones.ts upgrades it
+//     step by step to this version before validating it. Bump it (and add its
+//     migration) every time the shape of DatosBolsillo changes.
+export const VERSION_DATOS = 2;
+
 // ES: Estructura completa que se persiste (y se cifra) en disco. Es el objeto
 //     raíz que se carga al arrancar y se guarda en cada cambio.
 // EN: The complete structure persisted (and encrypted) on disk. This is the root
 //     object loaded at startup and saved on every change.
 export interface DatosBolsillo {
+  version: number; // ES: versión del esquema (VERSION_DATOS) / EN: schema version (VERSION_DATOS)
   recurrentes: Recurrente[];
   puntuales: Puntual[];
   deudas: Deuda[];
@@ -222,27 +233,27 @@ export interface DatosBolsillo {
   cuentas: Cuenta[];
 }
 
-// ES: Valida (de forma laxa pero suficiente) que un objeto tenga la forma de
-//     DatosBolsillo. Evita hidratar datos corruptos (de una copia importada o de
-//     un blob dañado) que dejarían los KPIs en NaN o romperían el render.
-//     Devuelve un type predicate para que quien llama estreche `unknown` a DatosBolsillo.
-// EN: Validates (loosely but enough) that an object has the shape of
-//     DatosBolsillo. It guards against hydrating corrupt data (from an imported
-//     backup or a damaged blob) that would leave KPIs as NaN or break the render.
-//     Returns a type predicate so callers narrow `unknown` to DatosBolsillo.
+// ES: Valida que un objeto tenga EXACTAMENTE la forma de DatosBolsillo en la
+//     versión actual: todas las colecciones y todos los campos, incluidos los
+//     opcionales (comercio, tags, recibo, cuenta, diaPago…). Las copias antiguas
+//     NO se validan aquí directamente: antes pasan por `migrar` (utils/migraciones.ts).
+//     Las claves desconocidas se toleran (p. ej. `categoriasCustom` de las copias).
+//     Devuelve un type predicate para que quien llama estreche `unknown`.
+// EN: Validates that an object has EXACTLY the shape of DatosBolsillo at the
+//     current version: every collection and every field, optional ones included
+//     (comercio, tags, recibo, cuenta, diaPago…). Old backups are NOT validated
+//     here directly: they go through `migrar` (utils/migraciones.ts) first.
+//     Unknown keys are tolerated (e.g. backups' `categoriasCustom`). Returns a
+//     type predicate so callers narrow `unknown`.
 export function esDatosValidos(d: unknown): d is DatosBolsillo {
-  // ES: Debe ser un objeto no nulo antes de poder mirar sus claves.
-  // EN: Must be a non-null object before we can inspect its keys.
-  if (!d || typeof d !== "object") return false;
+  // ES: Debe ser un objeto no nulo (y no un array) de la versión actual.
+  // EN: Must be a non-null object (not an array) of the current version.
+  if (!d || typeof d !== "object" || Array.isArray(d)) return false;
   const o = d as Record<string, unknown>;
-  // ES: Las tres colecciones núcleo son obligatorias y deben ser arrays.
-  // EN: The three core collections are mandatory and must be arrays.
-  if (!Array.isArray(o.recurrentes) || !Array.isArray(o.puntuales) || !Array.isArray(o.deudas))
-    return false;
-  // ES: Pequeños guards de tipo reutilizables en las comprobaciones por elemento de abajo.
-  // EN: Tiny reusable type guards used across the per-item checks below.
-  // ES: Objeto no nulo cuyas claves se pueden leer (sustituye a los antiguos `any`).
-  // EN: Non-null object whose keys can be read (replaces the former `any`).
+  if (o.version !== VERSION_DATOS) return false;
+
+  // ES: Pequeños guards de tipo reutilizables en las comprobaciones por elemento.
+  // EN: Tiny reusable type guards used across the per-item checks.
   const esObjeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object";
   const num = (x: unknown) => typeof x === "number" && Number.isFinite(x);
   const str = (x: unknown) => typeof x === "string";
@@ -251,90 +262,94 @@ export function esDatosValidos(d: unknown): d is DatosBolsillo {
   // EN: Real month/date format checks (shield the downstream date math).
   const mesOk = (x: unknown) => typeof x === "string" && /^\d{4}-\d{2}$/.test(x);
   const fechaOk = (x: unknown) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}/.test(x);
-  // ES: Cada recurrente debe tener id, importe finito, signo/categoría válidos
-  //     y un `desde` válido; `hasta` es null o un mes válido.
-  // EN: Every recurring entry must have id, finite amount, valid sign/category
-  //     and a valid `desde`; `hasta` is either null or a valid month.
-  const rec = o.recurrentes.every(
-    (r: unknown) =>
-      esObjeto(r) &&
+  // ES: Campos opcionales: o no están (undefined) o tienen el tipo correcto.
+  // EN: Optional fields: either absent (undefined) or of the right type.
+  const opt = (x: unknown, ok: (v: unknown) => boolean) => x === undefined || ok(x);
+  const diaOk = (x: unknown) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 31;
+  const tagsOk = (x: unknown) => Array.isArray(x) && x.every((t) => typeof t === "string");
+  // ES: El recibo es una imagen en data URL (es lo único que la app sabe pintar).
+  // EN: The receipt is an image data URL (the only thing the app can render).
+  const reciboOk = (x: unknown) => typeof x === "string" && x.startsWith("data:image/");
+  const tiposDeuda: string[] = TIPOS_DEUDA.map((t) => t.valor);
+  // ES: Una colección obligatoria: array cuyos elementos (objetos) pasan `ok`.
+  // EN: A mandatory collection: an array whose items (objects) all pass `ok`.
+  const lista = (x: unknown, ok: (e: Record<string, unknown>) => boolean) =>
+    Array.isArray(x) && x.every((e: unknown) => esObjeto(e) && ok(e));
+
+  // ES: Recurrentes: id, concepto, importe finito, signo y categoría, `desde`
+  //     válido, `hasta` null o mes válido, y sus opcionales bien formados.
+  // EN: Recurring entries: id, concept, finite amount, sign and category, valid
+  //     `desde`, `hasta` null or a valid month, and well-formed optionals.
+  const rec = lista(
+    o.recurrentes,
+    (r) =>
       str(r.id) &&
+      str(r.concepto) &&
       num(r.importe) &&
       signo(r.signo) &&
       str(r.categoria) &&
       mesOk(r.desde) &&
-      (r.hasta === null || mesOk(r.hasta))
+      (r.hasta === null || mesOk(r.hasta)) &&
+      opt(r.diaPago, diaOk) &&
+      opt(r.comercio, str) &&
+      opt(r.tags, tagsOk) &&
+      opt(r.cuenta, str)
   );
   // ES: Las subdivisiones (gasto dividido) son opcionales, pero si vienen deben
-  //     ser un array de { categoria:string, importe:number finito } o el reparto
-  //     por categoría daría NaN.
+  //     ser { categoria:string, importe:number finito } o el reparto daría NaN.
   // EN: Subdivisions (split expense) are optional, but if present they must be
-  //     an array of { categoria:string, importe:number finite } or the
-  //     per-category split would produce NaN.
-  const subOk = (p: Record<string, unknown>) =>
-    p.subdivisiones === undefined ||
-    (Array.isArray(p.subdivisiones) &&
-      p.subdivisiones.every((s: unknown) => esObjeto(s) && str(s.categoria) && num(s.importe)));
-  // ES: Cada puntual debe tener id, importe finito, signo/categoría válidos,
-  //     una fecha válida y (si vienen) subdivisiones válidas.
-  // EN: Every one-off entry must have id, finite amount, valid sign/category,
-  //     a valid date, and (if present) valid subdivisions.
-  const pun = o.puntuales.every(
-    (p: unknown) =>
-      esObjeto(p) &&
+  //     { categoria:string, importe:number finite } or the split would be NaN.
+  const subOk = (x: unknown) =>
+    Array.isArray(x) && x.every((e: unknown) => esObjeto(e) && str(e.categoria) && num(e.importe));
+  // ES: Puntuales: id, concepto, importe, signo, categoría, fecha válida y sus
+  //     opcionales (comercio, tags, recibo, cuenta, subdivisiones).
+  // EN: One-off entries: id, concept, amount, sign, category, valid date and
+  //     their optionals (comercio, tags, recibo, cuenta, subdivisiones).
+  const pun = lista(
+    o.puntuales,
+    (p) =>
       str(p.id) &&
+      str(p.concepto) &&
       num(p.importe) &&
       signo(p.signo) &&
       str(p.categoria) &&
       fechaOk(p.fecha) &&
-      subOk(p)
+      opt(p.comercio, str) &&
+      opt(p.tags, tagsOk) &&
+      opt(p.recibo, reciboOk) &&
+      opt(p.cuenta, str) &&
+      opt(p.subdivisiones, subOk)
   );
-  // ES: Cada deuda debe tener id, total/cuota/pagado finitos y un mes de inicio
-  //     válido.
-  // EN: Every debt must have id, finite total/installment/paid amounts and a
-  //     valid start month.
-  const deu = o.deudas.every(
-    (x: unknown) =>
-      esObjeto(x) &&
+  // ES: Deudas: id, concepto, tipo conocido, importes finitos, mes de inicio
+  //     válido y día de pago opcional.
+  // EN: Debts: id, concept, known type, finite amounts, valid start month and
+  //     optional payment day.
+  const deu = lista(
+    o.deudas,
+    (x) =>
       str(x.id) &&
+      str(x.concepto) &&
+      tiposDeuda.includes(x.tipo as string) &&
       num(x.total) &&
       num(x.cuotaMensual) &&
       num(x.pagadoInicial) &&
-      mesOk(x.inicioMes)
+      mesOk(x.inicioMes) &&
+      opt(x.diaPago, diaOk)
   );
-  // ES: planes/presupuestos/plantillas/cuentas son opcionales (copias antiguas
-  //     no los traen); cuando vienen, cada elemento se valida aquí abajo.
-  // EN: planes/presupuestos/plantillas/cuentas are optional (old backups may not
-  //     include them); when present, each item is validated below.
-  const pla =
-    o.planes === undefined ||
-    (Array.isArray(o.planes) &&
-      o.planes.every(
-        (x: unknown) =>
-          esObjeto(x) && str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)
-      ));
-  const pre =
-    o.presupuestos === undefined ||
-    (Array.isArray(o.presupuestos) &&
-      o.presupuestos.every((x: unknown) => esObjeto(x) && str(x.categoria) && num(x.limite)));
-  const pll =
-    o.plantillas === undefined ||
-    (Array.isArray(o.plantillas) &&
-      o.plantillas.every(
-        (x: unknown) =>
-          esObjeto(x) &&
-          str(x.id) &&
-          str(x.concepto) &&
-          num(x.importe) &&
-          signo(x.signo) &&
-          str(x.categoria)
-      ));
-  const cue =
-    o.cuentas === undefined ||
-    (Array.isArray(o.cuentas) &&
-      o.cuentas.every(
-        (x: unknown) => esObjeto(x) && str(x.id) && str(x.nombre) && num(x.saldoInicial)
-      ));
+  // ES: En la versión actual el resto de colecciones también son obligatorias
+  //     (la migración desde v1 las rellena con [] si faltaban).
+  // EN: At the current version the remaining collections are mandatory too
+  //     (the migration from v1 fills them with [] when missing).
+  const pla = lista(
+    o.planes,
+    (x) => str(x.id) && str(x.nombre) && num(x.objetivo) && num(x.aportado)
+  );
+  const pre = lista(o.presupuestos, (x) => str(x.categoria) && num(x.limite));
+  const pll = lista(
+    o.plantillas,
+    (x) => str(x.id) && str(x.concepto) && num(x.importe) && signo(x.signo) && str(x.categoria)
+  );
+  const cue = lista(o.cuentas, (x) => str(x.id) && str(x.nombre) && num(x.saldoInicial));
   // ES: Válido solo si todas las colecciones pasan su comprobación.
   // EN: Valid only if every collection passes its check.
   return rec && pun && deu && pla && pre && pll && cue;

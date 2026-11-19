@@ -12,6 +12,7 @@
  *   1. Importaciones / Imports
  *   2. Generador de IDs / ID generator
  *   3. Constructor de datos demo / Demo data builder
+ *   4. Datos vacíos / Empty data
  * ===========================================================================*/
 
 // ── 1. Importaciones / Imports ────────────────────────────────────────────────
@@ -19,7 +20,7 @@
 //     y aritmética de meses) usadas para anclar los datos demo a "hoy".
 // EN: Domain type for the whole dataset, plus date helpers (current month and
 //     month arithmetic) used to anchor the demo data to "today".
-import type { DatosBolsillo } from "../types";
+import { VERSION_DATOS, type DatosBolsillo } from "../types";
 import { mesActual, sumarMeses } from "../utils/format";
 
 // ── 2. Generador de IDs / ID generator ────────────────────────────────────────
@@ -46,6 +47,7 @@ export function datosDemo(): DatosBolsillo {
   const dia = (d: number) => `${mes}-${String(d).padStart(2, "0")}`;
 
   return {
+    version: VERSION_DATOS,
     // ES: Recurrentes (se repiten cada mes desde su alta).
     // EN: Recurring entries (repeat every month from their start date).
     recurrentes: [
@@ -184,5 +186,21 @@ export function datosDemo(): DatosBolsillo {
       { id: nuevoId(), nombre: "Efectivo", saldoInicial: 200 },
       { id: nuevoId(), nombre: "Banco", saldoInicial: 1500 },
     ],
+  };
+}
+
+// ── 4. Datos vacíos / Empty data ──────────────────────────────────────────────
+// ES: Conjunto vacío de la versión actual, para "empezar de cero" sin ejemplo.
+// EN: Empty dataset of the current version, to "start from scratch" without samples.
+export function datosVacios(): DatosBolsillo {
+  return {
+    version: VERSION_DATOS,
+    recurrentes: [],
+    puntuales: [],
+    deudas: [],
+    planes: [],
+    presupuestos: [],
+    plantillas: [],
+    cuentas: [],
   };
 }

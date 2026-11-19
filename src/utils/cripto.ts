@@ -16,7 +16,8 @@
  *   3. Derivación de clave (PBKDF2) / Key derivation (PBKDF2)
  *   4. Forma del blob cifrado / Encrypted blob shape
  *   5. Cifrar / Encrypt
- *   6. Descifrar / Decrypt
+ *   6. Leer el sobre sin secreto / Read the envelope without a secret
+ *   7. Descifrar / Decrypt
  * ===========================================================================*/
 
 // ── 1. Codificadores de texto / Text codecs ──────────────────────────────────
@@ -103,21 +104,81 @@ export async function cifrar(texto: string, secreto: string): Promise<string> {
   return JSON.stringify(blob);
 }
 
-// ── 6. Descifrar / Decrypt ────────────────────────────────────────────────────
-// ES: Descifra un blob con el secreto dado. Re-deriva la clave usando el salt del
-//     propio blob y luego descifra. Lanza error si el secreto es incorrecto o el
-//     dato fue alterado: la etiqueta de autenticación de AES-GCM verifica la
-//     integridad y falla cerrando.
-// EN: Decrypts a blob with the given secret. Re-derives the key from the blob's
-//     own salt, then decrypts. Throws if the secret is wrong or the data was
-//     tampered with: AES-GCM's auth tag verifies integrity and fails closed.
+// ── 6. Leer el sobre sin secreto / Read the envelope without a secret ───────────
+// ES: Error de "sobre dañado": el blob guardado no tiene la forma de un cifrado
+//     de Bolsillo (JSON ilegible, faltan campos, base64 roto o tamaños de salt/IV
+//     imposibles). Se detecta SIN secreto, así que es daño seguro, no una
+//     credencial mala.
+// EN: "Damaged envelope" error: the stored blob does not have the shape of a
+//     Bolsillo ciphertext (unreadable JSON, missing fields, broken base64 or
+//     impossible salt/IV sizes). It is detected WITHOUT a secret, so it is
+//     certain damage, not a wrong credential.
+export class ErrorSobreDanado extends Error {
+  constructor() {
+    super("sobre-danado");
+    this.name = "ErrorSobreDanado";
+  }
+}
+
+// ES: Sobre ya decodificado: los bytes listos para derivar la clave y descifrar.
+// EN: Decoded envelope: the bytes ready to derive the key and decrypt.
+interface SobreDecodificado {
+  salt: Uint8Array;
+  iv: Uint8Array;
+  ct: Uint8Array;
+}
+
+// ES: Lee y comprueba la estructura del blob sin descifrarlo. Lanza
+//     ErrorSobreDanado si algo no cuadra. Ojo: un `ct` alterado con la forma
+//     correcta pasa esta prueba; eso solo se ve al descifrar, y entonces no se
+//     puede distinguir de una credencial incorrecta (AES-GCM falla igual).
+// EN: Reads and checks the blob structure without decrypting it. Throws
+//     ErrorSobreDanado if anything is off. Note: an altered `ct` with the right
+//     shape passes this check; that only shows up when decrypting, and then it
+//     cannot be told apart from a wrong credential (AES-GCM fails the same way).
+export function leerSobre(blobStr: string): SobreDecodificado {
+  let blob: unknown;
+  try {
+    blob = JSON.parse(blobStr);
+  } catch {
+    throw new ErrorSobreDanado();
+  }
+  if (!blob || typeof blob !== "object") throw new ErrorSobreDanado();
+  const b = blob as Record<string, unknown>;
+  if (
+    b.v !== 1 ||
+    typeof b.salt !== "string" ||
+    typeof b.iv !== "string" ||
+    typeof b.ct !== "string"
+  )
+    throw new ErrorSobreDanado();
+  try {
+    const sobre = { salt: deBase64(b.salt), iv: deBase64(b.iv), ct: deBase64(b.ct) };
+    // ES: salt de 16 B, IV de 12 B y al menos la etiqueta de 16 B de AES-GCM.
+    // EN: 16-byte salt, 12-byte IV and at least AES-GCM's 16-byte tag.
+    if (sobre.salt.length !== 16 || sobre.iv.length !== 12 || sobre.ct.length < 16)
+      throw new ErrorSobreDanado();
+    return sobre;
+  } catch {
+    // ES: atob lanza con caracteres que no son base64. / EN: atob throws on non-base64 characters.
+    throw new ErrorSobreDanado();
+  }
+}
+
+// ── 7. Descifrar / Decrypt ────────────────────────────────────────────────────
+// ES: Descifra un blob con el secreto dado. Primero comprueba el sobre (lanza
+//     ErrorSobreDanado si está roto); luego re-deriva la clave con el salt del
+//     propio blob y descifra. Si el secreto es incorrecto O el cifrado fue
+//     alterado, AES-GCM falla cerrando (la etiqueta no cuadra) y lanza otro
+//     error: esos dos casos no se pueden distinguir entre sí.
+// EN: Decrypts a blob with the given secret. It first checks the envelope
+//     (throws ErrorSobreDanado if broken); then re-derives the key from the
+//     blob's own salt and decrypts. If the secret is wrong OR the ciphertext
+//     was altered, AES-GCM fails closed (the tag does not match) and throws a
+//     different error: those two cases cannot be told apart.
 export async function descifrar(blobStr: string, secreto: string): Promise<string> {
-  const blob = JSON.parse(blobStr) as BlobCifrado;
-  const clave = await derivarClave(secreto, deBase64(blob.salt));
-  const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: deBase64(blob.iv) },
-    clave,
-    deBase64(blob.ct)
-  );
+  const sobre = leerSobre(blobStr);
+  const clave = await derivarClave(secreto, sobre.salt);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: sobre.iv }, clave, sobre.ct);
   return dec.decode(pt);
 }

@@ -33,6 +33,7 @@ import { notificar } from "./utils/notificar";
 import { crearT } from "./i18n";
 import PantallaBloqueo from "./components/PantallaBloqueo.vue";
 import Onboarding from "./components/Onboarding.vue";
+import PantallaErrorDatos from "./components/PantallaErrorDatos.vue";
 import DashboardView from "./views/DashboardView.vue";
 import MovimientosView from "./views/MovimientosView.vue";
 import DeudasView from "./views/DeudasView.vue";
@@ -327,6 +328,9 @@ onUnmounted(() => {
 <template>
   <!-- ES: Bienvenida / onboarding (primer arranque) / EN: Welcome / onboarding (first run) -->
   <Onboarding v-if="sesion.necesitaOnboarding" />
+
+  <!-- ES: Datos que no se pueden abrir (nunca se pisan) / EN: Data that cannot be opened (never overwritten) -->
+  <PantallaErrorDatos v-else-if="sesion.fallo" />
 
   <!-- ES: Pantalla de bloqueo / EN: Lock screen -->
   <PantallaBloqueo v-else-if="bloqueado" />

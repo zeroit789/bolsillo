@@ -35,6 +35,10 @@ const t = crearT({
   desbloquear: { es: "Desbloquear", en: "Unlock" },
   credIncorrecta: { es: "Credencial incorrecta", en: "Wrong credential" },
   lecturaFallida: { es: "No se pudieron leer los datos", en: "Could not read the data" },
+  recuperar: {
+    es: "¿No puedes entrar? Ver opciones de recuperación",
+    en: "Can't get in? See recovery options",
+  },
   datosCifrados: {
     es: "Tus datos están cifrados en este equipo.",
     en: "Your data is encrypted on this device.",
@@ -42,10 +46,13 @@ const t = crearT({
 });
 
 // ── 3. Estado local / Local state ─────────────────────────────────────────────
-// ES: credencial = el PIN/contraseña tecleado; cargando = true mientras verifica.
-// EN: credencial = the typed PIN/password; cargando = true while verifying.
+// ES: credencial = el PIN/contraseña tecleado; cargando = true mientras verifica;
+//     fallos = intentos fallidos (tras el primero se ofrece la recuperación).
+// EN: credencial = the typed PIN/password; cargando = true while verifying;
+//     fallos = failed attempts (after the first one, recovery is offered).
 const credencial = ref("");
 const cargando = ref(false);
+const fallos = ref(0);
 
 // ES: True cuando el tipo de bloqueo configurado es PIN (vs. contraseña); decide
 //     el modo de entrada, longitud máxima y placeholder en la plantilla.
@@ -73,7 +80,10 @@ async function entrar() {
   cargando.value = false;
   // ES: Limpia el campo si la credencial era incorrecta.
   // EN: Clear the field if the credential was wrong.
-  if (!sesion.desbloqueado) credencial.value = "";
+  if (!sesion.desbloqueado) {
+    credencial.value = "";
+    fallos.value++;
+  }
 }
 </script>
 
@@ -106,6 +116,17 @@ async function entrar() {
 
       <!-- ES: Mensaje de error (p. ej. credencial incorrecta) / EN: Error message (e.g. wrong credential) -->
       <p v-if="sesion.error" class="text-danger text-sm mt-3">{{ t(sesion.error) }}</p>
+
+      <!-- ES: Tras un fallo: opciones de recuperación (importar o empezar de cero) -->
+      <!-- EN: After a failure: recovery options (import or start from scratch) -->
+      <button
+        v-if="fallos > 0"
+        type="button"
+        class="mt-3 text-xs text-muted underline hover:text-ink"
+        @click="sesion.mostrarRecuperacion()"
+      >
+        {{ t("recuperar") }}
+      </button>
 
       <!-- ES: Botón de desbloqueo; deshabilitado mientras carga o con campo vacío -->
       <!-- EN: Unlock button; disabled while loading or with empty field -->

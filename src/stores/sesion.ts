@@ -9,11 +9,13 @@
  *     it decides WHICH screen to show and wires persistence around `finanzas`.
  *
  * ES: Estados de pantalla posibles según este store + ajustes:
- *       - necesitaOnboarding: primer arranque (mostrar bienvenida)
+ *       - necesitaOnboarding: no hay datos guardados (mostrar bienvenida)
+ *       - fallo: los datos no se pueden leer (pantalla de error y rescate)
  *       - bloqueado (bloqueoActivo && !desbloqueado): pedir credencial
  *       - desbloqueado: app en marcha
  * EN: Possible screen states derived from this store + ajustes:
- *       - necesitaOnboarding: first boot (show the welcome screen)
+ *       - necesitaOnboarding: there is no saved data (show the welcome screen)
+ *       - fallo: the data cannot be read (error screen and rescue)
  *       - locked (bloqueoActivo && !desbloqueado): ask for the credential
  *       - unlocked (desbloqueado): app is running
  *
@@ -21,7 +23,7 @@
  *   1. Importaciones / Imports
  *   2. Definición del store y estado reactivo / Store definition & reactive state
  *   3. Conexión del guardado automático / Autosave wiring
- *   4. Carga e hidratación / Load & hydrate
+ *   4. Entrada, fallos y rescate / Entry, failures & rescue
  *   5. Decisión de arranque / Boot decision
  *   6. Desbloqueo / Unlock
  *   7. Gestión del bloqueo / Lock management
@@ -32,17 +34,23 @@
 
 // ── 1. Importaciones / Imports ───────────────────────────────────────────────
 // ES: Fábrica de stores de Pinia, reactividad de Vue, stores hermanos, capa de
-//     almacenamiento, datos demo de siembra y el validador de forma en runtime
-//     para las copias importadas.
+//     almacenamiento, datos iniciales (ejemplo o vacío) y la preparación de
+//     datos (migrar + validar) para las copias importadas.
 // EN: Pinia store factory, Vue reactivity, sibling stores, storage layer,
-//     demo seed data and the runtime shape validator for imported backups.
+//     initial data (samples or empty) and data preparation (migrate +
+//     validate) for imported backups.
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { useFinanzas } from "./finanzas";
 import { useAjustes, type TipoBloqueo } from "./ajustes";
 import * as almacen from "../utils/almacen";
-import { datosDemo } from "../data/demo";
-import { esDatosValidos } from "../types";
+import { datosDemo, datosVacios } from "../data/demo";
+import type { DatosBolsillo } from "../types";
+import { prepararDatos, ErrorDatos } from "../utils/migraciones";
+
+// ES: Motivos por los que los datos guardados no se pueden abrir (ver almacen.leer).
+// EN: Reasons why the stored data cannot be opened (see almacen.leer).
+export type FalloDatos = "danado" | "credencial" | "invalido" | "version";
 
 // ── 2. Definición del store y estado reactivo / Store definition & reactive state ─
 // ES: `desbloqueado` habilita la UI principal; `necesitaOnboarding` dispara el
@@ -56,6 +64,13 @@ export const useSesion = defineStore("sesion", () => {
   const desbloqueado = ref(false);
   const necesitaOnboarding = ref(false);
   const error = ref("");
+  // ES: Motivo del fallo de lectura (null = sin fallo), clave de la copia de
+  //     rescate creada y si no se pudo crear (falta de espacio).
+  // EN: Read failure reason (null = no failure), key of the rescue copy made
+  //     and whether it could not be made (out of space).
+  const fallo = ref<FalloDatos | null>(null);
+  const rescate = ref<string | null>(null);
+  const rescateFallido = ref(false);
   let guardadoActivo = false;
 
   // ── 3. Conexión del guardado automático / Autosave wiring ──────────────────
@@ -78,105 +93,164 @@ export const useSesion = defineStore("sesion", () => {
     );
   }
 
-  // ── 4. Carga e hidratación / Load & hydrate ────────────────────────────────
-  // ES: Carga los datos persistidos e hidrata finanzas. En instalación limpia
-  //     (sin datos) siembra el conjunto demo y lo persiste de inmediato para
-  //     que el blob exista desde el principio. Luego conecta el guardado.
-  // EN: Loads persisted data and hydrates finanzas. On a fresh install (no
-  //     data) it seeds the demo dataset and persists it immediately so the
-  //     blob exists from the start. Always wires autosave afterwards.
-  async function cargarEHidratar() {
-    const f = useFinanzas();
-    const datos = await almacen.cargar();
-    if (datos) {
-      f.hidratar(datos);
-    } else {
-      f.hidratar(datosDemo());
-      await almacen.guardar(f.snapshot());
-    }
+  // ── 4. Entrada, fallos y rescate / Entry, failures & rescue ─────────────────
+  // ES: Entra en la app con unos datos ya leídos y validados: hidrata, conecta
+  //     el guardado, limpia cualquier fallo y marca la app como configurada
+  //     (si hay datos, no tiene sentido volver a mostrar la bienvenida).
+  // EN: Enters the app with already read and validated data: hydrates, wires
+  //     autosave, clears any failure and marks the app as configured (if there
+  //     is data, showing the welcome again makes no sense).
+  function entrar(datos: DatosBolsillo) {
+    const ajustes = useAjustes();
+    useFinanzas().hidratar(datos);
     activarGuardado();
+    fallo.value = null;
+    error.value = "";
+    if (!ajustes.configurado) ajustes.marcarConfigurado();
+    desbloqueado.value = true;
   }
 
-  // ES: Envoltura tolerante a fallos sobre cargarEHidratar: si el blob guardado
-  //     está corrupto (la lectura/descifrado lanza), recurre a los datos demo
-  //     en vez de romper el arranque, y persiste ese estado recuperado.
-  // EN: Fault-tolerant wrapper over cargarEHidratar: if the stored blob is
-  //     corrupt (read/decrypt throws), fall back to the demo data instead of
-  //     crashing boot, and persist that recovered state.
-  async function cargarSeguro() {
+  // ES: Garantiza que existe una copia de rescate del blob actual (una sola por
+  //     contenido). Devuelve false si no cabe: entonces NO se debe seguir con
+  //     nada que sobrescriba los datos sin que el usuario lo fuerce.
+  // EN: Ensures a rescue copy of the current blob exists (one per content).
+  //     Returns false if it does not fit: then nothing that overwrites the data
+  //     must go ahead unless the user forces it.
+  function asegurarRescate(): boolean {
+    if (rescate.value) return true;
     try {
-      await cargarEHidratar();
+      rescate.value = almacen.crearRescate();
+      rescateFallido.value = false;
+      return true;
     } catch {
-      const f = useFinanzas();
-      f.hidratar(datosDemo());
-      activarGuardado();
-      await almacen.guardar(f.snapshot());
+      rescateFallido.value = true;
+      return false;
     }
+  }
+
+  // ES: Pasa a la pantalla de error de datos. NUNCA siembra ejemplo ni escribe
+  //     el blob principal. Con daño o datos no válidos se hace ya la copia de
+  //     rescate; con "credencial" no (los datos pueden estar bien y solo faltar
+  //     el PIN): la copia se hará antes de cualquier opción destructiva.
+  // EN: Switches to the data error screen. It NEVER seeds samples nor writes
+  //     the main blob. On damage or invalid data the rescue copy is made right
+  //     away; on "credencial" it is not (the data may be fine and only the PIN
+  //     be missing): the copy is made before any destructive option.
+  function entrarEnFallo(tipo: FalloDatos) {
+    fallo.value = tipo;
+    desbloqueado.value = false;
+    if (tipo !== "credencial") asegurarRescate();
   }
 
   // ── 5. Decisión de arranque / Boot decision ────────────────────────────────
-  // ES: Punto de entrada al iniciar la app. Aplica el tema y luego enruta a uno
-  //     de los tres estados: onboarding (primer arranque), bloqueado (bloqueo
-  //     activo) o desbloqueado (sin bloqueo → entrar directo). Usa ofuscación
-  //     como secreto en reposo cuando no hay credencial de usuario que proteja
-  //     los datos.
-  // EN: Entry point at app start. Applies the theme, then routes to one of the
-  //     three states: onboarding (first run), locked (lock enabled), or
-  //     unlocked (no lock → enter directly). Uses obfuscation as the at-rest
-  //     secret whenever there is no user credential to protect the data.
+  // ES: Punto de entrada al iniciar la app:
+  //       1. Sin blob → bienvenida (nada se guarda hasta que el usuario elige).
+  //       2. Sobre dañado → pantalla de error (antes de pedir PIN, para no
+  //          responder "credencial incorrecta" a unos datos rotos).
+  //       3. Bloqueo activo → pantalla de bloqueo.
+  //       4. Sin bloqueo → se lee con el secreto de ofuscación; si no abre o no
+  //          valida → pantalla de error, nunca datos de ejemplo encima.
+  //     La bienvenida depende de que NO haya blob, no de `ajustes.configurado`:
+  //     si se pierden los ajustes, los datos no se pisan.
+  // EN: Entry point at app start:
+  //       1. No blob → welcome (nothing is saved until the user chooses).
+  //       2. Damaged envelope → error screen (before asking for a PIN, so a
+  //          broken blob does not answer "wrong credential").
+  //       3. Lock enabled → lock screen.
+  //       4. No lock → read with the obfuscation secret; if it does not open or
+  //          validate → error screen, never sample data on top.
+  //     The welcome depends on there being NO blob, not on `ajustes.configurado`:
+  //     if the settings are lost, the data is not overwritten.
   async function arrancar() {
     const ajustes = useAjustes();
     ajustes.aplicarTema();
 
-    // ES: Primer arranque -> bienvenida (con datos demo de fondo).
-    // EN: First run -> show welcome (with demo data in the background).
-    if (!ajustes.configurado) {
+    if (!almacen.hayDatos()) {
       almacen.usarOfuscacion();
-      await cargarSeguro();
       necesitaOnboarding.value = true;
       return;
     }
-    // ES: Con bloqueo -> permanecer bloqueado y esperar la credencial.
-    // EN: Lock enabled -> stay locked and wait for the credential.
+    if (!almacen.sobreLegible()) {
+      entrarEnFallo("danado");
+      return;
+    }
     if (ajustes.bloqueoActivo) {
       desbloqueado.value = false;
       return;
     }
-    // ES: Sin bloqueo -> entrar directo usando el secreto de ofuscación.
-    // EN: No lock -> enter directly using the obfuscation secret.
     almacen.usarOfuscacion();
-    await cargarSeguro();
-    desbloqueado.value = true;
+    const r = await almacen.leer();
+    if (r.estado === "ok") entrar(r.datos);
+    else if (r.estado === "vacio") necesitaOnboarding.value = true;
+    else entrarEnFallo(r.estado);
   }
 
   // ── 6. Desbloqueo / Unlock ──────────────────────────────────────────────────
-  // ES: Valida la credencial introducida en la pantalla de bloqueo. Si es
-  //     correcta, la fija como secreto activo, carga/hidrata y pasa a
-  //     desbloqueado. Si la credencial es incorrecta o falla la lectura, fija
-  //     una clave i18n de error y devuelve false. Devuelve true solo cuando la
-  //     app queda realmente desbloqueada.
-  // EN: Validates the credential typed on the lock screen. On success, sets it
-  //     as the active secret, loads/hydrates and flips to unlocked. On wrong
-  //     credential or read failure, sets an i18n error key and returns false.
-  //     Returns true only when the app is actually unlocked.
+  // ES: Prueba una credencial (pantalla de bloqueo o de error). Si abre y valida,
+  //     la fija como secreto activo y entra; si los ajustes se habían perdido,
+  //     vuelve a marcar el bloqueo (PIN si son 4-6 dígitos, si no contraseña)
+  //     para que la próxima vez se pida. Si no abre → "credIncorrecta" (puede
+  //     ser también un cifrado alterado: no se puede distinguir). Si abre pero
+  //     no valida o es de una versión nueva → pantalla de error con rescate.
+  // EN: Tries a credential (lock or error screen). If it opens and validates,
+  //     it becomes the active secret and the app is entered; if the settings
+  //     were lost, the lock is set again (PIN if 4-6 digits, else password) so
+  //     it is asked next time. If it does not open → "credIncorrecta" (it may
+  //     also be altered ciphertext: they cannot be told apart). If it opens but
+  //     does not validate or is from a newer version → error screen with rescue.
   async function desbloquear(credencial: string): Promise<boolean> {
     error.value = "";
     try {
-      const ok = await almacen.secretoValido(credencial);
-      if (!ok) {
-        // ES: clave i18n, se traduce en PantallaBloqueo / EN: i18n key, translated in PantallaBloqueo
+      const r = await almacen.leer(credencial);
+      if (r.estado === "ok") {
+        almacen.usarSecreto(credencial);
+        const ajustes = useAjustes();
+        if (!ajustes.bloqueoActivo)
+          ajustes.setBloqueo(true, /^\d{4,6}$/.test(credencial) ? "pin" : "password");
+        entrar(r.datos);
+        return true;
+      }
+      if (r.estado === "credencial") {
+        // ES: clave i18n, se traduce en la pantalla / EN: i18n key, translated on screen
         error.value = "credIncorrecta";
         return false;
       }
-      almacen.usarSecreto(credencial);
-      await cargarEHidratar();
-      desbloqueado.value = true;
-      return true;
+      if (r.estado === "vacio") {
+        error.value = "lecturaFallida";
+        return false;
+      }
+      entrarEnFallo(r.estado);
+      return false;
     } catch {
-      // ES: clave i18n, se traduce en PantallaBloqueo / EN: i18n key, translated in PantallaBloqueo
       error.value = "lecturaFallida";
       return false;
     }
+  }
+
+  // ES: Desde la pantalla de bloqueo: abre las opciones de recuperación (importar
+  //     copia o empezar de cero) sin tocar nada todavía.
+  // EN: From the lock screen: opens the recovery options (import a backup or
+  //     start from scratch) without touching anything yet.
+  function mostrarRecuperacion() {
+    entrarEnFallo("credencial");
+  }
+
+  // ES: Opción "empezar de cero" de la pantalla de error: exige la copia de
+  //     rescate (salvo que el usuario fuerce tras ser avisado), quita el bloqueo
+  //     antiguo y lleva a la bienvenida. El blob ilegible no se toca hasta que
+  //     la bienvenida guarde los datos nuevos.
+  // EN: "Start from scratch" option of the error screen: requires the rescue
+  //     copy (unless the user forces it after being warned), removes the old
+  //     lock and goes to the welcome. The unreadable blob is not touched until
+  //     the welcome saves the new data.
+  function empezarDeCero(forzar = false): boolean {
+    if (!asegurarRescate() && !forzar) return false;
+    almacen.usarOfuscacion();
+    useAjustes().setBloqueo(false, null);
+    fallo.value = null;
+    error.value = "";
+    necesitaOnboarding.value = true;
+    return true;
   }
 
   // ── 7. Gestión del bloqueo / Lock management ────────────────────────────────
@@ -223,38 +297,64 @@ export const useSesion = defineStore("sesion", () => {
   }
 
   // ── 8. Cierre de la bienvenida / Onboarding completion ──────────────────────
-  // ES: Completa la bienvenida: guarda el nombre recortado, activa el bloqueo si
-  //     el usuario eligió uno, marca ajustes como configurado y entra en la app
-  //     (desbloqueada, onboarding hecho).
-  // EN: Finishes the welcome flow: saves the trimmed name, enables the lock if
-  //     the user chose one, marks ajustes as configured and enters the app
-  //     (unlocked, onboarding done).
+  // ES: Completa la bienvenida: carga los datos elegidos (ejemplo o vacío),
+  //     los GUARDA cifrados (con la credencial elegida o con ofuscación) y solo
+  //     si el guardado va bien registra el bloqueo, marca la app como
+  //     configurada y entra. Si el guardado falla, lanza y no cambia de pantalla.
+  // EN: Finishes the welcome: loads the chosen data (samples or empty), SAVES
+  //     it encrypted (with the chosen credential or obfuscation) and only if
+  //     the save works records the lock, marks the app as configured and
+  //     enters. If the save fails it throws and stays on the welcome screen.
   async function completarOnboarding(opts: {
     nombre: string;
     bloqueo: { tipo: TipoBloqueo; credencial: string } | null;
+    datosIniciales: "ejemplo" | "vacio";
   }) {
     const ajustes = useAjustes();
-    ajustes.setNombre(opts.nombre.trim());
-    if (opts.bloqueo) {
-      await configurarBloqueo(opts.bloqueo.tipo, opts.bloqueo.credencial);
+    const datos = opts.datosIniciales === "ejemplo" ? datosDemo() : datosVacios();
+    const secreto = opts.bloqueo?.credencial;
+    if (secreto) await almacen.guardar(datos, secreto);
+    else {
+      almacen.usarOfuscacion();
+      await almacen.guardar(datos);
     }
-    ajustes.marcarConfigurado();
+    if (secreto) almacen.usarSecreto(secreto);
+    ajustes.setNombre(opts.nombre.trim());
+    ajustes.setBloqueo(!!opts.bloqueo, opts.bloqueo?.tipo ?? null);
     necesitaOnboarding.value = false;
-    desbloqueado.value = true;
+    entrar(datos);
   }
 
   // ── 9. Importación de datos / Data import ───────────────────────────────────
-  // ES: Importa datos de una copia. VALIDA la FORMA antes de hidratar: una copia
-  //     manipulada o de otra app metería basura (NaN en KPIs -> blob corrupto).
-  //     Luego hidrata y PERSISTE con un await garantizado, sin depender de que
-  //     el watch automático ya esté activo. Lanza si la copia no es válida.
-  // EN: Imports data from a backup. Validates the SHAPE before hydrating: a
-  //     tampered or foreign-app backup would inject garbage (NaN in KPIs ->
-  //     corrupt blob). Then hydrates and PERSISTS with a guaranteed await,
-  //     without relying on the autosave watcher being active yet. Throws if the
-  //     backup is invalid.
-  async function importarDatos(datos: unknown) {
-    if (!esDatosValidos(datos)) throw new Error("copia-invalida");
+  // ES: Importa una copia. Pasa SIEMPRE por migrar + validar (las copias
+  //     antiguas sin versión se migran, no se rechazan). Errores: "copia-invalida"
+  //     o "copia-version" (copia de una versión más nueva). Desde la pantalla de
+  //     error exige antes la copia de rescate (o `forzar`), guarda con
+  //     ofuscación y quita el bloqueo antiguo, porque su credencial no se conoce.
+  //     El guardado se espera: si falla, lanza y no se da por importada.
+  // EN: Imports a backup. It ALWAYS goes through migrate + validate (old
+  //     unversioned backups are migrated, not rejected). Errors: "copia-invalida"
+  //     or "copia-version" (backup from a newer version). From the error screen
+  //     it first requires the rescue copy (or `forzar`), saves with obfuscation
+  //     and removes the old lock, because its credential is unknown. The save is
+  //     awaited: if it fails, it throws and the import does not count.
+  async function importarDatos(crudo: unknown, forzar = false) {
+    let datos: DatosBolsillo;
+    try {
+      datos = prepararDatos(crudo);
+    } catch (e) {
+      throw new Error(
+        e instanceof ErrorDatos && e.motivo === "version" ? "copia-version" : "copia-invalida"
+      );
+    }
+    if (fallo.value) {
+      if (!asegurarRescate() && !forzar) throw new Error("sin-rescate");
+      almacen.usarOfuscacion();
+      await almacen.guardar(datos);
+      useAjustes().setBloqueo(false, null);
+      entrar(datos);
+      return;
+    }
     const f = useFinanzas();
     f.hidratar(datos);
     await almacen.guardar(f.snapshot());
@@ -262,16 +362,21 @@ export const useSesion = defineStore("sesion", () => {
 
   // ── 10. API pública / Public API ────────────────────────────────────────────
   // ES: Flags reactivos + acciones expuestas a los componentes. Los ayudantes
-  //     internos (activarGuardado, cargarEHidratar, cargarSeguro) quedan
-  //     privados.
+  //     internos (activarGuardado, entrar, entrarEnFallo, asegurarRescate)
+  //     quedan privados.
   // EN: Reactive flags + actions exposed to components. Internal helpers
-  //     (activarGuardado, cargarEHidratar, cargarSeguro) stay private.
+  //     (activarGuardado, entrar, entrarEnFallo, asegurarRescate) stay private.
   return {
     desbloqueado,
     necesitaOnboarding,
     error,
+    fallo,
+    rescate,
+    rescateFallido,
     arrancar,
     desbloquear,
+    mostrarRecuperacion,
+    empezarDeCero,
     configurarBloqueo,
     quitarBloqueo,
     cambiarCredencial,

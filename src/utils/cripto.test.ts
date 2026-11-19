@@ -9,7 +9,7 @@
  *     every encryption and that nothing is ever stored in plaintext.
  * ===========================================================================*/
 import { beforeEach, describe, expect, it } from "vitest";
-import type { DatosBolsillo } from "../types";
+import { VERSION_DATOS, type DatosBolsillo } from "../types";
 import { cifrar, descifrar } from "./cripto";
 import * as almacen from "./almacen";
 
@@ -19,6 +19,7 @@ const CLAVE_DATOS = "bolsillo.datos.cif";
 // ES: Datos mínimos válidos con un texto fácil de buscar en el blob cifrado.
 // EN: Minimal valid data with a text that is easy to look for in the blob.
 const datos: DatosBolsillo = {
+  version: VERSION_DATOS,
   recurrentes: [],
   puntuales: [
     {
@@ -81,12 +82,12 @@ describe("almacen cifrado / encrypted store", () => {
 
   it("guarda cifrado y carga lo mismo / saves encrypted and loads it back", async () => {
     expect(almacen.hayDatos()).toBe(false);
-    expect(await almacen.cargar()).toBeNull();
+    expect(await almacen.leer()).toEqual({ estado: "vacio" });
 
     await almacen.guardar(datos);
     expect(almacen.hayDatos()).toBe(true);
     expect(localStorage.getItem(CLAVE_DATOS)).not.toContain("TEXTO-SECRETO");
-    expect(await almacen.cargar()).toEqual(datos);
+    expect(await almacen.leer()).toEqual({ estado: "ok", datos });
   });
 
   it("con PIN solo ese PIN abre los datos / with a PIN only that PIN opens the data", async () => {
@@ -98,8 +99,10 @@ describe("almacen cifrado / encrypted store", () => {
 
     // ES: Con el secreto de ofuscación ya no se puede leer.
     // EN: The obfuscation secret can no longer read it.
+    //     AES-GCM no distingue credencial mala de cifrado alterado: "credencial".
+    // EN: AES-GCM cannot tell a wrong credential from altered ciphertext: "credencial".
     almacen.usarOfuscacion();
-    await expect(almacen.cargar()).rejects.toThrow();
+    expect(await almacen.leer()).toEqual({ estado: "credencial" });
   });
 
   it("sin datos cualquier PIN vale para empezar / with no data any PIN is valid", async () => {
@@ -110,12 +113,56 @@ describe("almacen cifrado / encrypted store", () => {
     const primero = { ...datos, puntuales: [] };
     void almacen.guardar(primero);
     await almacen.guardar(datos);
-    expect(await almacen.cargar()).toEqual(datos);
+    expect(await almacen.leer()).toEqual({ estado: "ok", datos });
   });
 
-  it("devuelve null si lo descifrado no es una copia válida / returns null for invalid content", async () => {
+  it("descifra pero no valida: invalido / decrypts but invalid: invalido", async () => {
     localStorage.setItem(CLAVE_DATOS, await cifrar(JSON.stringify({ hola: 1 }), "2468"));
     almacen.usarSecreto("2468");
-    expect(await almacen.cargar()).toBeNull();
+    expect(await almacen.leer()).toEqual({ estado: "invalido" });
+  });
+
+  it("de una versión más nueva: version / from a newer version: version", async () => {
+    const futuro = { ...datos, version: VERSION_DATOS + 1 };
+    localStorage.setItem(CLAVE_DATOS, await cifrar(JSON.stringify(futuro), "2468"));
+    expect(await almacen.leer("2468")).toEqual({ estado: "version" });
+  });
+
+  it.each([
+    ["JSON roto / broken JSON", "{roto"],
+    ["no es objeto / not an object", "[1,2]"],
+    ["faltan campos / missing fields", JSON.stringify({ v: 1, salt: "AAAA" })],
+    ["base64 roto / broken base64", JSON.stringify({ v: 1, salt: "@@", iv: "@@", ct: "@@" })],
+    [
+      "tamaños imposibles / impossible sizes",
+      JSON.stringify({ v: 1, salt: "AAAA", iv: "AAAA", ct: "AAAA" }),
+    ],
+  ])("sobre dañado (%s): danado sin pedir secreto / damaged envelope", async (_n, blob) => {
+    localStorage.setItem(CLAVE_DATOS, blob);
+    expect(almacen.sobreLegible()).toBe(false);
+    expect(await almacen.leer()).toEqual({ estado: "danado" });
+  });
+
+  it("v1 sin versión se migra al leer / unversioned v1 is migrated on read", async () => {
+    // ES: Forma de la 1.1.0: sin version ni colecciones opcionales.
+    // EN: 1.1.0 shape: no version nor optional collections.
+    const v1 = { recurrentes: [], puntuales: datos.puntuales, deudas: [] };
+    localStorage.setItem(CLAVE_DATOS, await cifrar(JSON.stringify(v1), "2468"));
+    expect(await almacen.leer("2468")).toEqual({ estado: "ok", datos });
+  });
+
+  it("rescate: copia el blob sin pisar ni duplicar / rescue: copies the blob without overwriting or duplicating", async () => {
+    await almacen.guardar(datos);
+    const blob = localStorage.getItem(CLAVE_DATOS);
+    const fecha = new Date("2026-11-19T09:30:00Z");
+    // ES: Un rescate previo distinto con la misma fecha no se pisa.
+    // EN: A different earlier rescue with the same date is not overwritten.
+    localStorage.setItem(almacen.PREFIJO_RESCATE + "2026-11-19T09-30-00", "anterior");
+    const clave = almacen.crearRescate(fecha);
+    expect(clave).toBe(almacen.PREFIJO_RESCATE + "2026-11-19T09-30-00-2");
+    expect(localStorage.getItem(clave)).toBe(blob);
+    expect(localStorage.getItem(almacen.PREFIJO_RESCATE + "2026-11-19T09-30-00")).toBe("anterior");
+    // ES: Mismo contenido: devuelve el rescate existente. / EN: Same content: returns the existing one.
+    expect(almacen.crearRescate(new Date("2027-01-01T00:00:00Z"))).toBe(clave);
   });
 });
