@@ -42,12 +42,14 @@ Si tenías PIN o contraseña, se conserva el mismo (aunque no cumpla los mínimo
 
 Si existe un `datos.bolsillo` válido, la 1.2.0 **nunca** vuelve a migrar desde `localStorage` encima. Si después de migrar alguien usa la 1.1.0 y apunta cosas, esas cosas van a `localStorage`, no al fichero. Al abrir otra vez la 1.2.0, la app detecta que el bloque de `localStorage` ya no es el que migró (su huella no coincide) y **avisa**, pero no lo importa sola: importarlo encima podría borrar lo que hiciste en la 1.2.0. Para traerlo, exporta una copia JSON desde la 1.1.0 e impórtala en la 1.2.0 sabiendo que sustituye los datos.
 
-### Volver a la 1.1.0 sin perder nada
+### Volver a la 1.1.0
 
 1. En la 1.2.0, **exporta una copia JSON** (Ajustes → Exportar copia). Es la forma de llevarte lo que hayas cambiado desde la migración.
 2. Copia la carpeta `%APPDATA%\com.zeroit.bolsillo\` entera a otro sitio (otro disco o fuera del PC). ⚠️ Por confirmar si el desinstalador de la 1.2.0 la borra.
 3. Instala la 1.1.0. Abrirá los datos de `localStorage` tal como estaban **en el momento de la migración**: lo que hiciste en la 1.2.0 no está ahí.
-4. Para tenerlo, importa en la 1.1.0 la copia JSON del paso 1. ⚠️ Por confirmar con la 1.1.0 real: la copia de la 1.2.0 lleva `version: 4`, que la 1.1.0 no conoce.
+4. Para tenerlo, importa en la 1.1.0 la copia JSON del paso 1. ⚠️ Por confirmar con la 1.1.0 real: la copia de la 1.2.0 lleva `version: 4`, que la 1.1.0 no conoce (su validación no mira la versión).
+
+Aunque la 1.1.0 acepte esa copia, **pierde lo que no conoce**: un fijo semanal, trimestral, anual o con cuotas pasa a contar una vez cada mes y sin fin; las transferencias y los ajustes de saldo no cuentan (los saldos cambian); y las reglas, los perfiles de banco y las correcciones se ignoran. Los movimientos importados de extractos siguen ahí como movimientos normales. Guarda la copia JSON y la carpeta del paso 2 para volver a la 1.2.0 con todo.
 
 La 1.1.0 no sabe leer `datos.bolsillo` y no lo toca. Si más tarde vuelves a la 1.2.0, esta abrirá `datos.bolsillo` (con lo que tenía al irte) y avisará de que `localStorage` cambió.
 
@@ -97,12 +99,14 @@ If you had a PIN or password, the same one is kept (even if it does not meet the
 
 If a valid `datos.bolsillo` exists, 1.2.0 **never** migrates from `localStorage` on top of it again. If, after migrating, someone uses 1.1.0 and records things, they go to `localStorage`, not to the file. When 1.2.0 opens again, it detects that the `localStorage` block is no longer the one it migrated (its fingerprint does not match) and **warns**, but it does not import it by itself: importing it on top could wipe what you did in 1.2.0. To bring it over, export a JSON backup from 1.1.0 and import it into 1.2.0, knowing that it replaces the data.
 
-### Going back to 1.1.0 without losing anything
+### Going back to 1.1.0
 
 1. In 1.2.0, **export a JSON backup** (Settings → Export backup). That is how you take along whatever changed since the migration.
 2. Copy the whole `%APPDATA%\com.zeroit.bolsillo\` folder somewhere else (another disk or off the PC). ⚠️ To be confirmed whether the 1.2.0 uninstaller deletes it.
 3. Install 1.1.0. It will open the `localStorage` data as it was **at the moment of the migration**: what you did in 1.2.0 is not there.
-4. To get it, import into 1.1.0 the JSON backup from step 1. ⚠️ To be confirmed with the real 1.1.0: the 1.2.0 backup carries `version: 4`, which 1.1.0 does not know.
+4. To get it, import into 1.1.0 the JSON backup from step 1. ⚠️ To be confirmed with the real 1.1.0: the 1.2.0 backup carries `version: 4`, which 1.1.0 does not know (its validation does not check the version).
+
+Even if 1.1.0 accepts that backup, **it loses what it does not know**: a weekly, quarterly, yearly or instalment-limited fixed item counts once every month with no end; transfers and balance adjustments do not count (balances change); and rules, bank profiles and corrections are ignored. Transactions imported from statements are still there as normal transactions. Keep the JSON backup and the folder from step 2 to go back to 1.2.0 with everything.
 
 1.1.0 cannot read `datos.bolsillo` and does not touch it. If you later go back to 1.2.0, it will open `datos.bolsillo` (with what it had when you left) and warn that `localStorage` changed.
 
