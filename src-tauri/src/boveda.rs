@@ -537,6 +537,16 @@ impl Boveda {
         //     replaced: if anything fails before, the original stays in place.
         let (f, dek, clave) = self.construir(datos, recibos, bloqueo, credencial)?;
         if existe {
+            // ES: Lo pendiente se resuelve contra la DEK que se va a sustituir
+            //     (como al restaurar o cambiar la protección).
+            // EN: Pending work is resolved against the DEK about to be replaced
+            //     (as when restoring or changing the protection).
+            let anterior = self
+                .dir
+                .leer(PRINCIPAL)?
+                .and_then(|b| desde_bytes(&b).ok())
+                .map(|f| f.dek_id);
+            self.resolver_pendientes(anterior.as_deref())?;
             self.dir.rescatar(PRINCIPAL, false, self.ahora())?;
         }
         self.escribir_principal(f, dek, false)?;
@@ -2046,6 +2056,30 @@ mod tests {
         assert!(con_nueva
             .iter()
             .all(|f| f.envolturas.recuperacion.is_some()));
+    }
+
+    #[test]
+    fn empezar_de_cero_resuelve_lo_pendiente_contra_la_dek_sustituida() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let actual = b.abierta().unwrap().cabecera.dek_id.clone();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let sal = desde_bytes(&b.dir.leer_copia(&copia).unwrap())
+            .unwrap()
+            .envolturas
+            .recuperacion
+            .unwrap()
+            .kdf
+            .sal;
+        let reg = format!(
+            r#"[{{"ruta":"copias/{copia}","accion":"recuperacion","dek_id":"{actual}","sal":"{sal}","dek_copia":"{actual}"}}]"#
+        );
+        b.dir.escribir(PENDIENTES, reg.as_bytes()).unwrap();
+        b.crear("{}", &[], Bloqueo::Ninguno, None, true, "t")
+            .unwrap();
+        b.restaurar_copia(&copia, Some("4831")).unwrap();
+        assert!(b.estado().tiene_recuperacion);
     }
 
     #[test]
