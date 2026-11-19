@@ -1,0 +1,176 @@
+# ES: Publicación de Bolsillo. Al empujar un tag `v*` (p. ej. v1.2.0):
+#       1. comprueba que el tag coincide con la versión de package.json,
+#          src-tauri/tauri.conf.json y src-tauri/Cargo.toml;
+#       2. pasa los tests;
+#       3. compila los instaladores de Windows (NSIS y MSI) con tauri-action y la
+#          configuración de PRODUCCIÓN (tauri.conf.json tal cual, sin
+#          tauri.dev.conf.json: identificador com.zeroit.bolsillo);
+#       4. los sube a un release en BORRADOR, con notas que apuntan al CHANGELOG;
+#       5. descarga los ficheros ya subidos, calcula su SHA-256 y publica
+#          SHA256SUMS en el mismo borrador.
+#     El borrador lo revisa y publica una persona a mano.
+# EN: Bolsillo release. When a `v*` tag is pushed (e.g. v1.2.0):
+#       1. checks that the tag matches the version in package.json,
+#          src-tauri/tauri.conf.json and src-tauri/Cargo.toml;
+#       2. runs the tests;
+#       3. builds the Windows installers (NSIS and MSI) with tauri-action and
+#          the PRODUCTION config (tauri.conf.json as is, without
+#          tauri.dev.conf.json: identifier com.zeroit.bolsillo);
+#       4. uploads them to a DRAFT release, with notes pointing to the CHANGELOG;
+#       5. downloads the files already uploaded, computes their SHA-256 and
+#          publishes SHA256SUMS on the same draft.
+#     A person reviews and publishes the draft by hand.
+#
+# ES: Acciones fijadas por SHA completo (el comentario indica la versión), igual
+#     que en ci.yml. tauri-action action-v1.0.0 = 1deb371b0cd8bd54025b384f1cd735e725c4060f
+#     (tag action-v1.0.0 del repo oficial tauri-apps/tauri-action, comprobado el
+#     19-11-2026 en su API de GitHub).
+# EN: Actions pinned to a full commit SHA (the comment shows the version), as in
+#     ci.yml. tauri-action action-v1.0.0 = 1deb371b0cd8bd54025b384f1cd735e725c4060f
+#     (tag action-v1.0.0 of the official tauri-apps/tauri-action repo, checked
+#     on 19-11-2026 through its GitHub API).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# ES: Sin permisos por defecto; solo el job de publicación pide escritura.
+# EN: No permissions by default; only the release job asks for write access.
+permissions: {}
+
+# ES: Un solo release por tag a la vez; no se cancela uno a medias.
+# EN: One release per tag at a time; a half-done one is never cancelled.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Instaladores de Windows (borrador) / Windows installers (draft)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # ES: crear el borrador y subir ficheros / EN: create the draft and upload files
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # ES: no deja el token en .git/config / EN: don't leave the token in .git/config
+
+      # ES: 1. El tag tiene que ser la versión que llevan los tres manifiestos;
+      #        si no, saldrían instaladores 1.1.0 bajo un tag v1.2.0.
+      # EN: 1. The tag must be the version the three manifests carry; otherwise
+      #        1.1.0 installers would ship under a v1.2.0 tag.
+      - name: Comprobar versión del tag / Check tag version
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $esperada = $env:TAG -replace '^v', ''
+          $paquete = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauri = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' |
+            Select-Object -First 1).Matches[0].Groups[1].Value
+          Write-Output "tag=$esperada package.json=$paquete tauri.conf.json=$tauri Cargo.toml=$cargo"
+          if ($paquete -ne $esperada -or $tauri -ne $esperada -or $cargo -ne $esperada) {
+            Write-Error "La versión no coincide con el tag / Version does not match the tag"
+            exit 1
+          }
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Instalar dependencias / Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ES: 2. Tests antes de compilar (tipos y build los hace beforeBuildCommand).
+      # EN: 2. Tests before building (types and build run in beforeBuildCommand).
+      - name: Tests (Vitest)
+        run: pnpm test
+
+      # ES: Caché de ~/.cargo y src-tauri/target, como en ci.yml.
+      # EN: Caches ~/.cargo and src-tauri/target, as in ci.yml.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri -> target
+
+      # ES: 3 y 4. Compila con tauri.conf.json (producción) y sube al borrador.
+      #     Sin `args`: nada de --config con la configuración de desarrollo.
+      #     Sin updater: ni latest.json ni firmas.
+      # EN: 3 and 4. Builds with tauri.conf.json (production) and uploads to the
+      #     draft. No `args`: no --config with the development config.
+      #     No updater: neither latest.json nor signatures.
+      - name: Compilar y subir / Build and upload (tauri-action)
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Bolsillo ${{ github.ref_name }}
+          releaseBody: |
+            **ES** · Instaladores de Windows de Bolsillo ${{ github.ref_name }}.
+            Novedades: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md).
+            Comprueba la descarga con `SHA256SUMS` (PowerShell: `Get-FileHash <fichero> -Algorithm SHA256`).
+
+            **EN** · Windows installers for Bolsillo ${{ github.ref_name }}.
+            What's new: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md).
+            Verify the download with `SHA256SUMS` (PowerShell: `Get-FileHash <file> -Algorithm SHA256`).
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
+
+      # ES: 5. SHA256SUMS de los ficheros TAL COMO están en el release (se
+      #        descargan por la API, así el nombre y el contenido son los que
+      #        bajará la gente). Formato de sha256sum: "<hash>  <nombre>", LF.
+      #        Si se repite el job, el SHA256SUMS anterior se borra y se rehace.
+      # EN: 5. SHA256SUMS of the files AS they are in the release (downloaded
+      #        through the API, so name and content are what people will get).
+      #        sha256sum format: "<hash>  <name>", LF. If the job is re-run, the
+      #        previous SHA256SUMS is deleted and rebuilt.
+      - name: Publicar SHA256SUMS / Publish SHA256SUMS
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ steps.tauri.outputs.releaseId }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:RELEASE_ID) { throw "tauri-action no devolvió releaseId / no releaseId from tauri-action" }
+          $cabeceras = @{
+            Authorization          = "Bearer $env:GH_TOKEN"
+            Accept                 = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $api = "https://api.github.com/repos/$env:REPO/releases"
+          $ficheros = Invoke-RestMethod -Headers $cabeceras -Uri "$api/$env:RELEASE_ID/assets?per_page=100"
+          $carpeta = New-Item -ItemType Directory -Force -Path (Join-Path $env:RUNNER_TEMP 'sumas')
+          $lineas = @()
+          foreach ($f in ($ficheros | Sort-Object name)) {
+            if ($f.name -eq 'SHA256SUMS') {
+              Invoke-RestMethod -Method Delete -Headers $cabeceras -Uri "$api/assets/$($f.id)"
+              continue
+            }
+            $destino = Join-Path $carpeta $f.name
+            $descarga = $cabeceras.Clone()
+            $descarga.Accept = 'application/octet-stream'
+            # ES: PowerShell 7 quita Authorization al seguir la redirección al
+            #     almacén de GitHub, que es lo que este espera.
+            # EN: PowerShell 7 drops Authorization when following the redirect
+            #     to GitHub's storage, which is what it expects.
+            Invoke-WebRequest -Headers $descarga -Uri "$api/assets/$($f.id)" -OutFile $destino
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $destino).Hash.ToLowerInvariant()
+            $lineas += "$hash  $($f.name)"
+          }
+          if ($lineas.Count -eq 0) { throw "El release no tiene ficheros / The release has no files" }
+          $sumas = Join-Path $carpeta 'SHA256SUMS'
+          [IO.File]::WriteAllText($sumas, (($lineas -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
+          $subida = "https://uploads.github.com/repos/$env:REPO/releases/$env:RELEASE_ID/assets?name=SHA256SUMS"
+          Invoke-RestMethod -Method Post -Headers $cabeceras -ContentType 'text/plain' -InFile $sumas -Uri $subida | Out-Null
+          # ES: Copia en el resumen del job. / EN: Copy in the job summary.
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @('### SHA256SUMS', '```', (Get-Content $sumas -Raw).TrimEnd(), '```')
