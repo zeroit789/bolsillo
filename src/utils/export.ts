@@ -4,13 +4,13 @@
    ES: Exportación de datos de Bolsillo a XLSX (ExcelJS), PDF (jsPDF +
        autoTable) y CSV.
        - 5 funciones públicas: mes × XLSX/PDF e historial × XLSX/PDF/CSV.
-       - Guardado en disco vía Tauri: diálogo "save" + comando Rust
-         `guardar_archivo`.
+       - Guardado en disco vía Tauri: el comando Rust `guardar_archivo` abre
+         el diálogo "Guardar como" y escribe (el frontend no elige rutas).
        - Todos los importes se muestran formateados en euros (es-ES).
    EN: Exports Bolsillo data to XLSX (ExcelJS), PDF (jsPDF + autoTable) and CSV.
        - 5 public functions: month × XLSX/PDF and history × XLSX/PDF/CSV.
-       - Saved to disk through Tauri: "save" dialog + the `guardar_archivo`
-         Rust command.
+       - Saved to disk through Tauri: the `guardar_archivo` Rust command opens
+         the "Save as" dialog and writes (the frontend does not pick paths).
        - Every amount is shown formatted in euros (es-ES).
    ---------------------------------------------------------------------------
    ÍNDICE / INDEX:
@@ -21,7 +21,6 @@
      5. Exportar historial a CSV / Export history to CSV
    =========================================================================== */
 
-import { save } from "@tauri-apps/plugin-dialog"; // ES: diálogo nativo "Guardar como" / EN: native "Save as" dialog
 import { invoke } from "@tauri-apps/api/core"; // ES: puente para llamar comandos Rust / EN: bridge to call Rust commands
 
 import type { LineaMes, EstadoDeuda, Plan } from "../types"; // ES: línea unificada + estado de deuda + plan de ahorro / EN: unified line + debt status + savings plan
@@ -89,43 +88,33 @@ function etiquetaTipo(linea: LineaMes): string {
 }
 
 /* ---------------------------------------------------------------------------
-   ES: Helper interno de guardado.
-       1. Abre el diálogo nativo con un nombre sugerido y un filtro por extensión.
-       2. Si el usuario cancela (ruta null), no hace nada.
-       3. Si elige ruta, envía los bytes al backend Rust para escribirlos en disco.
-       `bytes` se convierte a `number[]` porque el comando Rust espera un array
-       de enteros (no un Uint8Array, que no es serializable directamente a JSON).
-       Devuelve true si se escribió y false si el usuario canceló.
-   EN: Internal save helper. Returns true if written, false if cancelled.
-       1. Opens the native dialog with a suggested name and an extension filter.
-       2. If the user cancels (null path), it does nothing.
-       3. If a path is chosen, it sends the bytes to the Rust backend to write
-          them to disk.
-       `bytes` is turned into `number[]` because the Rust command expects an
-       array of integers (a Uint8Array is not directly JSON-serializable).
+   ES: Helper interno de guardado. Envía los bytes EN CRUDO (cuerpo binario de
+       la IPC, sin convertirlos a un array JSON de números) y en cabeceras el
+       nombre sugerido y el filtro. Rust abre el diálogo nativo y escribe en la
+       ruta elegida de forma atómica. Las cabeceras HTTP solo admiten ASCII,
+       así que el nombre va con encodeURIComponent (Rust lo decodifica).
+       Devuelve true si se escribió y false si el usuario canceló; si falla,
+       `invoke` lanza el error para que el llamador lo muestre.
+   EN: Internal save helper. It sends the bytes RAW (binary IPC body, without
+       turning them into a JSON array of numbers) and, in headers, the
+       suggested name and the filter. Rust opens the native dialog and writes
+       atomically to the chosen path. HTTP headers only allow ASCII, so the
+       name goes through encodeURIComponent (Rust decodes it). Returns true if
+       written and false if the user cancelled; on failure `invoke` throws the
+       error so the caller can show it.
    --------------------------------------------------------------------------- */
-async function guardar(
+export async function guardar(
   nombreSugerido: string,
-  ext: "xlsx" | "pdf" | "csv" | "json",
+  ext: "xlsx" | "pdf" | "csv" | "json" | "bolsillo",
   bytes: Uint8Array
 ): Promise<boolean> {
-  // ES: Abre el diálogo "Guardar como" con el filtro de extensión correspondiente.
-  // EN: Opens the "Save as" dialog with the matching extension filter.
-  const ruta = await save({
-    defaultPath: nombreSugerido,
-    filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+  return invoke<boolean>("guardar_archivo", bytes, {
+    headers: {
+      "x-nombre": encodeURIComponent(nombreSugerido),
+      "x-filtro": encodeURIComponent(ext.toUpperCase()),
+      "x-extensiones": ext,
+    },
   });
-
-  // ES: Usuario canceló el diálogo: salimos sin escribir nada.
-  // EN: The user cancelled the dialog: exit without writing anything.
-  if (ruta === null) return false;
-
-  // ES: Llamada al comando Rust que escribe los bytes en la ruta elegida.
-  //     Si falla, `invoke` lanza un string de error que el llamador puede capturar.
-  // EN: Call the Rust command that writes the bytes to the chosen path. If it fails,
-  //     `invoke` throws an error string the caller can catch.
-  await invoke("guardar_archivo", { ruta, contenido: Array.from(bytes) });
-  return true;
 }
 
 /* ---------------------------------------------------------------------------

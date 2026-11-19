@@ -34,4 +34,31 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# ES: Cifrado del almacén (Tanda 2). Versiones exactas comprobadas en crates.io
+#     el 19-11-2026: Argon2id para derivar claves del PIN/contraseña, AES-256-GCM
+#     para cifrar, zeroize para borrar claves de la memoria, getrandom para los
+#     bytes aleatorios del sistema y base64 para meter binario en la cabecera JSON.
+# EN: Store encryption (Tanda 2). Exact versions checked on crates.io on
+#     2026-11-19: Argon2id to derive keys from the PIN/password, AES-256-GCM to
+#     encrypt, zeroize to wipe keys from memory, getrandom for the system's
+#     random bytes and base64 to put binary into the JSON header.
+argon2 = { version = "=0.6.0", default-features = false, features = ["alloc"] }
+aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"] }
+zeroize = "=1.9.2"
+getrandom = "=0.4.3"
+base64 = "=0.23.1"
+
+# ES: Solo para los tests: carpetas temporales que se borran solas.
+# EN: Tests only: temporary folders that delete themselves.
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+# ES: Argon2 sin optimizar es lentísimo: en los tests (perfil dev) se compila
+#     optimizado para que derivar una clave no tarde segundos.
+# EN: Unoptimized Argon2 is very slow: in tests (dev profile) it is built
+#     optimized so deriving a key does not take seconds.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3
 

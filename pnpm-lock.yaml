@@ -20,15 +20,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.12.5
         version: 2.12.5
-      '@tauri-apps/plugin-dialog':
-        specifier: ^2.8.4
-        version: 2.8.4
       '@tauri-apps/plugin-notification':
         specifier: ^2.8.1
         version: 2.8.1
-      '@tauri-apps/plugin-opener':
-        specifier: ^2.7.3
-        version: 2.7.3
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
@@ -705,14 +699,8 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
-  '@tauri-apps/plugin-dialog@2.8.4':
-    resolution: {integrity: sha512-+6ZOiXenOaxXwb8qCbBPdT2jX2cFPaVVHGIskrpmJLpmWj+qKRTD6X/z9x7hTdSQn7NedcoXCkWGej4a7dC4lw==}
-
   '@tauri-apps/plugin-notification@2.8.1':
     resolution: {integrity: sha512-B+OCJv17XCFQxAhe2+fn2bHqQ1fz/hGnYHeT++yv8+q0daOH5o1ghX7MmxWgoGFp7POaNn4UMONclHeZn65mJA==}
-
-  '@tauri-apps/plugin-opener@2.7.3':
-    resolution: {integrity: sha512-Nm+v7vLBCDzYZxrmCJhpMgtPsPsKt5myMs7SMU/aBjPOmAFI1RrHfhMz7t5KlxjMOzRcelyNq1/j0pmC9SmBVA==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -2447,15 +2435,7 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.12.5
       '@tauri-apps/cli-win32-x64-msvc': 2.12.5
 
-  '@tauri-apps/plugin-dialog@2.8.4':
-    dependencies:
-      '@tauri-apps/api': 2.12.5
-
   '@tauri-apps/plugin-notification@2.8.1':
-    dependencies:
-      '@tauri-apps/api': 2.12.5
-
-  '@tauri-apps/plugin-opener@2.7.3':
     dependencies:
       '@tauri-apps/api': 2.12.5
 
