@@ -262,6 +262,13 @@ export const useSesion = defineStore("sesion", () => {
         return await op();
       } finally {
         operando = false;
+        // ES: Un bloqueo pendiente se reevalúa al salir de la operación,
+        //     aunque ya no quede nada por guardar.
+        // EN: A pending lock is re-evaluated when leaving the operation, even
+        //     if nothing is left to save.
+        if (bloqueoPendiente.value && cambios === guardados) {
+          setTimeout(() => void solicitarBloqueo(), 0);
+        }
         if (cambios !== guardados && !bloqueando) {
           if (estadoGuardado.value === "error") marcarFallo();
           else programarGuardado();
@@ -618,6 +625,9 @@ export const useSesion = defineStore("sesion", () => {
         : await boveda.abrir(credencial);
       porRecuperacion.value = !!recuperacion;
       entrar(datos);
+      // ES: Al abrir, Rust reintenta las reenvolturas pendientes: se refresca el aviso.
+      // EN: On open, Rust retries the pending rewraps: the warning is refreshed.
+      copiasPendientes.value = (await boveda.estado().catch(() => null))?.copiasPendientes ?? 0;
       return true;
     } catch (e) {
       const c = codigo(e);
@@ -930,6 +940,7 @@ export const useSesion = defineStore("sesion", () => {
   //     previous state is saved first (if it cannot be, nothing is replaced)
   //     and at the end only the revision really written counts as saved.
   async function hidratarYGuardar(datos: DatosBolsillo) {
+    if (trabajando.value) throw new Error("ocupado");
     trabajando.value = true;
     try {
       if (!(await vaciarGuardado())) throw new Error("guardado-pendiente");
@@ -965,6 +976,9 @@ export const useSesion = defineStore("sesion", () => {
   //     the current main file as "antes-…" and the store is left locked; then
   //     it boots again (asks for the credential that backup had).
   async function restaurarCopia(nombre: string, credencial: string | null = null) {
+    // ES: Una sola sustitución de datos a la vez, venga de donde venga.
+    // EN: Only one data replacement at a time, wherever it comes from.
+    if (trabajando.value) throw new Error("ocupado");
     trabajando.value = true;
     try {
       // ES: 1. Se abre, descifra y valida la copia SIN publicarla: una copia
@@ -993,7 +1007,26 @@ export const useSesion = defineStore("sesion", () => {
         }
         // ES: 3. Rust publica (el actual queda como "antes-…") y la deja abierta.
         // EN: 3. Rust publishes (the current one stays as "antes-…") and leaves it open.
-        const datos = await boveda.restaurarCopia(nombre, credencial);
+        let datos: DatosBolsillo;
+        try {
+          datos = await boveda.restaurarCopia(nombre, credencial);
+        } catch (e) {
+          // ES: Si ya se publicó pero no se puede cargar, se olvida la clave y
+          //     se va a la pantalla de error: nada de lo de antes en memoria
+          //     puede guardarse encima de lo restaurado.
+          // EN: If it was already published but cannot be loaded, the key is
+          //     forgotten and it goes to the error screen: nothing from before
+          //     in memory can be saved on top of what was restored.
+          if (codigo(e) !== "credencial" && codigo(e) !== "sin-copia") {
+            await boveda.bloquear().catch(() => {});
+            bloqueando = true;
+            useFinanzas().hidratar(datosVacios());
+            guardados = cambios;
+            bloqueando = false;
+            await entrarEnFallo("invalido");
+          }
+          throw e;
+        }
         retirarClaveRecuperacion();
         porRecuperacion.value = false;
         const e = await boveda.estado();

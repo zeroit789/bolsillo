@@ -433,8 +433,14 @@ const comandos: Record<string, (a: Args) => unknown> = {
 
   restaurar_copia: (a) => {
     const c = abrirCopia(a);
-    if (st.principal)
-      st.copias[`antes-${String(ahora()).padStart(12, "0")}.bolsillo`] = st.principal;
+    if (st.principal) {
+      // ES: Nombre "antes-" libre, como en Rust (sufijo si ya existe).
+      // EN: Free "antes-" name, as in Rust (suffix if it already exists).
+      const base = `antes-${String(ahora()).padStart(12, "0")}`;
+      let nombre = `${base}.bolsillo`;
+      for (let n = 2; st.copias[nombre]; n++) nombre = `${base}-${n}.bolsillo`;
+      st.copias[nombre] = st.principal;
+    }
     st.principal = copiar(c);
     st.principalRoto = null;
     st.marca = true;

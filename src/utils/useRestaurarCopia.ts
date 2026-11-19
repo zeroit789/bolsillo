@@ -29,6 +29,7 @@ export function useRestaurarCopia(confirmar: () => boolean) {
   const ocupado = ref(false);
 
   async function ejecutar(nombre: string, credencial: string | null) {
+    if (ocupado.value || sesion.trabajando) return;
     ocupado.value = true;
     error.value = "";
     try {
