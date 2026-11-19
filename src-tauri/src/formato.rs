@@ -80,6 +80,8 @@ pub enum ErrorAlmacen {
     SinCopia,
     // ES: la migración no se pudo verificar / EN: the migration could not be verified
     Verificacion,
+    // ES: el principal cambió en disco desde que se abrió / EN: the main file changed on disk since it was opened
+    Conflicto,
     // ES: el fichero elegido no lleva los recibos dentro / EN: the picked file does not carry the receipts
     NoAutosuficiente,
     // ES: destino de exportación dentro del almacén / EN: export target inside the store
@@ -104,6 +106,7 @@ impl ErrorAlmacen {
             ErrorAlmacen::CredencialInvalida => "credencial-invalida".into(),
             ErrorAlmacen::SinCopia => "sin-copia".into(),
             ErrorAlmacen::Verificacion => "verificacion".into(),
+            ErrorAlmacen::Conflicto => "conflicto".into(),
             ErrorAlmacen::NoAutosuficiente => "no-autosuficiente".into(),
             ErrorAlmacen::DestinoProtegido => "destino-protegido".into(),
             ErrorAlmacen::Io(m) => format!("io:{m}"),
@@ -346,7 +349,16 @@ pub fn abrir_con_secreto(
     if !params.validos() {
         return Err(ErrorAlmacen::Danado);
     }
+    // ES: Tamaños comprobados ANTES de derivar: una envoltura mal formada no
+    //     llega a costar un Argon2id (sal 8-64 B, nonce 12 B, DEK 32 B + etiqueta 16 B).
+    // EN: Sizes checked BEFORE deriving: a malformed wrapping never costs an
+    //     Argon2id (salt 8-64 B, nonce 12 B, DEK 32 B + 16 B tag).
     let sal = de_b64(&e.kdf.sal)?;
+    let nonce = de_b64(&e.cifrado.nonce)?;
+    let ct = de_b64(&e.cifrado.ct)?;
+    if !(8..=64).contains(&sal.len()) || nonce.len() != TAM_NONCE || ct.len() != TAM_CLAVE + 16 {
+        return Err(ErrorAlmacen::Danado);
+    }
     let kek = derivar(secreto, &sal, &params)?;
     let claro = descifrar_b64(&kek, &aad_envoltura(rol, dek_id), &e.cifrado)?;
     a_clave(&claro)

@@ -21,6 +21,7 @@
 // =============================================================================
 
 use crate::cripto::{aleatorio, ErrorCripto};
+use zeroize::Zeroizing;
 
 // ── 1. Alfabeto y tamaños / Alphabet & sizes ─────────────────────────────────
 // ES: Base32 de Crockford: sin I, L, O ni U para evitar confusiones.
@@ -97,8 +98,10 @@ fn valor(c: char) -> Option<u8> {
 //     canónica (lo que entra en Argon2id). Errores: Formato o Comprobacion.
 // EN: Reads a typed key and returns the 30 data symbols in canonical form
 //     (what goes into Argon2id). Errors: Formato or Comprobacion.
-pub fn normalizar(entrada: &str) -> Result<String, ErrorClave> {
-    let mut valores = Vec::with_capacity(SIMBOLOS_TOTAL);
+//     El resultado y los valores intermedios se borran de la memoria al soltarse.
+// EN: The result and the intermediate values are wiped from memory when dropped.
+pub fn normalizar(entrada: &str) -> Result<Zeroizing<String>, ErrorClave> {
+    let mut valores = Zeroizing::new(Vec::with_capacity(SIMBOLOS_TOTAL));
     for c in entrada.chars() {
         if c == '-' || c.is_whitespace() {
             continue;
@@ -112,10 +115,12 @@ pub fn normalizar(entrada: &str) -> Result<String, ErrorClave> {
     if valores[SIMBOLOS_DATOS] as u32 != c / 32 || valores[SIMBOLOS_DATOS + 1] as u32 != c % 32 {
         return Err(ErrorClave::Comprobacion);
     }
-    Ok(valores[..SIMBOLOS_DATOS]
-        .iter()
-        .map(|v| ALFABETO[*v as usize] as char)
-        .collect())
+    Ok(Zeroizing::new(
+        valores[..SIMBOLOS_DATOS]
+            .iter()
+            .map(|v| ALFABETO[*v as usize] as char)
+            .collect(),
+    ))
 }
 
 // ── 5. Tests / Tests ──────────────────────────────────────────────────────────
@@ -185,7 +190,7 @@ mod tests {
             .replacen('0', "O", 3)
             .replacen('1', "l", 2)
             .replacen('1', "I", 1);
-        assert_eq!(normalizar(&confusa).unwrap(), datos);
+        assert_eq!(normalizar(&confusa).unwrap().as_str(), datos);
     }
 
     #[test]

@@ -56,6 +56,27 @@ use crate::formato::{
 };
 use crate::recuperacion;
 
+// ES: Reenvolturas de copias que no se pudieron hacer (se reintentan al abrir).
+// EN: Backup rewraps that could not be done (retried on open).
+const PENDIENTES: &str = "pendientes.json";
+
+// ES: Comparación en tiempo constante (no se corta en el primer byte distinto).
+// EN: Constant-time comparison (it does not stop at the first different byte).
+fn iguales_ct(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+// ES: Una reenvoltura pendiente: fichero (relativo a la raíz) y qué falta.
+//     "proteger": copia aún solo ofuscada; "credencial": copia con la
+//     credencial anterior; "recuperacion": copia con la clave de recuperación
+//     anterior.
+// EN: A pending rewrap: file (relative to the root) and what is missing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct Reenvoltura {
+    ruta: String,
+    accion: String,
+}
+
 type R<T> = Result<T, ErrorAlmacen>;
 
 // ── 1. Tipos públicos / Public types ─────────────────────────────────────────
@@ -78,6 +99,9 @@ pub struct Estado {
     // ES: abierta con la clave de recuperación: hay que poner PIN nuevo
     // EN: opened with the recovery key: a new PIN must be set
     pub por_recuperacion: bool,
+    // ES: copias que aún tienen la protección anterior (se reintenta al abrir)
+    // EN: backups that still have the previous protection (retried on open)
+    pub copias_pendientes: usize,
 }
 
 // ES: Recibo que llega del frontend (id y data URL). / EN: Receipt coming from the frontend (id and data URL).
@@ -109,12 +133,17 @@ struct Abierta {
     dek: Clave,
     cabecera: Fichero,
     por_recuperacion: bool,
+    // ES: bytes del principal tal como se leyó o escribió por última vez: si en
+    //     disco hay otra cosa, no se pisa (conflicto).
+    // EN: main file bytes as last read or written: if something else is on
+    //     disk, it is not overwritten (conflict).
+    huella: Vec<u8>,
 }
 
 // ES: Migración escrita pero sin confirmar. / EN: Migration written but not confirmed.
 struct Pendiente {
     dek: Clave,
-    origen: Vec<u8>,
+    origen: Zeroizing<Vec<u8>>,
 }
 
 // ES: Segundos Unix actuales. / EN: Current Unix seconds.
@@ -203,13 +232,15 @@ impl Boveda {
             hay_rescate: self.dir.hay_rescate(),
             abierta: self.abierta.is_some(),
             por_recuperacion: self.abierta_por_recuperacion(),
+            copias_pendientes: self.leer_pendientes().len(),
         }
     }
 
     // ES: Abre con la llave dada, guarda la DEK en memoria y devuelve los datos.
     // EN: Opens with the given key, keeps the DEK in memory and returns the data.
     fn abrir_con(&mut self, llave: Option<Llave>, por_recuperacion: bool) -> R<String> {
-        let cab = self.leer_principal()?.ok_or(ErrorAlmacen::Vacio)?;
+        let bytes = self.dir.leer(PRINCIPAL)?.ok_or(ErrorAlmacen::Vacio)?;
+        let cab = desde_bytes(&bytes)?;
         let dek = cab.abrir_dek(llave)?;
         let claro = cab.descifrar_datos(&dek)?;
         let texto = String::from_utf8(claro.to_vec()).map_err(|_| ErrorAlmacen::Danado)?;
@@ -217,12 +248,24 @@ impl Boveda {
             dek,
             cabecera: cab,
             por_recuperacion,
+            huella: bytes,
         });
+        // ES: La marca es duradera aunque se perdiera al migrar o crear.
+        // EN: The marker becomes durable even if it was lost when migrating or creating.
+        let _ = self.marcar("apertura");
         Ok(texto)
     }
 
+    // ES: Abre y, con la credencial en la mano, reintenta las reenvolturas de
+    //     copias que quedaron pendientes.
+    // EN: Opens and, with the credential at hand, retries the pending backup
+    //     rewraps.
     pub fn abrir(&mut self, credencial: Option<&str>) -> R<String> {
-        self.abrir_con(credencial.map(Llave::Credencial), false)
+        let texto = self.abrir_con(credencial.map(Llave::Credencial), false)?;
+        if let Some(c) = credencial {
+            self.reintentar_pendientes(c);
+        }
+        Ok(texto)
     }
 
     pub fn abrir_con_recuperacion(&mut self, clave: &str) -> R<String> {
@@ -254,7 +297,14 @@ impl Boveda {
             if !id_recibo_valido(&r.id) {
                 return Err(ErrorAlmacen::Danado);
             }
-            if !self.dir.existe_recibo(dek_id, &r.id) {
+            // ES: Si ya existe, solo vale si se descifra y coincide; si no, se reescribe.
+            // EN: If it already exists, it only counts if it decrypts and matches; otherwise it is rewritten.
+            let vale = self
+                .dir
+                .leer_recibo(dek_id, &r.id)?
+                .and_then(|b| descifrar_recibo(dek, dek_id, &r.id, &b).ok())
+                .is_some_and(|c| iguales_ct(&c, r.datos.as_bytes()));
+            if !vale {
                 let c = cifrar_recibo(dek, dek_id, &r.id, r.datos.as_bytes())?;
                 self.dir.escribir_recibo(dek_id, &r.id, &c)?;
             }
@@ -266,11 +316,32 @@ impl Boveda {
     //     de las copias no deshace el guardado (ya está en disco).
     // EN: Writes the main file (atomic) and rotates the automatic backups. A
     //     backup failure does not undo the save (it is already on disk).
-    fn escribir_principal(&self, f: &Fichero) -> R<()> {
-        let bytes = a_bytes(f)?;
+    //     Deja el almacén abierto con esa cabecera, esa DEK y la huella nueva.
+    // EN: Leaves the store open with that header, that DEK and the new fingerprint.
+    fn escribir_principal(&mut self, f: Fichero, dek: Clave, por_recuperacion: bool) -> R<()> {
+        let bytes = a_bytes(&f)?;
         self.dir.escribir(PRINCIPAL, &bytes)?;
         let _ = self.dir.rotar_copias(&bytes, self.ahora());
+        self.abierta = Some(Abierta {
+            dek,
+            cabecera: f,
+            por_recuperacion,
+            huella: bytes,
+        });
         Ok(())
+    }
+
+    // ES: Antes de sustituir el principal abierto: ¿sigue en disco lo que se
+    //     leyó o escribió? Si alguien lo cambió o se dañó, no se pisa.
+    // EN: Before replacing the open main file: is what was read or written
+    //     still on disk? If someone changed it or it got damaged, it is not
+    //     overwritten.
+    fn comprobar_revision(&self) -> R<()> {
+        let a = self.abierta()?;
+        match self.dir.leer(PRINCIPAL)? {
+            Some(b) if b == a.huella => Ok(()),
+            _ => Err(ErrorAlmacen::Conflicto),
+        }
     }
 
     // ES: Guarda los datos: primero los recibos nuevos, después el principal
@@ -278,15 +349,13 @@ impl Boveda {
     // EN: Saves the data: first the new receipts, then the main file that
     //     references them. Needs the store to be open.
     pub fn guardar(&mut self, datos: &str, recibos: &[ReciboEntrada]) -> R<()> {
+        self.comprobar_revision()?;
         let a = self.abierta()?;
         self.escribir_recibos(&a.dek, &a.cabecera.dek_id, recibos)?;
         let mut cab = a.cabecera.clone();
         cab.cambiar_datos(&a.dek, datos.as_bytes())?;
-        self.escribir_principal(&cab)?;
-        if let Some(a) = self.abierta.as_mut() {
-            a.cabecera = cab;
-        }
-        Ok(())
+        let (dek, por) = (Zeroizing::new(*a.dek), a.por_recuperacion);
+        self.escribir_principal(cab, dek, por)
     }
 
     // ES: Relee el principal del disco y lo descifra con la DEK en memoria.
@@ -354,7 +423,7 @@ impl Boveda {
             &dek,
             &dek_id,
             credencial,
-            norm.as_deref(),
+            norm.as_ref().map(|z| z.as_str()),
             &self.kdf,
             datos.as_bytes(),
         )?;
@@ -408,15 +477,10 @@ impl Boveda {
         if existe {
             self.dir.rescatar(PRINCIPAL, false, self.ahora())?;
         }
-        self.escribir_principal(&f)?;
+        self.escribir_principal(f, dek, false)?;
         // ES: La marca es una señal secundaria: si falla, el almacén ya existe.
         // EN: The marker is a secondary signal: if it fails, the store exists anyway.
         let _ = self.marcar(origen);
-        self.abierta = Some(Abierta {
-            dek,
-            cabecera: f,
-            por_recuperacion: false,
-        });
         Ok(clave)
     }
 
@@ -436,7 +500,7 @@ impl Boveda {
         credencial: Option<&str>,
         huella: &str,
     ) -> R<Option<String>> {
-        if self.dir.existe(PRINCIPAL) {
+        if self.hubo_almacen() {
             return Err(ErrorAlmacen::Existe);
         }
         if bloqueo != Bloqueo::Ninguno && credencial.is_none_or(str::is_empty) {
@@ -477,13 +541,13 @@ impl Boveda {
             let dek3 = releido
                 .abrir_dek(Some(Llave::Recuperacion(&norm)))
                 .map_err(|_| ErrorAlmacen::Verificacion)?;
-            if *dek3 != *dek {
+            if !iguales_ct(dek3.as_ref(), dek.as_ref()) {
                 return Err(ErrorAlmacen::Verificacion);
             }
         }
         self.pendiente = Some(Pendiente {
             dek,
-            origen: datos.as_bytes().to_vec(),
+            origen: Zeroizing::new(datos.as_bytes().to_vec()),
         });
         Ok(clave)
     }
@@ -505,14 +569,25 @@ impl Boveda {
     //     .migrando to datos.bolsillo, writes the marker and leaves the store open.
     pub fn confirmar_migracion(&mut self) -> R<()> {
         let p = self.pendiente.take().ok_or(ErrorAlmacen::Verificacion)?;
-        if self.dir.existe(PRINCIPAL) {
+        if self.hubo_almacen() {
             return Err(ErrorAlmacen::Existe);
         }
-        let f = desde_bytes(&self.dir.leer(MIGRANDO)?.ok_or(ErrorAlmacen::Verificacion)?)?;
-        if f.descifrar_datos(&p.dek)?.as_slice() != p.origen.as_slice() {
+        let bytes = self.dir.leer(MIGRANDO)?.ok_or(ErrorAlmacen::Verificacion)?;
+        let f = desde_bytes(&bytes)?;
+        if !iguales_ct(&f.descifrar_datos(&p.dek)?, &p.origen) {
             return Err(ErrorAlmacen::Verificacion);
         }
-        self.dir.renombrar(MIGRANDO, PRINCIPAL)?;
+        // ES: Publicación exclusiva: si entre medias apareció un principal, falla.
+        // EN: Exclusive publish: if a main file appeared in between, it fails.
+        self.dir
+            .publicar_sin_reemplazo(MIGRANDO, PRINCIPAL)
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    ErrorAlmacen::Existe
+                } else {
+                    ErrorAlmacen::from(e)
+                }
+            })?;
         // ES: El renombrado es el punto de confirmación: desde aquí el fichero
         //     manda, así que nada de lo que sigue puede devolver error (si no,
         //     la sesión volvería a localStorage con el fichero ya publicado).
@@ -520,15 +595,25 @@ impl Boveda {
         //     nothing after it may return an error (otherwise the session would
         //     go back to localStorage with the file already published).
         let _ = self.marcar("localStorage");
-        if let Ok(bytes) = a_bytes(&f) {
-            let _ = self.dir.rotar_copias(&bytes, self.ahora());
-        }
+        let _ = self.dir.rotar_copias(&bytes, self.ahora());
         self.abierta = Some(Abierta {
             dek: p.dek,
             cabecera: f,
             por_recuperacion: false,
+            huella: bytes,
         });
         Ok(())
+    }
+
+    // ES: ¿Hubo aquí un almacén? (principal, marca, copias o rescates de datos).
+    //     Con cualquiera de esas señales nunca se migra desde localStorage.
+    // EN: Was there a store here? (main file, marker, backups or data rescues).
+    //     With any of those signs it never migrates from localStorage.
+    fn hubo_almacen(&self) -> bool {
+        self.dir.existe(PRINCIPAL)
+            || self.dir.existe(MARCA)
+            || self.dir.hay_copias()
+            || self.dir.hay_rescate()
     }
 
     // ES: Cancela una migración que no cuadró: el .migrando se aparta a rescate/
@@ -555,6 +640,7 @@ impl Boveda {
     where
         F: FnOnce(&Clave, &str) -> R<crate::formato::Envolturas>,
     {
+        self.comprobar_revision()?;
         let a = self.abierta()?;
         let claro = a.cabecera.descifrar_datos(&a.dek)?;
         let dek = clave_nueva()?;
@@ -573,13 +659,7 @@ impl Boveda {
         f.dek_id = dek_id.clone();
         f.envolturas = envolturas(&dek, &dek_id)?;
         f.cambiar_datos(&dek, &claro)?;
-        self.escribir_principal(&f)?;
-        self.abierta = Some(Abierta {
-            dek,
-            cabecera: f,
-            por_recuperacion: false,
-        });
-        Ok(())
+        self.escribir_principal(f, dek, false)
     }
 
     // ES: Reenvuelve las copias automáticas y los rescates que usan la DEK
@@ -590,16 +670,16 @@ impl Boveda {
     // EN: Rewraps the automatic backups and rescues that use the DEK `dek_id`.
     //     It runs AFTER publishing the main file and without returning an
     //     error: if a backup cannot be rewritten, it goes on with the rest and
-    //     the main change (and the new recovery key) is not lost. Returns how
-    //     many could not be rewrapped.
-    fn reenvolver_copias<F>(&self, dek_id: &str, mut cambio: F) -> usize
+    //     the main change (and the new recovery key) is not lost. Returns the
+    //     ones that could not be rewrapped (they are recorded as pending).
+    fn reenvolver_copias<F>(&self, dek_id: &str, mut cambio: F) -> Vec<std::path::PathBuf>
     where
         F: FnMut(&mut Fichero) -> R<()>,
     {
-        let mut fallos = 0;
+        let mut fallos = Vec::new();
         for ruta in self.dir.ficheros_con_dek() {
             let Ok(bytes) = std::fs::read(&ruta) else {
-                fallos += 1;
+                fallos.push(ruta);
                 continue;
             };
             let Ok(mut f) = desde_bytes(&bytes) else {
@@ -612,10 +692,126 @@ impl Boveda {
                 .and_then(|_| a_bytes(&f))
                 .and_then(|b| Ok(crate::directorio::escribir_atomico(&ruta, &b)?));
             if hecho.is_err() {
-                fallos += 1;
+                fallos.push(ruta);
             }
         }
         fallos
+    }
+
+    // ── Reenvolturas pendientes / Pending rewraps ──────────────────────────────
+    // ES: Lista de reenvolturas pendientes (vacía si no hay o no se lee).
+    // EN: List of pending rewraps (empty if none or unreadable).
+    fn leer_pendientes(&self) -> Vec<Reenvoltura> {
+        self.dir
+            .leer(PENDIENTES)
+            .ok()
+            .flatten()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default()
+    }
+
+    fn escribir_pendientes(&self, v: &[Reenvoltura]) {
+        if let Ok(b) = serde_json::to_vec(v) {
+            let _ = self.dir.escribir(PENDIENTES, &b);
+        }
+    }
+
+    // ES: Apunta en disco (duradero) las copias que no se pudieron reenvolver.
+    // EN: Records on disk (durably) the backups that could not be rewrapped.
+    fn anotar_pendientes(&self, rutas: Vec<std::path::PathBuf>, accion: &str) {
+        if rutas.is_empty() {
+            return;
+        }
+        let raiz = self.dir.ruta("");
+        let mut v = self.leer_pendientes();
+        for r in rutas {
+            let rel = r
+                .strip_prefix(&raiz)
+                .unwrap_or(&r)
+                .to_string_lossy()
+                .into_owned();
+            let nueva = Reenvoltura {
+                ruta: rel,
+                accion: accion.into(),
+            };
+            if !v.contains(&nueva) {
+                v.push(nueva);
+            }
+        }
+        self.escribir_pendientes(&v);
+    }
+
+    // ES: Reintenta las reenvolturas pendientes con la credencial actual (una
+    //     sola derivación). Las que salen bien se quitan de la lista.
+    //       - "proteger": la copia sigue solo ofuscada: su DEK (pública) pasa a
+    //         la credencial actual.
+    //       - "credencial": copia con la DEK actual y la credencial anterior.
+    //       - "recuperacion": se le quita la recuperación anterior.
+    // EN: Retries the pending rewraps with the current credential (a single
+    //     derivation). The ones that succeed are removed from the list.
+    fn reintentar_pendientes(&mut self, credencial: &str) {
+        let v = self.leer_pendientes();
+        if v.is_empty() {
+            return;
+        }
+        let Ok(a) = self.abierta() else { return };
+        let (bloqueo, dek_id) = (a.cabecera.bloqueo, a.cabecera.dek_id.clone());
+        let dek = Zeroizing::new(*a.dek);
+        if bloqueo == Bloqueo::Ninguno {
+            return;
+        }
+        let Ok((kek, sal)) = self.kek_nueva(credencial.as_bytes()) else {
+            return;
+        };
+        let kdf = self.kdf;
+        let mut quedan = Vec::new();
+        for p in v {
+            let ruta = self.dir.ruta(&p.ruta);
+            if !ruta.exists() {
+                continue;
+            }
+            let hecho = (|| -> R<()> {
+                let mut f = desde_bytes(&std::fs::read(&ruta)?)?;
+                match p.accion.as_str() {
+                    "proteger" if f.bloqueo == Bloqueo::Ninguno => {
+                        let d = f.abrir_dek(None)?;
+                        f.envolturas = crate::formato::Envolturas {
+                            credencial: Some(envolver_con_kek(
+                                &kek,
+                                &sal,
+                                "credencial",
+                                &f.dek_id,
+                                &d,
+                                &kdf,
+                            )?),
+                            ..Default::default()
+                        };
+                        f.bloqueo = bloqueo;
+                    }
+                    "credencial" if f.dek_id == dek_id => {
+                        f.envolturas.credencial = Some(envolver_con_kek(
+                            &kek,
+                            &sal,
+                            "credencial",
+                            &f.dek_id,
+                            &dek,
+                            &kdf,
+                        )?);
+                        f.bloqueo = bloqueo;
+                    }
+                    "recuperacion" if f.envolturas.credencial.is_some() => {
+                        f.envolturas.recuperacion = None;
+                    }
+                    _ => return Ok(()),
+                }
+                crate::directorio::escribir_atomico(&ruta, &a_bytes(&f)?)?;
+                Ok(())
+            })();
+            if hecho.is_err() {
+                quedan.push(p);
+            }
+        }
+        self.escribir_pendientes(&quedan);
     }
 
     // ES: Deriva una KEK con sal nueva (para envolver varias cosas con una sola
@@ -671,13 +867,14 @@ impl Boveda {
             })
         };
         self.rotar_dek(bloqueo, envolver)?;
-        let _ = self.reenvolver_copias(&viejo_id, |f| {
+        let fallos = self.reenvolver_copias(&viejo_id, |f| {
             if f.bloqueo == Bloqueo::Ninguno {
                 f.bloqueo = bloqueo;
                 f.envolturas = envolver(&vieja_dek, &viejo_id)?;
             }
             Ok(())
         });
+        self.anotar_pendientes(fallos, "proteger");
         Ok(clave)
     }
 
@@ -688,23 +885,19 @@ impl Boveda {
         cab.abrir_dek(Some(Llave::Credencial(c))).map(|_| ())
     }
 
-    // ES: Quita el bloqueo: la DEK pasa a la envoltura de ofuscación. Las copias
-    //     automáticas conservan su credencial.
-    // EN: Removes the lock: the DEK moves to the obfuscation wrapping. Automatic
-    //     backups keep their credential.
+    // ES: Quita el bloqueo con una DEK NUEVA (rotación) envuelta con la
+    //     ofuscación. Así la DEK de las copias históricas, que siguen pidiendo
+    //     su PIN, no queda publicada bajo una clave que está en el código.
+    // EN: Removes the lock with a NEW DEK (rotation) wrapped with obfuscation.
+    //     So the DEK of the historical backups, which still ask for their PIN,
+    //     is not published under a key that lives in the code.
     pub fn quitar_bloqueo(&mut self) -> R<()> {
-        let a = self.abierta()?;
-        let mut f = a.cabecera.clone();
-        f.bloqueo = Bloqueo::Ninguno;
-        f.envolturas = crate::formato::Envolturas {
-            ofuscacion: Some(envolver_ofuscacion(&f.dek_id, &a.dek)?),
-            ..Default::default()
-        };
-        self.escribir_principal(&f)?;
-        if let Some(a) = self.abierta.as_mut() {
-            a.cabecera = f;
-        }
-        Ok(())
+        self.rotar_dek(Bloqueo::Ninguno, |dek, id| {
+            Ok(crate::formato::Envolturas {
+                ofuscacion: Some(envolver_ofuscacion(id, dek)?),
+                ..Default::default()
+            })
+        })
     }
 
     // ES: Cambia el PIN o la contraseña. Pide la antigua salvo si se abrió con la
@@ -737,6 +930,7 @@ impl Boveda {
         if !a.por_recuperacion {
             self.comprobar_credencial(antigua.ok_or(ErrorAlmacen::Credencial)?)?;
         }
+        self.comprobar_revision()?;
         let a = self.abierta()?;
         let (kek, sal) = self.kek_nueva(nueva.as_bytes())?;
         let mut f = a.cabecera.clone();
@@ -751,18 +945,16 @@ impl Boveda {
         )?);
         let nueva_env = f.envolturas.credencial.clone();
         let dek_id = f.dek_id.clone();
-        self.escribir_principal(&f)?;
-        if let Some(a) = self.abierta.as_mut() {
-            a.cabecera = f;
-            a.por_recuperacion = false;
-        }
-        let _ = self.reenvolver_copias(&dek_id, |c| {
+        let dek = Zeroizing::new(*a.dek);
+        self.escribir_principal(f, dek, false)?;
+        let fallos = self.reenvolver_copias(&dek_id, |c| {
             if c.envolturas.credencial.is_some() {
                 c.bloqueo = bloqueo;
                 c.envolturas.credencial = nueva_env.clone();
             }
             Ok(())
         });
+        self.anotar_pendientes(fallos, "credencial");
         Ok(())
     }
 
@@ -808,7 +1000,7 @@ impl Boveda {
                 ofuscacion: None,
             })
         })?;
-        let _ = self.reenvolver_copias(&viejo_id, |f| {
+        let fallos = self.reenvolver_copias(&viejo_id, |f| {
             if f.envolturas.recuperacion.is_some() {
                 f.envolturas.recuperacion = Some(envolver_con_kek(
                     &kek_r,
@@ -821,6 +1013,7 @@ impl Boveda {
             }
             Ok(())
         });
+        self.anotar_pendientes(fallos, "recuperacion");
         Ok(clave)
     }
 
@@ -851,7 +1044,42 @@ impl Boveda {
     //     saved as copias/antes-<s>.bolsillo and the backup becomes the main
     //     file. The store is left locked: it must be opened again (with the
     //     credential that backup had).
-    pub fn restaurar_copia(&mut self, nombre: &str) -> R<()> {
+    //     ANTES de publicar se abre y se descifra con su credencial (o sin ella
+    //     si no tiene bloqueo): una copia dañada nunca desplaza al principal.
+    //     Queda abierta con la DEK de la copia; devuelve sus datos.
+    // EN: BEFORE publishing it is opened and decrypted with its credential (or
+    //     without one if it has no lock): a damaged backup never displaces the
+    //     main file. It is left open with the backup's DEK; returns its data.
+    pub fn restaurar_copia(&mut self, nombre: &str, credencial: Option<&str>) -> R<String> {
+        let (bytes, f, dek, texto) = self.abrir_copia(nombre, credencial)?;
+        if let Some(actual) = self.dir.leer(PRINCIPAL)? {
+            let nombre_antes = self.dir.nombre_copia_libre("antes", self.ahora());
+            self.dir.escribir_copia(&nombre_antes, &actual)?;
+        }
+        self.dir.escribir(PRINCIPAL, &bytes)?;
+        let _ = self.marcar("restauracion");
+        self.abierta = Some(Abierta {
+            dek,
+            cabecera: f,
+            por_recuperacion: false,
+            huella: bytes,
+        });
+        Ok(texto)
+    }
+
+    // ES: Abre y descifra una copia automática sin publicar nada (para que el
+    //     frontend valide su contenido antes de restaurar).
+    // EN: Opens and decrypts an automatic backup without publishing anything
+    //     (so the frontend validates its content before restoring).
+    pub fn probar_copia(&self, nombre: &str, credencial: Option<&str>) -> R<String> {
+        Ok(self.abrir_copia(nombre, credencial)?.3)
+    }
+
+    fn abrir_copia(
+        &self,
+        nombre: &str,
+        credencial: Option<&str>,
+    ) -> R<(Vec<u8>, Fichero, Clave, String)> {
         let bytes = self
             .dir
             .leer_copia(nombre)
@@ -860,14 +1088,10 @@ impl Boveda {
         if f.tipo != TipoFichero::Datos {
             return Err(ErrorAlmacen::Danado);
         }
-        if let Some(actual) = self.dir.leer(PRINCIPAL)? {
-            let nombre_antes = self.dir.nombre_copia_libre("antes", self.ahora());
-            self.dir.escribir_copia(&nombre_antes, &actual)?;
-        }
-        self.dir.escribir(PRINCIPAL, &bytes)?;
-        let _ = self.marcar("restauracion");
-        self.bloquear();
-        Ok(())
+        let dek = f.abrir_dek(credencial.map(Llave::Credencial))?;
+        let claro = f.descifrar_datos(&dek)?;
+        let texto = String::from_utf8(claro.to_vec()).map_err(|_| ErrorAlmacen::Danado)?;
+        Ok((bytes, f, dek, texto))
     }
 
     // ── 8. Copias cifradas exportadas / Exported encrypted backups ─────────────
@@ -1183,10 +1407,9 @@ mod tests {
             .unwrap();
         let copia = b.listar_copias()[0].nombre.clone();
         b.guardar("{\"n\":1}", &[]).unwrap();
-        b.restaurar_copia(&copia).unwrap();
-        b.abrir(None).unwrap();
+        b.restaurar_copia(&copia, None).unwrap();
         b.guardar("{\"n\":2}", &[]).unwrap();
-        b.restaurar_copia(&copia).unwrap();
+        b.restaurar_copia(&copia, None).unwrap();
         let antes: Vec<_> = b
             .listar_copias()
             .into_iter()
@@ -1205,6 +1428,153 @@ mod tests {
             b.elegir_copia(principal).err(),
             Some(ErrorAlmacen::NoAutosuficiente)
         );
+    }
+
+    #[test]
+    fn quitar_bloqueo_rota_la_dek_y_las_copias_siguen_con_pin() {
+        let (_t, mut b) = boveda();
+        b.crear(
+            "{}",
+            &[recibo("r1", 10)],
+            Bloqueo::Pin,
+            Some("4831"),
+            false,
+            "t",
+        )
+        .unwrap();
+        let id_pin = b.abierta().unwrap().cabecera.dek_id.clone();
+        b.quitar_bloqueo().unwrap();
+        assert_ne!(b.abierta().unwrap().cabecera.dek_id, id_pin);
+        assert!(b.leer_recibos(&["r1".into()]).unwrap()[0].datos.is_some());
+        // ES: Las copias con la DEK del PIN no se abren sin el PIN.
+        // EN: Backups with the PIN DEK do not open without the PIN.
+        for c in b.listar_copias() {
+            let f = desde_bytes(&b.dir.leer_copia(&c.nombre).unwrap()).unwrap();
+            if f.dek_id == id_pin {
+                assert!(f.abrir_dek(None).is_err());
+            }
+        }
+        b.bloquear();
+        assert_eq!(b.abrir(None).unwrap(), "{}");
+    }
+
+    #[test]
+    fn reenvolturas_fallidas_quedan_pendientes_y_se_reintentan_al_abrir() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let ruta = b.dir.ruta("copias").join(&copia);
+        // ES: Copia de solo lectura: no se puede reescribir (como sin espacio).
+        // EN: Read-only backup: it cannot be rewritten (like no space left).
+        let mut perm = std::fs::metadata(&ruta).unwrap().permissions();
+        perm.set_readonly(true);
+        std::fs::set_permissions(&ruta, perm.clone()).unwrap();
+        b.configurar_bloqueo(Bloqueo::Pin, "4831").unwrap();
+        assert_eq!(b.estado().copias_pendientes, 1);
+        let f = desde_bytes(&std::fs::read(&ruta).unwrap()).unwrap();
+        assert_eq!(f.bloqueo, Bloqueo::Ninguno);
+        #[allow(clippy::permissions_set_readonly_false)]
+        perm.set_readonly(false);
+        std::fs::set_permissions(&ruta, perm).unwrap();
+        b.bloquear();
+        b.abrir(Some("4831")).unwrap();
+        assert_eq!(b.estado().copias_pendientes, 0);
+        let f = desde_bytes(&std::fs::read(&ruta).unwrap()).unwrap();
+        assert_eq!(f.bloqueo, Bloqueo::Pin);
+        assert!(f.abrir_dek(None).is_err());
+        assert!(f.abrir_dek(Some(Llave::Credencial("4831"))).is_ok());
+    }
+
+    #[test]
+    fn no_se_migra_si_hubo_almacen() {
+        let (_t, mut b) = boveda();
+        b.dir.escribir(MARCA, b"{}").unwrap();
+        assert_eq!(
+            b.preparar_migracion("{}", &[], Bloqueo::Ninguno, None, "h")
+                .err(),
+            Some(ErrorAlmacen::Existe)
+        );
+        let (_t2, mut c) = boveda();
+        c.preparar_migracion("{}", &[], Bloqueo::Ninguno, None, "h")
+            .unwrap();
+        // ES: Entre preparar y confirmar aparece una copia: no se publica.
+        // EN: A backup appears between prepare and confirm: nothing is published.
+        c.dir
+            .escribir_copia("reciente-000000000001.bolsillo", b"x")
+            .unwrap();
+        assert_eq!(c.confirmar_migracion().err(), Some(ErrorAlmacen::Existe));
+        assert!(!c.dir.existe(PRINCIPAL));
+    }
+
+    #[test]
+    fn guardar_no_pisa_un_principal_cambiado_en_disco() {
+        let (_t, mut b) = boveda();
+        b.crear("{\"a\":1}", &[], Bloqueo::Ninguno, None, false, "t")
+            .unwrap();
+        b.dir.escribir(PRINCIPAL, b"{otro").unwrap();
+        assert_eq!(b.guardar("{}", &[]).err(), Some(ErrorAlmacen::Conflicto));
+        assert_eq!(b.dir.leer(PRINCIPAL).unwrap().unwrap(), b"{otro");
+    }
+
+    #[test]
+    fn restaurar_una_copia_danada_no_toca_el_principal() {
+        let (_t, mut b) = boveda();
+        b.crear("{\"a\":1}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        let mut v: serde_json::Value =
+            serde_json::from_slice(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        let campo = v.pointer_mut("/datos/ct").unwrap();
+        let mut bytes = crate::formato::de_b64(campo.as_str().unwrap()).unwrap();
+        bytes[0] ^= 1;
+        *campo = crate::formato::b64(&bytes).into();
+        b.dir
+            .escribir_copia(&copia, &serde_json::to_vec(&v).unwrap())
+            .unwrap();
+        let antes = b.dir.leer(PRINCIPAL).unwrap();
+        assert_eq!(
+            b.restaurar_copia(&copia, Some("4831")).err(),
+            Some(ErrorAlmacen::Danado)
+        );
+        assert_eq!(
+            b.restaurar_copia(&copia, Some("0000")).err(),
+            Some(ErrorAlmacen::Credencial)
+        );
+        assert_eq!(b.dir.leer(PRINCIPAL).unwrap(), antes);
+    }
+
+    #[test]
+    fn un_recibo_existente_danado_se_reescribe() {
+        let (_t, mut b) = boveda();
+        b.crear(
+            "{}",
+            &[recibo("r1", 10)],
+            Bloqueo::Ninguno,
+            None,
+            false,
+            "t",
+        )
+        .unwrap();
+        let id = b.abierta().unwrap().cabecera.dek_id.clone();
+        b.dir.escribir_recibo(&id, "r1", b"basura").unwrap();
+        b.guardar("{}", &[recibo("r1", 10)]).unwrap();
+        assert!(b.leer_recibos(&["r1".into()]).unwrap()[0].datos.is_some());
+    }
+
+    #[test]
+    fn envoltura_mal_formada_falla_antes_de_derivar() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        b.bloquear();
+        let mut v: serde_json::Value =
+            serde_json::from_slice(&b.dir.leer(PRINCIPAL).unwrap().unwrap()).unwrap();
+        v["envolturas"]["credencial"]["kdf"]["sal"] = crate::formato::b64(&[0u8; 4096]).into();
+        b.dir
+            .escribir(PRINCIPAL, &serde_json::to_vec(&v).unwrap())
+            .unwrap();
+        assert_eq!(b.abrir(Some("4831")).err(), Some(ErrorAlmacen::Danado));
     }
 
     #[test]
@@ -1287,15 +1657,18 @@ mod tests {
         // ES: Restaurar la más vieja que queda: el actual se guarda como "antes-".
         // EN: Restore the oldest one left: the current one is saved as "antes-".
         let vieja = recientes.last().unwrap().nombre.clone();
-        b.restaurar_copia(&vieja).unwrap();
-        assert!(!b.estado().abierta);
+        // ES: Queda abierta con la copia y devuelve sus datos.
+        // EN: It is left open with the backup and returns its data.
+        assert_eq!(b.restaurar_copia(&vieja, None).unwrap(), "{\"n\":3}");
+        assert!(b.estado().abierta);
+        b.bloquear();
         assert_eq!(b.abrir(None).unwrap(), "{\"n\":3}");
         assert!(b
             .listar_copias()
             .iter()
             .any(|c| c.nombre.starts_with("antes-")));
         assert_eq!(
-            b.restaurar_copia("../datos.bolsillo").err(),
+            b.restaurar_copia("../datos.bolsillo", None).err(),
             Some(ErrorAlmacen::SinCopia)
         );
     }

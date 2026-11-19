@@ -88,8 +88,16 @@ pub fn nombre_copia_valido(n: &str) -> bool {
 
 // ES: Id de recibo válido (sirve como nombre de fichero sin riesgo).
 // EN: Valid receipt id (safe to use as a file name).
+//     Solo minúsculas, cifras y guiones: en Windows los nombres de fichero no
+//     distinguen mayúsculas, así que "A" y "a" acabarían en el mismo fichero.
+// EN: Only lowercase, digits and hyphens: on Windows file names are
+//     case-insensitive, so "A" and "a" would end up in the same file.
 pub fn id_recibo_valido(id: &str) -> bool {
-    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 // ES: Información de una copia automática para la lista del frontend.
@@ -99,6 +107,23 @@ pub struct InfoCopia {
     pub nombre: String,
     pub bytes: u64,
     pub segundos: u64,
+    // ES: "ninguno" | "pin" | "password" leído de la cabecera (None si no se lee)
+    // EN: "ninguno" | "pin" | "password" read from the header (None if unreadable)
+    pub bloqueo: Option<String>,
+}
+
+// ES: Tipo de bloqueo de una copia leyendo solo el principio del fichero (la
+//     cabecera va antes que los datos en el JSON), sin cargarlo entero.
+// EN: Lock type of a backup reading only the start of the file (the header
+//     comes before the data in the JSON), without loading all of it.
+fn bloqueo_de(ruta: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut b = vec![0u8; 512];
+    let n = File::open(ruta).ok()?.read(&mut b).ok()?;
+    let t = String::from_utf8_lossy(&b[..n]);
+    let i = t.find("\"bloqueo\":\"")? + 11;
+    let fin = t[i..].find('"')?;
+    Some(t[i..i + fin].to_string())
 }
 
 // ── 2. Escritura atómica / Atomic write ───────────────────────────────────────
@@ -116,6 +141,27 @@ pub fn escribir_atomico_con<F>(ruta: &Path, bytes: &[u8], escribir: F) -> io::Re
 where
     F: FnOnce(&mut File, &[u8]) -> io::Result<()>,
 {
+    escribir_atomico_controlado(ruta, bytes, escribir, |_| true)
+}
+
+// ES: Escritura atómica con un control justo antes de publicar: `permitido`
+//     recibe la ruta real del temporal ya creado (para exportaciones: que no
+//     haya acabado dentro del almacén). El temporal se crea en exclusiva
+//     (create_new): nunca trunca un fichero que ya exista.
+// EN: Atomic write with a check right before publishing: `permitido` gets the
+//     real path of the already created temporary (for exports: that it did not
+//     end up inside the store). The temporary is created exclusively
+//     (create_new): it never truncates an existing file.
+pub fn escribir_atomico_controlado<F, P>(
+    ruta: &Path,
+    bytes: &[u8],
+    escribir: F,
+    permitido: P,
+) -> io::Result<()>
+where
+    F: FnOnce(&mut File, &[u8]) -> io::Result<()>,
+    P: FnOnce(&Path) -> bool,
+{
     if let Some(padre) = ruta.parent() {
         fs::create_dir_all(padre)?;
     }
@@ -128,10 +174,16 @@ where
     tmp.push(format!(".{unico:016x}.tmp"));
     let tmp = PathBuf::from(tmp);
     let resultado = (|| {
-        let mut f = File::create(&tmp)?;
+        let mut f = File::create_new(&tmp)?;
         escribir(&mut f, bytes)?;
         f.sync_all()?;
         drop(f);
+        if !permitido(&tmp) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "destino-protegido",
+            ));
+        }
         fs::rename(&tmp, ruta)
     })();
     if resultado.is_err() {
@@ -178,9 +230,16 @@ impl Directorio {
         escribir_atomico(&self.ruta(nombre), bytes)
     }
 
-    // ES: Renombra dentro de la raíz (sustituye el destino). / EN: Renames within the root (replaces the target).
-    pub fn renombrar(&self, de: &str, a: &str) -> io::Result<()> {
-        fs::rename(self.ruta(de), self.ruta(a))
+    // ES: Publica `de` como `a` SIN sustituir: crea un enlace duro (falla con
+    //     AlreadyExists si `a` ya existe, de forma atómica) y quita el nombre
+    //     viejo. Así una migración nunca pisa un principal aparecido entre medias.
+    // EN: Publishes `de` as `a` WITHOUT replacing: creates a hard link (fails
+    //     with AlreadyExists if `a` already exists, atomically) and removes the
+    //     old name. So a migration never overwrites a main file that appeared
+    //     in between.
+    pub fn publicar_sin_reemplazo(&self, de: &str, a: &str) -> io::Result<()> {
+        fs::hard_link(self.ruta(de), self.ruta(a))?;
+        fs::remove_file(self.ruta(de))
     }
 
     // ES: ¿Hay algo en copias/ o rescate/? (señal de que ya hubo un almacén).
@@ -220,10 +279,12 @@ impl Directorio {
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
+                let bloqueo = bloqueo_de(&e.path());
                 Some(InfoCopia {
                     nombre,
                     bytes: meta.len(),
                     segundos,
+                    bloqueo,
                 })
             })
             .collect();
@@ -316,20 +377,37 @@ impl Directorio {
     ) -> io::Result<String> {
         let dir = self.raiz.join(RESCATE);
         fs::create_dir_all(&dir)?;
-        let base = format!("{prefijo}-{ahora:012}");
-        let mut destino = format!("{base}.bolsillo");
-        let mut n = 2;
-        while dir.join(&destino).exists() {
-            destino = format!("{base}-{n}.bolsillo");
-            n += 1;
-        }
-        if mover {
-            fs::rename(self.ruta(nombre), dir.join(&destino))?;
+        // ES: Al copiar, primero un temporal propio con el contenido completo.
+        // EN: When copying, first an own temporary with the full content.
+        let origen = if mover {
+            self.ruta(nombre)
         } else {
-            let bytes = fs::read(self.ruta(nombre))?;
-            escribir_atomico(&dir.join(&destino), &bytes)?;
+            let tmp = dir.join(format!(".{prefijo}-{ahora:012}.tmp"));
+            let _ = fs::remove_file(&tmp);
+            escribir_atomico(&tmp, &fs::read(self.ruta(nombre))?)?;
+            tmp
+        };
+        // ES: Se publica con un enlace duro, que falla si el nombre ya existe:
+        //     así nunca se pisa un rescate, ni siquiera en una carrera.
+        // EN: It is published with a hard link, which fails if the name
+        //     already exists: so a rescue is never overwritten, not even in a race.
+        let base = format!("{prefijo}-{ahora:012}");
+        for n in 1..10_000 {
+            let destino = if n == 1 {
+                format!("{base}.bolsillo")
+            } else {
+                format!("{base}-{n}.bolsillo")
+            };
+            match fs::hard_link(&origen, dir.join(&destino)) {
+                Ok(()) => {
+                    fs::remove_file(&origen)?;
+                    return Ok(format!("{RESCATE}/{destino}"));
+                }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e),
+            }
         }
-        Ok(format!("{RESCATE}/{destino}"))
+        Err(io::Error::other("sin nombre libre"))
     }
 
     // ── 6. Recibos / Receipts ─────────────────────────────────────────────────
@@ -340,15 +418,12 @@ impl Directorio {
             .join(format!("{id}.rec"))
     }
 
-    pub fn existe_recibo(&self, dek_id: &str, id: &str) -> bool {
-        self.ruta_recibo(dek_id, id).exists()
-    }
-
     // ES: Los recibos no cambian nunca (un recibo nuevo lleva id nuevo), así que
-    //     solo se escriben si no existen y nunca se borran: las copias viejas
-    //     siguen encontrando los suyos.
+    //     solo se escriben si faltan o si el que hay no se descifra o no
+    //     coincide, y nunca se borran: las copias viejas siguen encontrando los suyos.
     // EN: Receipts never change (a new receipt gets a new id), so they are only
-    //     written if missing and never deleted: old backups still find theirs.
+    //     written if missing or if the existing one does not decrypt or match,
+    //     and never deleted: old backups still find theirs.
     pub fn escribir_recibo(&self, dek_id: &str, id: &str, bytes: &[u8]) -> io::Result<()> {
         escribir_atomico(&self.ruta_recibo(dek_id, id), bytes)
     }
@@ -419,14 +494,22 @@ impl Directorio {
     // EN: Does the path fall inside the data directory? Canonical paths are
     //     compared (the file may not exist yet: its folder is canonicalized).
     //     So an export can never overwrite datos.bolsillo or a receipt.
+    //     Falla cerrada: si la ruta no se puede resolver, se trata como
+    //     protegida. (Si la raíz aún no existe, nada puede caer dentro.)
+    // EN: Fails closed: if the path cannot be resolved, it is treated as
+    //     protected. (If the root does not exist yet, nothing can fall inside.)
     pub fn contiene(&self, ruta: &Path) -> bool {
         let Ok(raiz) = fs::canonicalize(&self.raiz) else {
             return false;
         };
-        let padre = ruta.parent().unwrap_or(ruta);
-        match fs::canonicalize(padre) {
+        let resolver = if ruta.exists() {
+            ruta
+        } else {
+            ruta.parent().unwrap_or(ruta)
+        };
+        match fs::canonicalize(resolver) {
             Ok(p) => p.starts_with(&raiz),
-            Err(_) => false,
+            Err(_) => true,
         }
     }
 }
@@ -527,6 +610,48 @@ mod tests {
     }
 
     #[test]
+    fn publicar_sin_reemplazo_no_pisa() {
+        let t = tempfile::tempdir().unwrap();
+        let d = Directorio::new(t.path().to_path_buf());
+        d.escribir(MIGRANDO, b"nuevo").unwrap();
+        d.escribir(PRINCIPAL, b"existente").unwrap();
+        assert!(d.publicar_sin_reemplazo(MIGRANDO, PRINCIPAL).is_err());
+        assert_eq!(d.leer(PRINCIPAL).unwrap().unwrap(), b"existente");
+        fs::remove_file(d.ruta(PRINCIPAL)).unwrap();
+        d.publicar_sin_reemplazo(MIGRANDO, PRINCIPAL).unwrap();
+        assert_eq!(d.leer(PRINCIPAL).unwrap().unwrap(), b"nuevo");
+        assert!(!d.existe(MIGRANDO));
+    }
+
+    #[test]
+    fn temporal_exclusivo_y_control_antes_de_publicar() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path().join("x.csv");
+        let e = escribir_atomico_controlado(&r, b"hola", |f, b| f.write_all(b), |_| false);
+        assert!(e.is_err());
+        assert!(!r.exists());
+        assert_eq!(fs::read_dir(t.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn ids_de_recibo_solo_en_minusculas() {
+        assert!(id_recibo_valido("0f8c3a2e-1b2c"));
+        assert!(!id_recibo_valido("0F8C3A2E-1B2C"));
+    }
+
+    #[test]
+    fn lista_de_copias_con_su_bloqueo() {
+        let t = tempfile::tempdir().unwrap();
+        let d = Directorio::new(t.path().to_path_buf());
+        d.escribir_copia(
+            "reciente-000000000001.bolsillo",
+            b"{\"formato\":\"bolsillo\",\"v\":2,\"tipo\":\"datos\",\"bloqueo\":\"pin\"}",
+        )
+        .unwrap();
+        assert_eq!(d.listar_copias()[0].bloqueo.as_deref(), Some("pin"));
+    }
+
+    #[test]
     fn rutas_dentro_del_almacen() {
         let t = tempfile::tempdir().unwrap();
         let d = Directorio::new(t.path().to_path_buf());
@@ -537,6 +662,9 @@ mod tests {
         assert!(d.contiene(&t.path().join("recibos").join("..").join(PRINCIPAL)));
         let fuera = tempfile::tempdir().unwrap();
         assert!(!d.contiene(&fuera.path().join("export.xlsx")));
+        // ES: Una carpeta que no existe no se puede resolver: protegida.
+        // EN: A folder that does not exist cannot be resolved: protected.
+        assert!(d.contiene(&fuera.path().join("no-existe").join("x.csv")));
     }
 
     #[test]
