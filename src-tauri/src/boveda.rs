@@ -524,7 +524,8 @@ impl Boveda {
     pub fn cancelar_migracion(&mut self) -> R<()> {
         self.pendiente = None;
         if self.dir.existe(MIGRANDO) {
-            self.dir.rescatar(MIGRANDO, true, self.ahora())?;
+            self.dir
+                .rescatar_como(MIGRANDO, true, self.ahora(), "migracion")?;
         }
         Ok(())
     }
@@ -1092,7 +1093,10 @@ mod tests {
             .unwrap();
         b.cancelar_migracion().unwrap();
         assert!(!b.dir.existe(MIGRANDO) && !b.dir.existe(PRINCIPAL));
-        assert!(b.estado().hay_rescate);
+        // ES: Se guarda aparte, pero no cuenta como "hubo almacén" (se puede reintentar).
+        // EN: It is kept aside, but it does not count as "there was a store" (it can be retried).
+        assert_eq!(std::fs::read_dir(b.dir.ruta("rescate")).unwrap().count(), 1);
+        assert!(!b.estado().hay_rescate);
         assert_eq!(
             b.confirmar_migracion().err(),
             Some(ErrorAlmacen::Verificacion)

@@ -183,10 +183,16 @@ impl Directorio {
     pub fn hay_copias(&self) -> bool {
         !self.listar_copias().is_empty()
     }
+    // ES: Solo cuentan los datos apartados ("datos-…"); una migración
+    //     cancelada ("migracion-…") no indica que hubiera un almacén.
+    // EN: Only moved-aside data counts ("datos-…"); a cancelled migration
+    //     ("migracion-…") does not mean there was a store.
     pub fn hay_rescate(&self) -> bool {
         fs::read_dir(self.raiz.join(RESCATE))
-            .map(|mut d| d.next().is_some())
-            .unwrap_or(false)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with("datos-"))
     }
 
     // ── 4. Copias automáticas / Automatic backups ─────────────────────────────
@@ -291,9 +297,21 @@ impl Directorio {
     //     copying it (`mover = false`) or renaming it (`mover = true`, frees the
     //     name). Returns the name in rescate/.
     pub fn rescatar(&self, nombre: &str, mover: bool, ahora: u64) -> io::Result<String> {
+        self.rescatar_como(nombre, mover, ahora, "datos")
+    }
+
+    // ES: Igual, con el prefijo del nombre en rescate/ ("datos" o "migracion").
+    // EN: Same, with the name prefix in rescate/ ("datos" or "migracion").
+    pub fn rescatar_como(
+        &self,
+        nombre: &str,
+        mover: bool,
+        ahora: u64,
+        prefijo: &str,
+    ) -> io::Result<String> {
         let dir = self.raiz.join(RESCATE);
         fs::create_dir_all(&dir)?;
-        let base = format!("datos-{ahora:012}");
+        let base = format!("{prefijo}-{ahora:012}");
         let mut destino = format!("{base}.bolsillo");
         let mut n = 2;
         while dir.join(&destino).exists() {
