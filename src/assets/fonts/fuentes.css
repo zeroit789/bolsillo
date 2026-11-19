@@ -10,7 +10,8 @@
        Los nombres de familia "Syne" y "DM Sans" coinciden con los de
        --font-display y --font-sans en main.css.
        Licencia de ambas fuentes: SIL Open Font License 1.1 (ver los
-       LICENSE-*-OFL.txt de esta carpeta).
+       LICENSE-*-OFL.txt de esta carpeta; el build los copia a
+       dist/licencias/).
    EN: Declares Syne (headings) and DM Sans (body) from the variable woff2
        files of the npm packages @fontsource-variable/syne and
        @fontsource-variable/dm-sans (version pinned in package.json). Vite
@@ -20,7 +21,8 @@
        The family names "Syne" and "DM Sans" match --font-display and
        --font-sans in main.css.
        License of both fonts: SIL Open Font License 1.1 (see the
-       LICENSE-*-OFL.txt files in this folder).
+       LICENSE-*-OFL.txt files in this folder; the build copies them to
+       dist/licencias/).
    =========================================================================== */
 
 /* ── Syne (eje wght 400..800) / Syne (wght axis 400..800) ─────────────────── */
