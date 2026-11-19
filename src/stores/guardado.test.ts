@@ -211,6 +211,47 @@ describe("bloquear ahora y autobloqueo / lock now and auto-lock", () => {
     simulador.estado.fallarBloqueo = false;
   });
 
+  it("cambios que entran durante el autobloqueo dejan la solicitud pendiente / changes during auto-lock keep the request", async () => {
+    vi.useFakeTimers();
+    const s = await app("4831");
+    useAjustes().setMinutosAutobloqueo(1);
+    await vi.advanceTimersByTimeAsync(59_800);
+    // ES: Cada guardado del intento de bloqueo trae un cambio nuevo (3 veces).
+    // EN: Each save of the lock attempt brings a new change (3 times).
+    let n = 0;
+    simulador.estado.alGuardar = () => {
+      if (n++ < 3) useFinanzas().addPlan({ nombre: `Durante ${n}`, objetivo: 1, aportado: 0 });
+    };
+    useFinanzas().addPlan({ nombre: "Antes", objetivo: 1, aportado: 0 });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(n).toBeGreaterThanOrEqual(3);
+    await vi.advanceTimersByTimeAsync(5_000);
+    simulador.estado.alGuardar = null;
+    expect(s.desbloqueado).toBe(false);
+    expect(enDisco().planes.some((p) => p.nombre === "Durante 3")).toBe(true);
+  });
+
+  it("si el guardado se recupera y Rust rechaza el bloqueo, no hay un segundo intento inmediato / no immediate second attempt", async () => {
+    vi.useFakeTimers();
+    const s = await app("4831");
+    useAjustes().setMinutosAutobloqueo(1);
+    useFinanzas().addPlan({ nombre: "Sin guardar", objetivo: 10, aportado: 0 });
+    simulador.estado.fallarGuardado = true;
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect(s.bloqueoPendiente).toBe(true);
+    const antes = simulador.estado.intentosBloqueo;
+    simulador.estado.fallarGuardado = false;
+    simulador.estado.fallarBloqueo = true;
+    for (let i = 0; i < 70 && simulador.estado.intentosBloqueo === antes; i++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+    expect(simulador.estado.intentosBloqueo).toBe(antes + 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(simulador.estado.intentosBloqueo).toBe(antes + 1);
+    expect(s.bloqueoPendiente).toBe(false);
+    simulador.estado.fallarBloqueo = false;
+  });
+
   it("un autobloqueo que no pudo guardar queda pendiente y se hace tras el siguiente guardado / a failed auto-lock is retried after the next save", async () => {
     vi.useFakeTimers();
     const s = await app("4831");

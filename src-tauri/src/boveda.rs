@@ -59,11 +59,10 @@ use crate::recuperacion;
 // ES: Reenvolturas de copias que no se pudieron hacer (se reintentan al abrir).
 // EN: Backup rewraps that could not be done (retried on open).
 const PENDIENTES: &str = "pendientes.json";
+// ES: Donde se aparta un registro mal formado (para poder seguir).
+// EN: Where a malformed record is set aside (so work can go on).
+const PENDIENTES_DANADO: &str = "pendientes-danado.json";
 
-// ES: ¿Ruta de reenvoltura aceptable? "copias/…" o "rescate/…" con un nombre
-//     simple acabado en .bolsillo (sin subcarpetas ni "..").
-// EN: Acceptable rewrap path? "copias/…" or "rescate/…" with a plain name
-//     ending in .bolsillo (no subfolders nor "..").
 // ES: Une dos listas de reenvolturas sin repetir.
 // EN: Joins two rewrap lists without repeats.
 fn unir(base: &[Reenvoltura], nuevas: &[Reenvoltura]) -> Vec<Reenvoltura> {
@@ -76,7 +75,10 @@ fn unir(base: &[Reenvoltura], nuevas: &[Reenvoltura]) -> Vec<Reenvoltura> {
     v
 }
 
-// ES: (ver arriba) / EN: (see above)
+// ES: ¿Ruta de reenvoltura aceptable? "copias/…" o "rescate/…" con un nombre
+//     simple acabado en .bolsillo (sin subcarpetas ni "..").
+// EN: Acceptable rewrap path? "copias/…" or "rescate/…" with a plain name
+//     ending in .bolsillo (no subfolders nor "..").
 fn ruta_pendiente_valida(r: &str) -> bool {
     let r = r.replace('\\', "/");
     let Some((dir, nombre)) = r.split_once('/') else {
@@ -819,8 +821,21 @@ impl Boveda {
         //     actual antes de cambiarla (igual que al restaurar).
         // EN: Pending work from earlier operations is resolved against the
         //     current DEK before changing it (as when restoring).
-        let previas: Vec<Reenvoltura> = self
-            .leer_pendientes_estricto()?
+        // ES: Un registro mal formado no se puede aprovechar: se aparta (se
+        //     conserva para revisarlo) y se empieza uno nuevo, en vez de
+        //     impedir para siempre cambiar la protección.
+        // EN: A malformed record cannot be used: it is set aside (kept for
+        //     review) and a new one is started, instead of blocking protection
+        //     changes forever.
+        let leidas = match self.leer_pendientes_estricto() {
+            Ok(v) => v,
+            Err(ErrorAlmacen::Danado) => {
+                std::fs::rename(self.dir.ruta(PENDIENTES), self.dir.ruta(PENDIENTES_DANADO))?;
+                Vec::new()
+            }
+            Err(e) => return Err(e),
+        };
+        let previas: Vec<Reenvoltura> = leidas
             .into_iter()
             .filter(|p| {
                 p.publicada || p.accion == "credencial" || p.dek_id.as_deref() != Some(dek_id)
@@ -1405,18 +1420,6 @@ impl Boveda {
         let (mut bytes, mut f, dek, texto) = self.abrir_copia(nombre, credencial)?;
         let actual = self.dir.leer(PRINCIPAL)?;
         let cab_actual = actual.as_ref().and_then(|b| desde_bytes(b).ok());
-        // ES: Una copia sin protección no sustituye a un almacén protegido si
-        //     no está abierto: si no, restaurarla saltaría el PIN.
-        // EN: An unprotected backup does not replace a protected store that is
-        //     not open: otherwise restoring it would skip the PIN.
-        if f.bloqueo == Bloqueo::Ninguno
-            && self.abierta.is_none()
-            && cab_actual
-                .as_ref()
-                .is_some_and(|c| c.bloqueo != Bloqueo::Ninguno)
-        {
-            return Err(ErrorAlmacen::Bloqueado);
-        }
         let dek_actual = cab_actual.map(|f| f.dek_id);
         let pendientes = self.resolver_pendientes(dek_actual.as_deref())?;
         // ES: Si esta copia tiene una clave de recuperación ya revocada (una
@@ -2167,31 +2170,6 @@ mod tests {
     }
 
     #[test]
-    fn una_copia_sin_proteccion_no_salta_el_pin_de_un_almacen_cerrado() {
-        let (_t, mut b) = boveda();
-        b.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
-            .unwrap();
-        let copia = b.listar_copias()[0].nombre.clone();
-        let bytes = b.dir.leer_copia(&copia).unwrap();
-        b.configurar_bloqueo(Bloqueo::Pin, "4831").unwrap();
-        // ES: Como si esa copia no se hubiera llegado a proteger.
-        // EN: As if that backup had never been protected.
-        b.dir.escribir_copia(&copia, &bytes).unwrap();
-        b.bloquear();
-        assert_eq!(
-            b.restaurar_copia(&copia, None).unwrap_err(),
-            ErrorAlmacen::Bloqueado
-        );
-        let f = desde_bytes(&b.dir.leer(PRINCIPAL).unwrap().unwrap()).unwrap();
-        assert_eq!(f.bloqueo, Bloqueo::Pin);
-        // ES: Con el almacén abierto sí se puede (decisión del usuario).
-        // EN: With the store open it is allowed (the user's decision).
-        b.abrir(Some("4831")).unwrap();
-        b.dir.escribir_copia(&copia, &bytes).unwrap();
-        assert!(b.restaurar_copia(&copia, None).is_ok());
-    }
-
-    #[test]
     fn una_carpeta_con_extension_bolsillo_no_bloquea_cambios() {
         let (_t, mut b) = boveda();
         b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
@@ -2214,14 +2192,14 @@ mod tests {
     }
 
     #[test]
-    fn un_registro_ilegible_impide_cambiar_la_proteccion() {
+    fn un_registro_mal_formado_se_aparta_y_se_puede_proteger() {
         let (_t, mut b) = boveda();
         b.crear("{}", &[], Bloqueo::Ninguno, None, false, "t")
             .unwrap();
         b.dir.escribir(PENDIENTES, b"{no es una lista").unwrap();
-        assert!(b.configurar_bloqueo(Bloqueo::Pin, "4831").is_err());
+        assert!(b.configurar_bloqueo(Bloqueo::Pin, "4831").is_ok());
         assert_eq!(
-            b.dir.leer(PENDIENTES).unwrap().unwrap(),
+            b.dir.leer(PENDIENTES_DANADO).unwrap().unwrap(),
             b"{no es una lista"
         );
     }

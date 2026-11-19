@@ -73,6 +73,8 @@ interface EstadoSim {
   intentosBloqueo: number;
   // ES: el estado falla N veces / EN: the state call fails N times
   fallarEstado: number;
+  // ES: se llama tras cada guardado bueno (tests) / EN: called after each good save (tests)
+  alGuardar: (() => void) | null;
   proximoArchivo: string | null;
   cancelarDialogo: boolean;
 }
@@ -99,6 +101,7 @@ function vacio(): EstadoSim {
     fallarBloqueo: false,
     intentosBloqueo: 0,
     fallarEstado: 0,
+    alGuardar: null,
     proximoArchivo: null,
     cancelarDialogo: false,
   };
@@ -276,6 +279,7 @@ const comandos: Record<string, (a: Args) => unknown> = {
     escribirRecibos(ab.dekId, a.recibos as { id: string; datos: string }[]);
     st.principal = { ...st.principal!, datos: String(a.datos) };
     st.escrituras++;
+    st.alGuardar?.();
     rotar(st.principal);
   },
 

@@ -1038,11 +1038,7 @@ export const useSesion = defineStore("sesion", () => {
           // EN: If it was already published but cannot be loaded, the key is
           //     forgotten and it goes to the error screen: nothing from before
           //     in memory can be saved on top of what was restored.
-          if (
-            codigo(e) !== "credencial" &&
-            codigo(e) !== "sin-copia" &&
-            codigo(e) !== "bloqueado"
-          ) {
+          if (codigo(e) !== "credencial" && codigo(e) !== "sin-copia") {
             // ES: Guardado bloqueado ANTES de cualquier espera.
             // EN: Saving blocked BEFORE any wait.
             bloqueando = true;
