@@ -123,6 +123,12 @@ struct Reenvoltura {
     //     Without it, a previous DEK equal to the current one = not published.
     #[serde(default)]
     publicada: bool,
+    // ES: DEK de la propia copia ("recuperacion"): puede ser de una
+    //     generación anterior a la de la operación.
+    // EN: The backup's own DEK ("recuperacion"): it may belong to a
+    //     generation older than the one of the operation.
+    #[serde(default)]
+    dek_copia: Option<String>,
 }
 
 type R<T> = Result<T, ErrorAlmacen>;
@@ -728,7 +734,13 @@ impl Boveda {
     //     error: if a backup cannot be rewritten, it goes on with the rest and
     //     the main change (and the new recovery key) is not lost. Returns the
     //     ones that could not be rewrapped (they are recorded as pending).
-    fn reenvolver_copias<F>(&self, dek_id: &str, mut cambio: F) -> Option<Vec<std::path::PathBuf>>
+    //     Con `dek_id` None recorre todas las copias; solo escribe las que cambian.
+    // EN: With `dek_id` None it goes through every backup; it only writes the ones that change.
+    fn reenvolver_copias<F>(
+        &self,
+        dek_id: Option<&str>,
+        mut cambio: F,
+    ) -> Option<Vec<std::path::PathBuf>>
     where
         F: FnMut(&mut Fichero) -> R<()>,
     {
@@ -742,12 +754,15 @@ impl Boveda {
             let Ok(mut f) = desde_bytes(&bytes) else {
                 continue;
             };
-            if f.dek_id != dek_id {
+            if dek_id.is_some_and(|d| d != f.dek_id) {
                 continue;
             }
-            let hecho = cambio(&mut f)
-                .and_then(|_| a_bytes(&f))
-                .and_then(|b| Ok(crate::directorio::escribir_atomico(&ruta, &b)?));
+            let hecho = cambio(&mut f).and_then(|_| a_bytes(&f)).and_then(|b| {
+                if b != bytes {
+                    crate::directorio::escribir_atomico(&ruta, &b)?;
+                }
+                Ok(())
+            });
             if hecho.is_err() {
                 fallos.push(ruta);
             }
@@ -846,13 +861,14 @@ impl Boveda {
             // EN: Removing the old recovery requires knowing which one (its
             //     salt): if the backup cannot be read, it stops. A damaged
             //     backup opens with nothing and is skipped.
-            let sal = if accion == "recuperacion" {
+            let (sal, dek_copia) = if accion == "recuperacion" {
                 let b = std::fs::read(&r)?;
-                desde_bytes(&b)
-                    .ok()
-                    .and_then(|f| f.envolturas.recuperacion.map(|e| e.kdf.sal))
+                match desde_bytes(&b) {
+                    Ok(f) => (f.envolturas.recuperacion.map(|e| e.kdf.sal), Some(f.dek_id)),
+                    Err(_) => (None, None),
+                }
             } else {
-                None
+                (None, None)
             };
             v.push(Reenvoltura {
                 ruta: self.relativa(&r),
@@ -860,6 +876,7 @@ impl Boveda {
                 dek_id: Some(dek_id.into()),
                 sal,
                 publicada: false,
+                dek_copia,
             });
         }
         Ok(v)
@@ -983,7 +1000,8 @@ impl Boveda {
                     }
                     "recuperacion"
                         if f.envolturas.credencial.is_some()
-                            && p.dek_id.as_deref() == Some(f.dek_id.as_str())
+                            && p.dek_copia.as_deref().or(p.dek_id.as_deref())
+                                == Some(f.dek_id.as_str())
                             && p.sal.is_some()
                             && f.envolturas.recuperacion.as_ref().map(|e| &e.kdf.sal)
                                 == p.sal.as_ref() =>
@@ -1101,7 +1119,7 @@ impl Boveda {
             let _ = self.escribir_pendientes(&previas);
             return Err(e);
         }
-        let fallos = self.reenvolver_copias(&viejo_id, |f| {
+        let fallos = self.reenvolver_copias(Some(&viejo_id), |f| {
             if f.bloqueo == Bloqueo::Ninguno {
                 f.bloqueo = bloqueo;
                 f.envolturas = envolver(&vieja_dek, &viejo_id)?;
@@ -1185,7 +1203,7 @@ impl Boveda {
             let _ = self.escribir_pendientes(&previas);
             return Err(e);
         }
-        let fallos = self.reenvolver_copias(&dek_id, |c| {
+        let fallos = self.reenvolver_copias(Some(&dek_id), |c| {
             if c.envolturas.credencial.is_some() {
                 c.bloqueo = bloqueo;
                 c.envolturas.credencial = nueva_env.clone();
@@ -1243,8 +1261,17 @@ impl Boveda {
             let _ = self.escribir_pendientes(&previas);
             return Err(e);
         }
-        let fallos = self.reenvolver_copias(&viejo_id, |f| {
-            if f.envolturas.recuperacion.is_some() {
+        // ES: Las copias de la DEK anterior pasan a la clave nueva; las de
+        //     generaciones más antiguas que aún tengan una recuperación (ya
+        //     sustituida) la pierden: ninguna clave revocada sigue abriendo nada.
+        // EN: Backups of the previous DEK move to the new key; those of older
+        //     generations that still have an (already replaced) recovery lose
+        //     it: no revoked key keeps opening anything.
+        let fallos = self.reenvolver_copias(None, |f| {
+            if f.envolturas.recuperacion.is_none() {
+                return Ok(());
+            }
+            if f.dek_id == viejo_id {
                 f.envolturas.recuperacion = Some(envolver_con_kek(
                     &kek_r,
                     &sal_r,
@@ -1253,6 +1280,8 @@ impl Boveda {
                     &vieja_dek,
                     &kdf,
                 )?);
+            } else if f.envolturas.credencial.is_some() {
+                f.envolturas.recuperacion = None;
             }
             Ok(())
         });
@@ -1319,7 +1348,8 @@ impl Boveda {
                 pendientes.as_ref().is_none_or(|v| {
                     v.iter().any(|p| {
                         p.accion == "recuperacion"
-                            && p.dek_id.as_deref() == Some(f.dek_id.as_str())
+                            && p.dek_copia.as_deref().or(p.dek_id.as_deref())
+                                == Some(f.dek_id.as_str())
                             && p.sal.as_ref() == Some(&rec.kdf.sal)
                     })
                 })
@@ -1890,6 +1920,29 @@ mod tests {
         assert!(!b.estado().tiene_recuperacion);
         b.bloquear();
         b.abrir(Some("4831")).unwrap();
+    }
+
+    #[test]
+    fn dos_regeneraciones_no_dejan_la_primera_clave_en_copias_antiguas() {
+        let (_t, mut b) = boveda();
+        b.crear("{}", &[], Bloqueo::Pin, Some("4831"), false, "t")
+            .unwrap();
+        let copia = b.listar_copias()[0].nombre.clone();
+        b.regenerar_recuperacion("4831").unwrap();
+        let sal_r1 = desde_bytes(&b.dir.leer_copia(&copia).unwrap())
+            .unwrap()
+            .envolturas
+            .recuperacion
+            .unwrap()
+            .kdf
+            .sal;
+        b.regenerar_recuperacion("4831").unwrap();
+        let f = desde_bytes(&b.dir.leer_copia(&copia).unwrap()).unwrap();
+        assert!(f
+            .envolturas
+            .recuperacion
+            .is_none_or(|r| r.kdf.sal != sal_r1));
+        assert!(f.envolturas.credencial.is_some());
     }
 
     #[test]
