@@ -22,6 +22,14 @@ describe("detectarSeparador", () => {
     expect(detectarSeparador("Fecha,Concepto,Importe\n2026-02-01,Pan,-1.20")).toBe(",");
   });
 
+  it("gana el separador que respeta las comillas aunque dé menos columnas / the separator that respects quotes wins even with fewer columns", () => {
+    expect(detectarSeparador('a;"b,c,d"\ne;"f,g,h"')).toBe(";");
+    expect(leerCSV('a;"b,c,d"\ne;"f,g,h"')).toEqual([
+      ["a", "b,c,d"],
+      ["e", "f,g,h"],
+    ]);
+  });
+
   it("tabulador / tab", () => {
     expect(detectarSeparador("Fecha\tConcepto\tImporte\n01/02/2026\tPan\t-1,20")).toBe("\t");
   });
