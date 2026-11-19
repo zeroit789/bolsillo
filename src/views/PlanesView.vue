@@ -142,6 +142,16 @@ const form = reactive<FormPlan>({
   aportado: 0,
 });
 
+// ES: Importes que tenía el plan al abrir la edición. Una copia antigua puede
+//     traer importes por encima del tope actual: si el usuario no los toca,
+//     se conservan tal cual (así puede cambiar el nombre sin perderlos); el
+//     tope solo se aplica a lo que modifique.
+// EN: Amounts the plan had when editing started. An old backup may carry
+//     amounts above the current cap: if the user does not touch them, they
+//     are kept as they are (so the name can be changed without losing them);
+//     the cap only applies to what is modified.
+const heredado = { objetivo: null as number | null, aportado: null as number | null };
+
 // ES: Mensaje de error de validación (vacío = sin error).
 // EN: Validation error message (empty = no error).
 const error = ref("");
@@ -190,6 +200,8 @@ function abrirEditar(plan: Plan) {
   form.nombre = plan.nombre;
   form.objetivo = plan.objetivo;
   form.aportado = plan.aportado;
+  heredado.objetivo = plan.objetivo;
+  heredado.aportado = plan.aportado;
   modalAbierto.value = true;
 }
 
@@ -211,8 +223,17 @@ function guardar() {
   //     coma decimal): así "1e307" no se convierte en un 0 que pise lo aportado.
   // EN: Analysis of the amounts BEFORE rounding (utils/importe.ts, accepts a
   //     decimal comma): so "1e307" never becomes a 0 that overwrites the saved amount.
-  const aObjetivo = analizarImporte(form.objetivo);
-  const aAportado = analizarImporte(form.aportado);
+  // ES: Un importe heredado sin tocar se acepta tal cual (ver `heredado`).
+  // EN: An untouched inherited amount is accepted as is (see `heredado`).
+  const analizar = (campo: "objetivo" | "aportado") => {
+    const h = heredado[campo];
+    if (editandoId.value && h !== null && form[campo] === h) {
+      return { tipo: "valido" as const, valor: h };
+    }
+    return analizarImporte(form[campo]);
+  };
+  const aObjetivo = analizar("objetivo");
+  const aAportado = analizar("aportado");
 
   // ES: Validación: nombre no vacío, importes que sean números y quepan,
   //     objetivo > 0 y aportado >= 0 (vacío cuenta como 0).
