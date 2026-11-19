@@ -44,7 +44,7 @@ import { ref, reactive, computed, useId } from "vue";
 import { useFocoAtrapado } from "../utils/useFocoAtrapado";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
-import { euro, fechaLegible, mesActual } from "../utils/format";
+import { euro, fechaLegible, mesActual, mesLegible } from "../utils/format";
 import { primerCobro } from "../utils/recurrencia";
 import { MENSAJE_IMPORTE_INVALIDO, MENSAJE_IMPORTE_MAX, analizarImporte } from "../utils/importe";
 import { totalPartes, validarPartes } from "../utils/partes";
@@ -126,6 +126,14 @@ const t = crearT({
     es: "Pon un último día válido, igual o posterior al primero.",
     en: "Enter a valid last day, on or after the first one.",
   },
+  dadoDeBaja: {
+    es: "Dado de baja a partir de @m (después de ese mes no cuenta).",
+    en: "Cancelled from @m (it does not count after that month).",
+  },
+  errTrasBaja: {
+    es: "El primer día no puede ser posterior al mes de baja.",
+    en: "The first day cannot be after the cancellation month.",
+  },
   errCuotas: {
     es: "El número de cobros debe ser un entero entre 1 y 5200.",
     en: "The number of charges must be a whole number between 1 and 5200.",
@@ -176,6 +184,7 @@ interface MovimientoInicial {
   subdivisiones?: Subdivision[]; // ES: gasto dividido en varias categorías; opcional / EN: expense split across several categories; optional
   // ES: Recurrencia (solo fijos, v4). / EN: Recurrence (fixed only, v4).
   desde?: string; // ES: mes de alta "YYYY-MM" (para enseñar el primer cobro) / EN: start month "YYYY-MM" (to show the first charge)
+  hasta?: string | null; // ES: mes de baja "YYYY-MM" si se dio de baja / EN: end month "YYYY-MM" if it was cancelled
   frecuencia?: Frecuencia;
   fechaInicio?: string;
   fechaFin?: string;
@@ -576,6 +585,8 @@ function validarRecurrencia():
   const fechaInicio = form.fechaInicio || undefined;
   if (fechaInicio && !esFechaValida(fechaInicio)) return { error: "errFecha" };
   if (form.frecuencia === "semanal" && !fechaInicio) return { error: "errSemanal" };
+  const hasta = props.inicial?.hasta;
+  if (fechaInicio && hasta && fechaInicio.slice(0, 7) > hasta) return { error: "errTrasBaja" };
   let fechaFin: string | undefined;
   let cuotas: number | undefined;
   if (form.fin === "fecha") {
@@ -603,7 +614,7 @@ const primerCobroTexto = computed(() => {
   const f = primerCobro({
     importe: 1,
     desde: props.inicial?.desde ?? mesActual(),
-    hasta: null,
+    hasta: props.inicial?.hasta ?? null,
     diaPago: d >= 1 && d <= 31 && r.frecuencia !== "semanal" ? d : undefined,
     ...r,
   });
@@ -782,6 +793,9 @@ const primerCobroTexto = computed(() => {
               />
             </div>
           </div>
+          <p v-if="props.inicial?.hasta" class="text-xs text-warn">
+            {{ t("dadoDeBaja").replace("@m", mesLegible(props.inicial.hasta)) }}
+          </p>
           <p v-if="primerCobroTexto" class="text-xs text-faint" aria-live="polite">
             {{ primerCobroTexto }}
           </p>

@@ -235,7 +235,19 @@ function revisarPagosProximos() {
   } catch {
     avisados = { mes, ids: [] };
   }
-  if (avisados.mes !== mes) avisados = { mes, ids: [] }; // ES: mes nuevo: reinicia / EN: new month: reset
+  // ES: Mes nuevo: se reinician los avisos de cuotas, pero los de fijos (clave
+  //     "r" + id + fecha) se conservan mientras su fecha no haya pasado, para
+  //     no repetir un cobro del día 1 avisado a finales del mes anterior.
+  // EN: New month: installment reminders are reset, but fixed-item ones (key
+  //     "r" + id + date) are kept while their date has not passed, so a charge
+  //     on the 1st reminded at the end of the previous month is not repeated.
+  if (avisados.mes !== mes) {
+    const hoyClave = mesActual() + "-" + String(ahora.getDate()).padStart(2, "0");
+    avisados = {
+      mes,
+      ids: avisados.ids.filter((k) => k.startsWith("r") && k.slice(-10) >= hoyClave),
+    };
+  }
   const set = new Set<string>(avisados.ids);
   // ES: Días hasta la próxima ocurrencia de un día de pago, cruzando bien el fin
   //     de mes (p.ej. hoy es 30 y el pago es el 1 → 1-2 días, no un negativo).

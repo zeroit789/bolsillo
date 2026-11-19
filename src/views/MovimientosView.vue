@@ -42,6 +42,10 @@ const t = crearT({
   titulo: { es: "Movimientos", en: "Transactions" },
   anadir: { es: "+ Añadir", en: "+ Add" },
   importarExtracto: { es: "Importar extracto", en: "Import statement" },
+  errGuardarFijo: {
+    es: "No se pudo guardar el fijo: revisa sus fechas y el número de cobros.",
+    en: "The fixed item could not be saved: check its dates and number of charges.",
+  },
   // ES: Chips de recurrencia (v4): frecuencia y veces del mes.
   // EN: Recurrence chips (v4): frequency and times in the month.
   frecSemanal: { es: "Semanal", en: "Weekly" },
@@ -143,6 +147,7 @@ const inicial = ref<{
   subdivisiones?: Subdivision[]; // ES: gasto dividido (solo puntuales); opcional / EN: split expense (one-off only); optional
   // ES: Recurrencia (solo fijos, v4). / EN: Recurrence (fixed only, v4).
   desde?: string;
+  hasta?: string | null;
   frecuencia?: Frecuencia;
   fechaInicio?: string;
   fechaFin?: string;
@@ -225,6 +230,7 @@ function editar(linea: LineaMes) {
       cuenta: r.cuenta, // ES: cuenta a la que pertenece; opcional / EN: account it belongs to; optional
       // ES: Recurrencia (v4). / EN: Recurrence (v4).
       desde: r.desde,
+      hasta: r.hasta,
       frecuencia: r.frecuencia,
       fechaInicio: r.fechaInicio,
       fechaFin: r.fechaFin,
@@ -275,11 +281,16 @@ function onGuardar(mov: {
   fechaFin?: string;
   cuotas?: number;
 }) {
+  // ES: El store valida los fijos contra el esquema; si los rechaza, el
+  //     modal sigue abierto y se avisa (nunca se pierde el cambio en silencio).
+  // EN: The store validates fixed items against the schema; if it rejects
+  //     them, the modal stays open with a notice (no change is lost silently).
+  let ok = true;
   if (editando.value) {
     // ES: --- Modo edición ---
     // EN: --- Edit mode ---
     if (editando.value.origen === "recurrente") {
-      f.actualizarRecurrente(editando.value.id, {
+      ok = f.actualizarRecurrente(editando.value.id, {
         concepto: mov.concepto,
         importe: mov.importe,
         signo: mov.signo,
@@ -313,7 +324,7 @@ function onGuardar(mov: {
     // ES: --- Modo alta ---
     // EN: --- Create mode ---
     if (mov.recurrente) {
-      f.addRecurrente({
+      ok = f.addRecurrente({
         concepto: mov.concepto,
         importe: mov.importe,
         signo: mov.signo,
@@ -345,6 +356,10 @@ function onGuardar(mov: {
         subdivisiones: mov.subdivisiones, // ES: gasto dividido (solo puntuales) / EN: split expense (one-off only)
       });
     }
+  }
+  if (!ok) {
+    alert(t("errGuardarFijo"));
+    return;
   }
   // ES: Cerramos y reseteamos el estado de edición.
   // EN: Close the modal and reset the editing state.

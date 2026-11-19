@@ -114,7 +114,11 @@ const t = crearT({
   },
   labelSaldoReal: { es: "Saldo real (€)", en: "Actual balance (€)" },
   labelNota: { es: "Nota (opcional)", en: "Note (optional)" },
-  saldoAhora: { es: "Saldo en Bolsillo:", en: "Balance in Bolsillo:" },
+  saldoAhora: { es: "Saldo en Bolsillo a esa fecha:", en: "Balance in Bolsillo on that date:" },
+  errCuentaConMovimientos: {
+    es: "Esta cuenta tiene transferencias o ajustes de saldo. Bórralos antes en «Entre cuentas y ajustes» para que el patrimonio siga cuadrando.",
+    en: "This account has transfers or balance adjustments. Delete them first in “Between accounts and adjustments” so net worth still adds up.",
+  },
   yaCuadra: {
     es: "El saldo ya cuadra en esa fecha: no hace falta ajuste.",
     en: "The balance already matches on that date: no adjustment needed.",
@@ -248,7 +252,16 @@ function guardar() {
 // ── 7. Eliminar cuenta / Delete account ──────────────────────────────────────
 // ES: Elimina una cuenta tras confirmación del navegador.
 // EN: Deletes an account after a browser confirmation.
+//     Si tiene transferencias o ajustes, antes hay que borrarlos: si no,
+//     seguirían moviendo la otra cuenta y el patrimonio se descuadraría.
+// EN: If it has transfers or adjustments, they must be deleted first:
+//     otherwise they would keep moving the other account and net worth would
+//     no longer add up.
 function borrar(cuenta: Cuenta) {
+  if (finanzas.cuentaConMovimientosEntreCuentas(cuenta.id)) {
+    alert(t("errCuentaConMovimientos"));
+    return;
+  }
   // ES: Confirmación bilingüe: el nombre de la cuenta es dato del usuario y no se traduce.
   // EN: Bilingual confirmation: the account name is user data and is not translated.
   if (confirm(`${t("confirmEliminar")} "${cuenta.nombre}"?`)) {
@@ -308,11 +321,20 @@ const cajaAjuste = ref<HTMLElement | null>(null);
 const idTituloAjuste = useId();
 useFocoAtrapado(cajaAjuste, { alEscape: () => (ajustando.value = null) });
 
-// ES: Abre el ajuste precargando el saldo actual. / EN: Opens the adjustment preloading the current balance.
+// ES: Saldo en Bolsillo de la cuenta HASTA la fecha del formulario (sin lo
+//     posterior): es con lo que el store compara al ajustar.
+// EN: The account's balance in Bolsillo UP TO the form's date (without what
+//     comes later): it is what the store compares with when adjusting.
+const saldoEnFecha = computed(() =>
+  ajustando.value ? finanzas.saldoCuentaEn(ajustando.value.cuenta.id, formA.fecha) : null
+);
+
+// ES: Abre el ajuste precargando el saldo de hoy (sin apuntes futuros).
+// EN: Opens the adjustment preloading today's balance (without future entries).
 function abrirAjuste(item: { cuenta: Cuenta; saldo: number }) {
   ajustando.value = item;
-  formA.saldo = String(item.saldo);
   formA.fecha = hoyISO();
+  formA.saldo = String(finanzas.saldoCuentaEn(item.cuenta.id, formA.fecha) ?? item.saldo);
   formA.nota = "";
   errorAjuste.value = "";
 }
@@ -490,7 +512,7 @@ function borrarMovimiento(m: { tipo: "transferencia" | "ajuste"; id: string }) {
     <!-- ES: 4b. Historial de transferencias y ajustes -->
     <!-- EN: 4b. Transfers and adjustments history -->
     <section
-      v-if="finanzas.cuentas.length"
+      v-if="finanzas.cuentas.length || historialCuentas.length"
       class="mt-6 rounded-2xl bg-surface border border-border p-5"
     >
       <h2 class="font-display font-bold">{{ t("historialTitulo") }}</h2>
@@ -539,7 +561,7 @@ function borrarMovimiento(m: { tipo: "transferencia" | "ajuste"; id: string }) {
         role="dialog"
         aria-modal="true"
         :aria-labelledby="idTituloModal"
-        class="w-full max-w-md rounded-2xl bg-surface border border-border p-5"
+        class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-border p-5"
       >
         <h3 :id="idTituloModal" class="font-display font-bold text-lg">{{ tituloModal }}</h3>
 
@@ -609,7 +631,7 @@ function borrarMovimiento(m: { tipo: "transferencia" | "ajuste"; id: string }) {
         role="dialog"
         aria-modal="true"
         :aria-labelledby="idTituloTransfer"
-        class="w-full max-w-md rounded-2xl bg-surface border border-border p-5"
+        class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-border p-5"
       >
         <h3 :id="idTituloTransfer" class="font-display font-bold text-lg">
           {{ t("modalTransfer") }}
@@ -714,13 +736,15 @@ function borrarMovimiento(m: { tipo: "transferencia" | "ajuste"; id: string }) {
         role="dialog"
         aria-modal="true"
         :aria-labelledby="idTituloAjuste"
-        class="w-full max-w-md rounded-2xl bg-surface border border-border p-5"
+        class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-border p-5"
       >
         <h3 :id="idTituloAjuste" class="font-display font-bold text-lg">
           {{ t("modalAjuste") }} · {{ ajustando.cuenta.nombre }}
         </h3>
         <p class="mt-1 text-xs text-faint">{{ t("ayudaAjuste") }}</p>
-        <p class="mt-2 text-sm text-muted">{{ t("saldoAhora") }} {{ euro(ajustando.saldo) }}</p>
+        <p v-if="saldoEnFecha !== null" class="mt-2 text-sm text-muted" aria-live="polite">
+          {{ t("saldoAhora") }} {{ euro(saldoEnFecha) }}
+        </p>
         <form class="mt-4 space-y-3" @submit.prevent="guardarAjuste">
           <div class="flex gap-3">
             <div class="flex-1">
