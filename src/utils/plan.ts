@@ -9,14 +9,14 @@
  *     tested without mounting the component.
  * ===========================================================================*/
 import type { Plan } from "../types";
+import { importeDesdeTexto } from "./importe";
 
 // ES: Redondea un número a 2 decimales (céntimos). Acepta coma o punto decimal.
+//     Delega en utils/importe.ts, el único sitio que redondea importes.
 // EN: Rounds a number to 2 decimals (cents). Accepts decimal comma or dot.
+//     Delegates to utils/importe.ts, the single place that rounds amounts.
 export function r2(valor: number | string): number {
-  // ES: Si viene como texto con coma decimal ("12,50") se normaliza a punto.
-  // EN: If it comes as text with decimal comma ("12,50") it's normalized to dot.
-  const n = typeof valor === "string" ? Number(valor.replace(",", ".")) : valor;
-  return Math.round((Number(n) || 0) * 100) / 100;
+  return importeDesdeTexto(valor);
 }
 
 // ES: Porcentaje de progreso de un plan, recortado (clamp) al rango 0..100.

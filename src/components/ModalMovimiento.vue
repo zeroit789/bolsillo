@@ -35,6 +35,7 @@ import { ref, reactive, computed } from "vue";
 import { categoriasPorGrupo, NOMBRES_CATEGORIA } from "../data/categorias";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
+import { importeDesdeTexto, redondear2 } from "../utils/importe";
 import { crearT } from "../i18n";
 import type { Signo, Subdivision } from "../types";
 
@@ -286,8 +287,7 @@ const error = ref("");
 // EN: Turns a text with comma/dot decimal into a number rounded to cents.
 //     Returns 0 if it is not a valid number.
 function aImporte(txt: string): number {
-  const n = Number(String(txt).replace(",", "."));
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  return importeDesdeTexto(String(txt));
 }
 
 // ES: Añade una parte vacía al gasto dividido.
@@ -304,8 +304,8 @@ function quitarParte(i: number) {
 
 // ES: Suma de las partes del gasto dividido (number, céntimos).
 // EN: Sum of the split-expense parts (number, in cents).
-const sumaPartes = computed(
-  () => Math.round(partes.reduce((acc, p) => acc + aImporte(p.importe), 0) * 100) / 100
+const sumaPartes = computed(() =>
+  redondear2(partes.reduce((acc, p) => acc + aImporte(p.importe), 0))
 );
 
 // ── 8. Gestión de imagen del recibo / Receipt image handling ──────────────────
@@ -381,9 +381,7 @@ function guardar() {
   // EN: Amount calculation:
   //      - split  -> it is the SUM of the parts (the normal input is ignored).
   //      - normal -> the amount input (accepts a decimal comma).
-  const importe = usandoDividido
-    ? sumaPartes.value
-    : Math.round(Number(String(form.importe).replace(",", ".")) * 100) / 100;
+  const importe = usandoDividido ? sumaPartes.value : importeDesdeTexto(String(form.importe));
 
   // ES: Validación del gasto dividido: al menos 2 partes con importe > 0.
   // EN: Split-expense validation: at least 2 parts with amount > 0.

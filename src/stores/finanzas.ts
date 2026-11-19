@@ -42,6 +42,7 @@ import type {
 import { mesActual, diffMeses, sumarMeses } from "../utils/format";
 import { estadoDeuda } from "../utils/deuda";
 import { nuevoId } from "../utils/id";
+import { redondear2 } from "../utils/importe";
 
 // ES: Resumen de KPIs de un solo mes (la forma que usan el dashboard y el historial).
 // EN: KPI summary of a single month (the shape the dashboard and history use).
@@ -426,7 +427,7 @@ export const useFinanzas = defineStore("finanzas", () => {
     if (i !== -1) {
       // ES: Redondea a 2 decimales para evitar deriva de coma flotante en el total guardado.
       // EN: Round to 2 decimals to avoid floating-point drift in the saved total.
-      const aportado = Math.round((planes.value[i].aportado + cantidad) * 100) / 100;
+      const aportado = redondear2(planes.value[i].aportado + cantidad);
       planes.value[i] = { ...planes.value[i], aportado };
     }
   }
@@ -440,7 +441,7 @@ export const useFinanzas = defineStore("finanzas", () => {
   function setPresupuesto(categoria: string, limite: number) {
     // ES: Normaliza a número no negativo redondeado a 2 decimales.
     // EN: Normalise to a non-negative number rounded to 2 decimals.
-    const lim = Math.round((Number(limite) || 0) * 100) / 100;
+    const lim = redondear2(Number(limite));
     presupuestos.value = presupuestos.value.filter((p) => p.categoria !== categoria);
     if (lim > 0) presupuestos.value.push({ categoria, limite: lim });
   }
@@ -517,7 +518,7 @@ export const useFinanzas = defineStore("finanzas", () => {
         if (p.cuenta !== c.id) continue;
         saldo += p.signo === "ingreso" ? p.importe : -p.importe;
       }
-      return { cuenta: c, saldo: Math.round(saldo * 100) / 100 };
+      return { cuenta: c, saldo: redondear2(saldo) };
     })
   );
   // ES: Patrimonio total = suma del saldo de todas las cuentas.

@@ -25,6 +25,7 @@ import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { TIPOS_DEUDA, type Deuda, type TipoDeuda } from "../types";
 import { euro, mesActual } from "../utils/format";
+import { redondear2 } from "../utils/importe";
 import { crearT } from "../i18n";
 
 // ES: Store central de finanzas (ya inicializado en la app).
@@ -182,7 +183,7 @@ function cerrarModal() {
 function guardar() {
   // ES: Redondeo a céntimos y saneo (evita NaN/negativos que contaminarían los KPIs).
   // EN: Round to cents and sanitize (avoids NaN/negatives polluting the KPIs).
-  const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+  const r2 = (n: number) => redondear2(Number(n));
   const total = r2(form.total);
   const cuota = r2(form.cuotaMensual);
   const pagado = r2(form.pagadoInicial);

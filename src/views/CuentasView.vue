@@ -23,6 +23,7 @@
 import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
+import { importeDesdeTexto } from "../utils/importe";
 import type { Cuenta } from "../types";
 import { crearT } from "../i18n";
 
@@ -126,12 +127,11 @@ function cerrarModal() {
 // ES: Valida y guarda: crea o actualiza la cuenta según el modo.
 // EN: Validates and saves: creates or updates the account depending on the mode.
 function guardar() {
-  // ES: Redondeo a céntimos: acepta coma decimal (Intl/teclado ES) y sanea NaN.
-  //     Number(form.saldoInicial) cubre el caso en que el input devuelva string.
-  // EN: Round to cents: accepts a decimal comma (Intl/ES keyboard) and sanitizes
-  //     NaN. Number(form.saldoInicial) covers the case where the input returns a string.
-  const bruto = String(form.saldoInicial).trim().replace(",", ".");
-  const saldoInicial = Math.round((Number(bruto) || 0) * 100) / 100;
+  // ES: Redondeo a céntimos (utils/importe.ts): acepta coma decimal (Intl/teclado
+  //     ES) y sanea NaN. String(...) cubre el caso en que el input devuelva número.
+  // EN: Round to cents (utils/importe.ts): accepts a decimal comma (Intl/ES
+  //     keyboard) and sanitizes NaN. String(...) covers the input returning a number.
+  const saldoInicial = importeDesdeTexto(String(form.saldoInicial));
 
   // ES: Validación: el nombre no puede estar vacío.
   // EN: Validation: the name cannot be empty.

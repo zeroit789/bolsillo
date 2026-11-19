@@ -41,6 +41,7 @@ import { ref, reactive, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import type { Plan } from "../types";
 import { euro } from "../utils/format";
+import { importeDesdeTexto } from "../utils/importe";
 import { r2, progreso, restante, conseguido } from "../utils/plan";
 import { crearT } from "../i18n";
 
@@ -251,8 +252,7 @@ function confirmarAporte() {
 
   // ES: Normaliza la coma decimal a punto y redondea a céntimos.
   // EN: Normalizes the decimal comma to dot and rounds to cents.
-  const normalizado = String(cantidadAportar.value).replace(",", ".");
-  const c = Math.round(Number(normalizado) * 100) / 100;
+  const c = importeDesdeTexto(String(cantidadAportar.value));
 
   // ES: Solo se aportan cantidades positivas válidas.
   // EN: Only valid positive amounts are added.

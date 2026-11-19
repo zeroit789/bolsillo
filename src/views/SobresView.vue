@@ -37,6 +37,7 @@
 import { computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
+import { redondear2 } from "../utils/importe";
 import { colorCategoria } from "../data/categorias";
 import { crearT } from "../i18n";
 
@@ -192,7 +193,7 @@ function colorTexto(gastado: number, limite: number): string {
 // ES: Lo que queda dentro del sobre (límite - gastado). Puede ser negativo.
 // EN: What's left inside the envelope (limit - spent). Can be negative.
 function quedan(gastado: number, limite: number): number {
-  return Math.round((limite - gastado) * 100) / 100;
+  return redondear2(limite - gastado);
 }
 </script>
 

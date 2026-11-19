@@ -31,6 +31,7 @@
 import { ref, computed } from "vue";
 import { useFinanzas } from "../stores/finanzas";
 import { euro } from "../utils/format";
+import { importeDesdeTexto } from "../utils/importe";
 import { NOMBRES_CATEGORIA, colorCategoria } from "../data/categorias";
 import { crearT } from "../i18n";
 
@@ -87,8 +88,7 @@ const error = ref<string>("");
 // ES: Normaliza un texto numérico ("12,50" o "12.50") a número con 2 decimales.
 // EN: Normalises a numeric text ("12,50" or "12.50") to a 2-decimal number.
 function aNumero(valor: string): number {
-  const n = Number(valor.replace(",", "."));
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  return importeDesdeTexto(valor);
 }
 
 // ES: Mapa categoría -> gasto del mes (a partir de finanzas.gastoPorCategoria).
