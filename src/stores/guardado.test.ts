@@ -1,183 +1,192 @@
 /* =============================================================================
- * guardado.test.ts — Guardado que avisa / Save that warns
+ * guardado.test.ts — Guardado que avisa, reemplazo y bloqueo / Warning save, replace & lock
  * -----------------------------------------------------------------------------
- * ES: Reproduce H2 (un guardado que falla, p. ej. almacenamiento lleno, se
- *     tragaba en silencio) y prueba el guardado nuevo: estado de error, reintento,
- *     debounce y cambio de credencial que no deja el disco descuadrado. Todos
- *     los datos son inventados.
- * EN: Reproduces H2 (a failing save, e.g. storage full, was silently
- *     swallowed) and tests the new save: error state, retry, debounce and a
- *     credential change that never leaves the disk out of step. All data is
- *     made up.
- * -----------------------------------------------------------------------------
- * ÍNDICE / INDEX:
- *   1. Utilidades de prueba / Test helpers
- *   2. H2: guardado que falla / H2: failing save
+ * ES: H2 del análisis (un guardado que falla no se veía) sobre el fichero
+ *     cifrado (Rust simulado), el debounce, que nunca se escriben datos que no
+ *     se podrían volver a leer, los dos arreglos ALTA de la revisión de la
+ *     Tanda 1 (reemplazar persiste antes de publicar; un reintento nunca
+ *     adelanta datos viejos a una operación) y el orden de "Bloquear ahora" y
+ *     del autobloqueo (bloquear con cambios pendientes no pierde nada).
+ * EN: H2 from the analysis (a failing save was invisible) on the encrypted
+ *     file (simulated Rust), the debounce, that data that could not be read
+ *     back is never written, the two HIGH fixes from the Tanda 1 review
+ *     (replace persists before publishing; a retry never overtakes an
+ *     operation with old data) and the order of "Lock now" and auto-lock
+ *     (locking with pending changes loses nothing).
  * ===========================================================================*/
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { nextTick } from "vue";
 import * as almacen from "../utils/almacen";
+import { simulador } from "../utils/rustSimulado";
+import type { DatosBolsillo } from "../types";
 import { useAjustes } from "./ajustes";
 import { useFinanzas } from "./finanzas";
 import { useSesion } from "./sesion";
 
-// ── 1. Utilidades de prueba / Test helpers ────────────────────────────────────
-// ES: Clave de localStorage de los datos cifrados. / EN: localStorage key of the encrypted data.
-const CLAVE_DATOS = "bolsillo.datos.cif";
+// ES: Contenido de datos.bolsillo (simulado). / EN: datos.bolsillo content (simulated).
+const enDisco = (): DatosBolsillo => JSON.parse(simulador.estado.principal!.datos);
 
-// ES: Vacía cualquier guardado pendiente del store activo (si la API existe),
-//     para que un temporizador de una prueba no escriba en la siguiente.
-// EN: Flushes any pending save of the active store (if the API exists), so a
-//     timer from one test never writes into the next one.
-async function vaciarPendientes() {
-  const s = useSesion() as unknown as { vaciarGuardado?: () => Promise<boolean> };
-  if (typeof s.vaciarGuardado === "function") await s.vaciarGuardado();
+// ES: Deja que terminen las promesas pendientes. / EN: Lets pending promises settle.
+const asentar = () => new Promise((r) => setTimeout(r, 0));
+
+// ES: App recién configurada sin PIN y con el ejemplo. / EN: Freshly set-up app without a PIN and with samples.
+async function app(pin: string | null = null) {
+  const s = useSesion();
+  await s.arrancar();
+  await s.completarOnboarding({
+    nombre: "",
+    bloqueo: pin ? { tipo: "pin", credencial: pin } : null,
+    datosIniciales: "ejemplo",
+  });
+  return s;
 }
 
-beforeEach(async () => {
+beforeEach(() => {
   setActivePinia(createPinia());
   localStorage.clear();
   almacen.usarOfuscacion();
+  simulador.reiniciar();
 });
 
 afterEach(async () => {
-  // ES: vi.restoreAllMocks no restaura el espía de localStorage de happy-dom:
-  //     se restaura a mano para que un fallo no contamine la prueba siguiente.
-  // EN: vi.restoreAllMocks does not restore happy-dom's localStorage spy: it is
-  //     restored by hand so a failure does not leak into the next test.
-  if (vi.isMockFunction(localStorage.setItem)) vi.mocked(localStorage.setItem).mockRestore();
-  await vaciarPendientes();
+  vi.useRealTimers();
+  simulador.estado.fallarGuardado = false;
+  await useSesion().vaciarGuardado();
 });
 
-// ES: Primer arranque completo: bienvenida con o sin PIN y datos de ejemplo.
-// EN: Full first run: onboarding with or without a PIN and the sample data.
-async function primerArranque(pin: string | null) {
-  const sesion = useSesion();
-  await sesion.arrancar();
-  await sesion.completarOnboarding({
-    nombre: "Prueba",
-    bloqueo: pin ? { tipo: "pin", credencial: pin } : null,
-    datosIniciales: "ejemplo",
-  } as Parameters<typeof sesion.completarOnboarding>[0]);
-  await vaciarPendientes();
-}
-
-// ES: Hace que escribir la clave de datos lance QuotaExceededError hasta restaurar.
-// EN: Makes writing the data key throw QuotaExceededError until restored.
-function llenarAlmacenamiento() {
-  const original = localStorage.setItem.bind(localStorage);
-  return vi.spyOn(localStorage, "setItem").mockImplementation((k: string, v: string) => {
-    if (k === CLAVE_DATOS) throw new DOMException("lleno", "QuotaExceededError");
-    original(k, v);
-  });
-}
-
-// ── 2. H2: guardado que falla / H2: failing save ──────────────────────────────
 describe("H2: el guardado que falla avisa / a failing save warns", () => {
-  it("almacenamiento lleno: estado de error y el blob no cambia / storage full: error state, blob unchanged", async () => {
-    await primerArranque(null);
-    const blob = localStorage.getItem(CLAVE_DATOS);
-
-    // ES: Simula QuotaExceededError solo al escribir la clave de datos.
-    // EN: Simulates QuotaExceededError only when writing the data key.
-    const espia = llenarAlmacenamiento();
-
+  it("disco lleno: estado de error, el fichero no cambia y Reintentar lo arregla / disk full: error, file unchanged, Retry fixes it", async () => {
+    const s = await app();
+    const antes = simulador.estado.principal!.datos;
+    simulador.estado.fallarGuardado = true;
     useFinanzas().addPlan({ nombre: "Bici", objetivo: 300, aportado: 0 });
-    await nextTick();
-    await vaciarPendientes();
-    // ES: Margen para el guardado asíncrono del código antiguo.
-    // EN: Leeway for the old code's async save.
-    await new Promise((r) => setTimeout(r, 400));
+    expect(await s.vaciarGuardado()).toBe(false);
+    expect(s.estadoGuardado).toBe("error");
+    expect(simulador.estado.principal!.datos).toBe(antes);
 
-    const sesion = useSesion() as unknown as { estadoGuardado?: string };
-    expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
-    expect(sesion.estadoGuardado).toBe("error");
-    espia.mockRestore();
+    simulador.estado.fallarGuardado = false;
+    expect(await s.vaciarGuardado()).toBe(true);
+    expect(s.estadoGuardado).toBe("ok");
+    expect(enDisco().planes.some((p) => p.nombre === "Bici")).toBe(true);
+  });
+
+  it("nunca escribe datos que no se podrían volver a leer / never writes unreadable data", async () => {
+    const s = await app();
+    const antes = simulador.estado.principal!.datos;
+    useFinanzas().addPlan({ nombre: "Roto", objetivo: Infinity, aportado: 0 });
+    expect(await s.vaciarGuardado()).toBe(false);
+    expect(s.estadoGuardado).toBe("error");
+    expect(simulador.estado.principal!.datos).toBe(antes);
+  });
+
+  it("el debounce agrupa cambios seguidos en una escritura / the debounce groups quick changes", async () => {
+    vi.useFakeTimers();
+    const s = await app();
+    const antes = simulador.estado.escrituras;
+    const f = useFinanzas();
+    for (let i = 0; i < 5; i++) f.addPlan({ nombre: `P${i}`, objetivo: 10, aportado: 0 });
+    expect(s.estadoGuardado).toBe("pendiente");
+    await vi.advanceTimersByTimeAsync(400);
+    expect(simulador.estado.escrituras - antes).toBe(1);
+    expect(s.estadoGuardado).toBe("ok");
   });
 });
 
-describe("guardado: reintento, debounce y credencial / save: retry, debounce and credential", () => {
-  it("nunca escribe datos que no se podrían volver a leer / never writes data that could not be read back", async () => {
-    await primerArranque(null);
-    const blob = localStorage.getItem(CLAVE_DATOS);
-    // ES: Infinity pasa a null en JSON: no debe llegar al disco.
-    // EN: Infinity becomes null in JSON: it must not reach the disk.
-    useFinanzas().addPlan({ nombre: "Roto", objetivo: Infinity, aportado: 0 });
-    const sesion = useSesion();
-    expect(await sesion.vaciarGuardado()).toBe(false);
-    expect(sesion.estadoGuardado).toBe("error");
-    expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
-  });
-
-  it("dos cambios de PIN seguidos quedan en orden / two back-to-back PIN changes stay in order", async () => {
-    await primerArranque(null);
-    const sesion = useSesion();
-    const a = sesion.configurarBloqueo("pin", "1111");
-    const b = sesion.cambiarCredencial("1111", "2222", "pin");
-    await a;
-    expect(await b).toBe(true);
-    expect(await almacen.secretoValido("2222")).toBe(true);
-    expect(useAjustes().bloqueoTipo).toBe("pin");
-  });
-
-  it("tras liberar espacio, Reintentar guarda y vuelve a ok / after freeing space, Retry saves and goes back to ok", async () => {
-    await primerArranque(null);
-    const espia = llenarAlmacenamiento();
-    useFinanzas().addPlan({ nombre: "Bici", objetivo: 300, aportado: 0 });
-    const sesion = useSesion();
-    expect(sesion.estadoGuardado).toBe("pendiente");
-    expect(await sesion.vaciarGuardado()).toBe(false);
-    expect(sesion.estadoGuardado).toBe("error");
-
-    espia.mockRestore();
-    expect(await sesion.vaciarGuardado()).toBe(true);
-    expect(sesion.estadoGuardado).toBe("ok");
-    const r = await almacen.leer();
-    expect(r.estado === "ok" && r.datos.planes.some((p) => p.nombre === "Bici")).toBe(true);
-  });
-
-  it("el debounce agrupa cambios seguidos en una escritura / the debounce groups quick changes into one write", async () => {
-    await primerArranque(null);
-    const espia = vi.spyOn(localStorage, "setItem");
+describe("reemplazar y operaciones (revisión Tanda 1) / replace and operations (Tanda 1 review)", () => {
+  it("si guardar el reemplazo falla, la pantalla y lo pendiente siguen igual / failed replace keeps screen and pending", async () => {
+    const s = await app();
     const f = useFinanzas();
-    f.addPlan({ nombre: "A", objetivo: 1, aportado: 0 });
-    f.addPlan({ nombre: "B", objetivo: 1, aportado: 0 });
-    f.addPlan({ nombre: "C", objetivo: 1, aportado: 0 });
-    await new Promise((r) => setTimeout(r, 600));
-    const escrituras = espia.mock.calls.filter(([k]) => k === CLAVE_DATOS).length;
-    espia.mockRestore();
-    expect(escrituras).toBe(1);
-    expect(useSesion().estadoGuardado).toBe("ok");
+    f.addPlan({ nombre: "Pendiente", objetivo: 50, aportado: 0 });
+    simulador.estado.fallarGuardado = true;
+    await expect(s.reemplazarDatos("vacio")).rejects.toThrow();
+    // ES: Lo de antes sigue en pantalla, con el cambio pendiente incluido.
+    // EN: The previous data is still on screen, with the pending change.
+    expect(f.planes.some((p) => p.nombre === "Pendiente")).toBe(true);
+    expect(f.recurrentes.length).toBeGreaterThan(0);
+    simulador.estado.fallarGuardado = false;
+    expect(await s.vaciarGuardado()).toBe(true);
+    expect(enDisco().planes.some((p) => p.nombre === "Pendiente")).toBe(true);
   });
 
-  it("si falla el guardado al poner PIN, no cambia nada / if saving fails when setting a PIN, nothing changes", async () => {
-    await primerArranque(null);
-    const sesion = useSesion();
-    const espia = llenarAlmacenamiento();
-    await expect(sesion.configurarBloqueo("pin", "1234")).rejects.toThrow();
-    espia.mockRestore();
+  it("un reintento que llega durante un reemplazo no escribe datos viejos encima / a retry during a replace does not write old data", async () => {
+    vi.useFakeTimers();
+    const s = await app();
+    useFinanzas().addPlan({ nombre: "Viejo", objetivo: 50, aportado: 0 });
+    simulador.estado.fallarGuardado = true;
+    await vi.advanceTimersByTimeAsync(400);
+    expect(s.estadoGuardado).toBe("error");
+    simulador.estado.fallarGuardado = false;
+    await s.reemplazarDatos("vacio");
+    // ES: Pasa el tiempo del reintento: no hay nada que guardar y no pisa el reemplazo.
+    // EN: The retry time passes: nothing to save and the replacement is not overwritten.
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(enDisco().planes).toEqual([]);
+    expect(enDisco().recurrentes).toEqual([]);
+    expect(s.estadoGuardado).toBe("ok");
+  });
 
-    // ES: Ajustes sin bloqueo y el disco sigue con la ofuscación.
-    // EN: Settings without lock and the disk still uses obfuscation.
+  it("un cambio durante el cambio de PIN se guarda después, con el PIN nuevo / a change during the PIN change is saved after", async () => {
+    const s = await app();
+    const op = s.configurarBloqueo("pin", "4831");
+    useFinanzas().addPlan({ nombre: "Durante", objetivo: 10, aportado: 0 });
+    await op;
+    expect(await s.vaciarGuardado()).toBe(true);
+    expect(simulador.estado.principal!.bloqueo).toBe("pin");
+    expect(enDisco().planes.some((p) => p.nombre === "Durante")).toBe(true);
+  });
+
+  it("si falla al poner PIN, no cambia nada / if setting a PIN fails, nothing changes", async () => {
+    const s = await app();
+    simulador.estado.fallarGuardado = true;
+    await expect(s.configurarBloqueo("pin", "4831")).rejects.toThrow();
     expect(useAjustes().bloqueoActivo).toBe(false);
-    expect(await almacen.secretoValido("1234")).toBe(false);
-    // ES: Los guardados siguientes usan también la ofuscación.
-    // EN: Later saves also use obfuscation.
-    useFinanzas().addPlan({ nombre: "Tras fallo", objetivo: 1, aportado: 0 });
-    expect(await sesion.vaciarGuardado()).toBe(true);
-    almacen.usarOfuscacion();
-    expect((await almacen.leer()).estado).toBe("ok");
+    expect(simulador.estado.principal!.bloqueo).toBe("ninguno");
+    expect(s.claveRecuperacion).toBeNull();
+  });
+});
+
+describe("bloquear ahora y autobloqueo / lock now and auto-lock", () => {
+  it("bloquear con cambios pendientes y desbloquear deja los datos intactos / lock with pending changes keeps data", async () => {
+    const s = await app("4831");
+    const f = useFinanzas();
+    f.addPlan({ nombre: "Antes de bloquear", objetivo: 70, aportado: 0 });
+    const esperado = JSON.parse(JSON.stringify(f.snapshot()));
+    expect(await s.bloquearAhora()).toBe(true);
+    expect(s.desbloqueado).toBe(false);
+    expect(simulador.estado.abierta).toBeNull();
+    expect(f.planes).toEqual([]);
+    await asentar();
+    // ES: El vaciado de memoria no se guardó encima. / EN: The memory wipe was not saved on top.
+    expect(enDisco()).toEqual(esperado);
+    expect(await s.desbloquear("4831")).toBe(true);
+    expect(f.snapshot()).toEqual(esperado);
   });
 
-  it("un cambio durante el cambio de PIN se guarda con el PIN nuevo / a change during the PIN change is saved with the new PIN", async () => {
-    await primerArranque(null);
-    const sesion = useSesion();
-    const promesa = sesion.configurarBloqueo("pin", "4321");
-    useFinanzas().addPlan({ nombre: "Durante", objetivo: 1, aportado: 0 });
-    await promesa;
-    expect(await sesion.vaciarGuardado()).toBe(true);
-    const r = await almacen.leer("4321");
-    expect(r.estado === "ok" && r.datos.planes.some((p) => p.nombre === "Durante")).toBe(true);
+  it("si no se puede guardar, no se bloquea (no se pierden cambios) / if it cannot save, it does not lock", async () => {
+    const s = await app("4831");
+    useFinanzas().addPlan({ nombre: "Sin guardar", objetivo: 70, aportado: 0 });
+    simulador.estado.fallarGuardado = true;
+    expect(await s.bloquearAhora()).toBe(false);
+    expect(s.desbloqueado).toBe(true);
+    expect(useFinanzas().planes.some((p) => p.nombre === "Sin guardar")).toBe(true);
+  });
+
+  it("sin PIN no hay nada que bloquear / without a PIN there is nothing to lock", async () => {
+    const s = await app();
+    expect(await s.bloquearAhora()).toBe(false);
+    expect(s.desbloqueado).toBe(true);
+  });
+
+  it("el autobloqueo actúa a los minutos configurados / auto-lock acts after the configured minutes", async () => {
+    vi.useFakeTimers();
+    const s = await app("4831");
+    useAjustes().setMinutosAutobloqueo(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(s.desbloqueado).toBe(true);
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect(s.desbloqueado).toBe(false);
+    expect(simulador.estado.abierta).toBeNull();
+    expect(await s.desbloquear("4831")).toBe(true);
+    expect(useFinanzas().recurrentes.length).toBeGreaterThan(0);
   });
 });

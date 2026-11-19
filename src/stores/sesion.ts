@@ -1,102 +1,136 @@
 /* =============================================================================
  * sesion.ts — Orquestación de sesión / Session orchestration (boot/lock/onboarding)
  * -----------------------------------------------------------------------------
- * ES: Store de Pinia que orquesta el arranque, la bienvenida (onboarding), el
- *     bloqueo de pantalla y el guardado cifrado. NO contiene datos financieros:
- *     decide QUÉ pantalla mostrar y conecta la persistencia con `finanzas`.
- * EN: Pinia store that orchestrates app boot, onboarding (welcome), screen
- *     lock and the encrypted autosave. It does NOT hold financial data itself:
- *     it decides WHICH screen to show and wires persistence around `finanzas`.
- *
- * ES: Estados de pantalla posibles según este store + ajustes:
- *       - necesitaOnboarding: no hay datos guardados (mostrar bienvenida)
+ * ES: Store de Pinia que orquesta el arranque, la bienvenida, el bloqueo y el
+ *     guardado. NO contiene datos financieros: decide QUÉ pantalla mostrar y
+ *     conecta la persistencia con `finanzas`. Desde la 1.2.0 hay dos modos:
+ *       - "fichero": el almacén cifrado en disco que gestiona Rust
+ *         (utils/boveda.ts). Es el modo normal. El tipo de bloqueo sale de la
+ *         cabecera del fichero, no de localStorage.
+ *       - "legado": los datos siguen en localStorage (1.1.0) porque aún no se
+ *         han migrado (falta el PIN) o porque la migración no se pudo
+ *         verificar. En cuanto se leen bien, se migran en tres fases; el
+ *         localStorage nunca se borra.
+ *     Estados de pantalla (con ajustes):
+ *       - necesitaOnboarding: no hay datos (bienvenida)
  *       - fallo: los datos no se pueden leer (pantalla de error y rescate)
  *       - bloqueado (bloqueoActivo && !desbloqueado): pedir credencial
  *       - desbloqueado: app en marcha
- * EN: Possible screen states derived from this store + ajustes:
- *       - necesitaOnboarding: there is no saved data (show the welcome screen)
- *       - fallo: the data cannot be read (error screen and rescue)
- *       - locked (bloqueoActivo && !desbloqueado): ask for the credential
- *       - unlocked (desbloqueado): app is running
+ * EN: Pinia store that orchestrates boot, onboarding, lock and saving. It does
+ *     NOT hold financial data: it decides WHICH screen to show and wires
+ *     persistence around `finanzas`. Since 1.2.0 there are two modes:
+ *       - "fichero": the encrypted on-disk store managed by Rust
+ *         (utils/boveda.ts). The normal mode. The lock type comes from the
+ *         file header, not from localStorage.
+ *       - "legado": the data is still in localStorage (1.1.0) because it has
+ *         not been migrated yet (the PIN is missing) or because the migration
+ *         could not be verified. As soon as it is read correctly, it is
+ *         migrated in three phases; localStorage is never deleted.
+ *     Screen states (with ajustes): see the list above.
  *
  * ÍNDICE / INDEX:
- *   1. Importaciones / Imports
- *   2. Definición del store y estado reactivo / Store definition & reactive state
+ *   1. Importaciones y tipos / Imports & types
+ *   2. Estado reactivo / Reactive state
  *   3. Guardado automático que avisa / Autosave that warns
- *   4. Entrada, fallos y rescate / Entry, failures & rescue
- *   5. Decisión de arranque / Boot decision
- *   6. Desbloqueo / Unlock
- *   7. Gestión del bloqueo / Lock management
- *   8. Cierre de la bienvenida / Onboarding completion
- *   9. Importación de datos / Data import
- *  10. API pública / Public API
+ *   4. Entrada, bloqueo y fallos / Entry, lock & failures
+ *   5. Migración desde localStorage / Migration from localStorage
+ *   6. Decisión de arranque / Boot decision
+ *   7. Desbloqueo y recuperación / Unlock & recovery
+ *   8. Gestión del bloqueo / Lock management
+ *   9. Bienvenida, importación y reemplazo / Onboarding, import & replace
+ *  10. Copias / Backups
+ *  11. API pública / Public API
  * ===========================================================================*/
 
-// ── 1. Importaciones / Imports ───────────────────────────────────────────────
-// ES: Fábrica de stores de Pinia, reactividad de Vue, stores hermanos, capa de
-//     almacenamiento, datos iniciales (ejemplo o vacío) y la preparación de
-//     datos (migrar + validar) para las copias importadas.
-// EN: Pinia store factory, Vue reactivity, sibling stores, storage layer,
-//     initial data (samples or empty) and data preparation (migrate +
-//     validate) for imported backups.
+// ── 1. Importaciones y tipos / Imports & types ───────────────────────────────
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { useFinanzas } from "./finanzas";
 import { useAjustes, type TipoBloqueo } from "./ajustes";
 import * as almacen from "../utils/almacen";
+import * as boveda from "../utils/boveda";
+import { ErrorBoveda, type EstadoAlmacen } from "../utils/boveda";
 import { datosDemo, datosVacios } from "../data/demo";
+import { categoriasCustom } from "../data/categorias";
 import type { DatosBolsillo } from "../types";
 import { prepararDatos, ErrorDatos } from "../utils/migraciones";
+import { validarCredencial } from "../utils/credencial";
+import { crearAutobloqueo } from "../utils/autobloqueo";
 
-// ES: Motivos por los que los datos guardados no se pueden abrir (ver almacen.leer).
-// EN: Reasons why the stored data cannot be opened (see almacen.leer).
-export type FalloDatos = "danado" | "credencial" | "invalido" | "version";
+// ES: Motivos por los que los datos guardados no se pueden abrir. "falta":
+//     hubo un almacén (marca, copias o rescate) pero no está el fichero;
+//     "entorno": no hay backend de Tauri (no debería pasar en la app).
+// EN: Reasons why the stored data cannot be opened. "falta": there was a
+//     store (marker, backups or rescue) but the file is missing; "entorno":
+//     there is no Tauri backend (it should not happen in the app).
+export type FalloDatos = "danado" | "credencial" | "invalido" | "version" | "falta" | "entorno";
 
-// ES: Estado del guardado: "ok" (todo en disco), "pendiente" (cambios a la espera
-//     del debounce), "guardando" o "error" (el último intento falló).
-// EN: Save state: "ok" (all on disk), "pendiente" (changes waiting for the
-//     debounce), "guardando" (saving) or "error" (the last attempt failed).
+// ES: Estado del guardado. / EN: Save state.
 export type EstadoGuardado = "ok" | "pendiente" | "guardando" | "error";
 
-// ── 2. Definición del store y estado reactivo / Store definition & reactive state ─
-// ES: `desbloqueado` habilita la UI principal; `necesitaOnboarding` dispara el
-//     flujo de bienvenida; `error` lleva una clave i18n para la pantalla de
-//     bloqueo. `guardadoActivo` es un guard no reactivo para conectar el
-//     guardado automático una sola vez.
-// EN: `desbloqueado` gates the main UI; `necesitaOnboarding` triggers the
-//     welcome flow; `error` carries an i18n key for the lock screen.
-//     `guardadoActivo` is a non-reactive guard so autosave is wired only once.
+// ES: Dónde viven los datos ahora mismo. / EN: Where the data lives right now.
+export type ModoAlmacen = "fichero" | "legado";
+
+// ES: Tipo de bloqueo de una credencial de la 1.1.0 (si los ajustes no lo dicen).
+// EN: Lock type of a 1.1.0 credential (when the settings do not say).
+const tipoDe = (c: string): TipoBloqueo => (/^\d{4,6}$/.test(c) ? "pin" : "password");
+
+// ES: Código de un error (ErrorBoveda, ErrorDatos o Error). / EN: Code of an error.
+function codigo(e: unknown): string {
+  if (e instanceof ErrorBoveda) return e.codigo;
+  if (e instanceof ErrorDatos) return e.motivo;
+  return e instanceof Error ? e.message : "interno";
+}
+
 export const useSesion = defineStore("sesion", () => {
+  // ── 2. Estado reactivo / Reactive state ────────────────────────────────────
   const desbloqueado = ref(false);
   const necesitaOnboarding = ref(false);
+  // ES: clave i18n del último error de credencial / EN: i18n key of the last credential error
   const error = ref("");
-  // ES: Motivo del fallo de lectura (null = sin fallo), clave de la copia de
-  //     rescate creada y si no se pudo crear (falta de espacio).
-  // EN: Read failure reason (null = no failure), key of the rescue copy made
-  //     and whether it could not be made (out of space).
   const fallo = ref<FalloDatos | null>(null);
   const rescate = ref<string | null>(null);
   const rescateFallido = ref(false);
+  const modo = ref<ModoAlmacen>("fichero");
+  // ES: Clave de recuperación recién creada, pendiente de enseñar UNA vez.
+  //     Se queda aquí hasta que la interfaz llame a olvidarClaveRecuperacion().
+  // EN: Recovery key just created, waiting to be shown ONCE. It stays here
+  //     until the UI calls olvidarClaveRecuperacion().
+  const claveRecuperacion = ref<string | null>(null);
+  const tieneRecuperacion = ref(false);
+  // ES: Abierta con la clave de recuperación: hay que poner PIN nuevo.
+  // EN: Opened with the recovery key: a new PIN must be set.
+  const porRecuperacion = ref(false);
+  // ES: Hay datos en localStorage distintos de los migrados (p. ej. se volvió
+  //     a usar la 1.1.0): no se importan solos, se avisa.
+  // EN: There is localStorage data different from the migrated one (e.g. 1.1.0
+  //     was used again): it is not imported automatically, a warning is shown.
+  const avisoLegadoNuevo = ref(false);
+  // ES: Código de error si la migración no se pudo verificar (sigue en legado).
+  // EN: Error code if the migration could not be verified (stays in legado).
+  const avisoMigracion = ref<string | null>(null);
   let guardadoActivo = false;
+  // ES: Al crear el almacén desde la pantalla de error, el fichero anterior se
+  //     aparta a rescate/ (nunca se pisa).
+  // EN: When creating the store from the error screen, the previous file is
+  //     moved to rescate/ (never overwritten).
+  let reemplazarAlCrear = false;
 
   // ── 3. Guardado automático que avisa / Autosave that warns ──────────────────
-  // ES: Cada cambio en finanzas suma 1 a `cambios`; un guardado que termina bien
-  //     sube `guardados` hasta el número de cambios que incluía. Si no coinciden
-  //     hay cambios sin guardar. Los guardados se agrupan con un debounce de
-  //     300 ms; si uno falla (p. ej. almacenamiento lleno) el estado pasa a
-  //     "error", se muestra un aviso persistente y se reintenta con espera
-  //     creciente (2 s, 4 s, 8 s… hasta 60 s), además del botón "Reintentar".
-  //     `operando` pausa el guardado automático mientras se cambia la
-  //     credencial o se importa, para que ningún guardado con el secreto viejo
-  //     llegue después del nuevo.
-  // EN: Every change in finanzas adds 1 to `cambios`; a save that succeeds
-  //     raises `guardados` up to the number of changes it included. If they
-  //     differ there are unsaved changes. Saves are grouped with a 300 ms
-  //     debounce; if one fails (e.g. storage full) the state becomes "error", a
-  //     persistent warning is shown and it is retried with growing waits (2 s,
-  //     4 s, 8 s… up to 60 s), besides the "Retry" button. `operando` pauses
-  //     autosave while the credential changes or an import runs, so no save
-  //     with the old secret can land after the new one.
+  // ES: Cada cambio en finanzas suma 1 a `cambios`; un guardado correcto sube
+  //     `guardados` hasta los cambios que incluía. Debounce de 300 ms; si falla,
+  //     estado "error", aviso y reintento creciente (2 s … 60 s). `operando`
+  //     pausa el guardado mientras corre una operación (credencial, importar,
+  //     reemplazar): ni el debounce ni un reintento escriben durante ella.
+  //     `bloqueando` hace que el vaciado de memoria al bloquear no cuente como
+  //     cambio (si contara, se guardaría un conjunto vacío encima).
+  // EN: Every change in finanzas adds 1 to `cambios`; a good save raises
+  //     `guardados` up to the changes it included. 300 ms debounce; on failure,
+  //     "error" state, warning and growing retry (2 s … 60 s). `operando`
+  //     pauses saving while an operation runs (credential, import, replace):
+  //     neither the debounce nor a retry writes during it. `bloqueando` keeps
+  //     the memory wipe on lock from counting as a change (if it did, an empty
+  //     set would be saved on top).
   const RETARDO_GUARDADO_MS = 300;
   const REINTENTO_MAX_MS = 60_000;
   const estadoGuardado = ref<EstadoGuardado>("ok");
@@ -104,10 +138,10 @@ export const useSesion = defineStore("sesion", () => {
   let guardados = 0;
   let intentos = 0;
   let operando = false;
+  let bloqueando = false;
   let temporizador: ReturnType<typeof setTimeout> | undefined;
   let reintento: ReturnType<typeof setTimeout> | undefined;
 
-  // ES: Cancela el debounce y el reintento pendientes. / EN: Cancels the pending debounce and retry.
   function cancelarTemporizadores() {
     clearTimeout(temporizador);
     clearTimeout(reintento);
@@ -115,47 +149,51 @@ export const useSesion = defineStore("sesion", () => {
     reintento = undefined;
   }
 
-  // ES: Programa un guardado dentro de 300 ms (salvo con el guardado en pausa).
-  // EN: Schedules a save in 300 ms (unless saving is paused).
   function programarGuardado() {
-    if (operando) return;
+    if (operando || bloqueando) return;
     clearTimeout(temporizador);
     temporizador = setTimeout(() => void guardarAhora(), RETARDO_GUARDADO_MS);
   }
 
-  // ES: Anota un guardado correcto que incluía hasta el cambio `hasta`.
-  // EN: Records a successful save that included up to change `hasta`.
   function marcarGuardado(hasta: number) {
     if (hasta > guardados) guardados = hasta;
     intentos = 0;
     estadoGuardado.value = cambios === guardados ? "ok" : "pendiente";
   }
 
-  // ES: Anota un guardado fallido: estado de error y reintento con espera creciente.
-  // EN: Records a failed save: error state and retry with a growing wait.
   function marcarFallo() {
     estadoGuardado.value = "error";
     intentos++;
-    if (operando) return;
+    if (operando || bloqueando) return;
     clearTimeout(reintento);
     const espera = Math.min(1000 * 2 ** intentos, REINTENTO_MAX_MS);
     reintento = setTimeout(() => void guardarAhora(), espera);
   }
 
-  // ES: Guarda YA lo que haya pendiente con el secreto activo. Devuelve true si
-  //     todo quedó en disco (o no había nada que guardar) y false si falló.
-  // EN: Saves whatever is pending NOW with the active secret. Returns true if
-  //     everything reached disk (or there was nothing to save), false if it failed.
+  // ES: Escribe unos datos en el almacén del modo actual.
+  // EN: Writes some data to the current mode's store.
+  function persistir(datos: DatosBolsillo): Promise<void> {
+    return modo.value === "fichero" ? boveda.guardar(datos) : almacen.guardar(datos);
+  }
+
+  // ES: Guarda YA lo pendiente. true si todo quedó en disco (o no había nada).
+  //     Durante una operación o un bloqueo no escribe (lo retoma la operación
+  //     al terminar): así un reintento nunca adelanta datos viejos a un reemplazo.
+  // EN: Saves what is pending NOW. true if everything reached disk (or there
+  //     was nothing). During an operation or a lock it does not write (the
+  //     operation resumes it when done): a retry never overtakes a replacement
+  //     with old data.
   async function guardarAhora(): Promise<boolean> {
     cancelarTemporizadores();
     if (cambios === guardados) {
       if (estadoGuardado.value !== "guardando") estadoGuardado.value = "ok";
       return true;
     }
+    if (operando || bloqueando) return false;
     const hasta = cambios;
     estadoGuardado.value = "guardando";
     try {
-      await almacen.guardar(useFinanzas().snapshot());
+      await persistir(useFinanzas().snapshot());
       marcarGuardado(hasta);
       return true;
     } catch {
@@ -164,18 +202,14 @@ export const useSesion = defineStore("sesion", () => {
     }
   }
 
-  // ES: Vacía el guardado pendiente (al cerrar, antes de cambiar la credencial,
-  //     al importar o desde el botón "Reintentar"). Es la API pública.
-  // EN: Flushes the pending save (on close, before changing the credential, on
-  //     import or from the "Retry" button). This is the public API.
-  //     Si hay una operación en curso, la espera primero; y repite (hasta 3
-  //     veces) si entran cambios nuevos mientras se cifra, para no dar por
-  //     guardado lo que aún no lo está.
-  // EN: If an operation is running, it waits for it first; and it repeats (up
-  //     to 3 times) if new changes arrive while encrypting, so nothing is
-  //     treated as saved before it is.
+  // ES: Vacía lo pendiente (al cerrar, antes de bloquear, desde "Reintentar").
+  //     Espera antes a la operación en curso y repite hasta 3 veces si entran
+  //     cambios mientras se guarda.
+  // EN: Flushes what is pending (on close, before locking, from "Retry"). It
+  //     first waits for the running operation and repeats up to 3 times if
+  //     changes arrive while saving.
   async function vaciarGuardado(): Promise<boolean> {
-    if (operando) await colaOperaciones;
+    await colaOperaciones;
     for (let i = 0; i < 3; i++) {
       if (!(await guardarAhora())) return false;
       if (cambios === guardados) return true;
@@ -183,16 +217,10 @@ export const useSesion = defineStore("sesion", () => {
     return cambios === guardados;
   }
 
-  // ES: Ejecuta una operación con el guardado automático en pausa (cambio de
-  //     credencial, importación). Al terminar, si quedó algo pendiente, se
-  //     programa con el secreto que haya quedado activo.
-  // EN: Runs an operation with autosave paused (credential change, import).
-  //     When done, if something is still pending, it is scheduled with the
-  //     secret left active.
-  //     Las operaciones se ejecutan de una en una (cola): dos cambios de
-  //     credencial o una importación solapados nunca se pisan.
-  // EN: Operations run one at a time (queue): two overlapping credential
-  //     changes or an import never step on each other.
+  // ES: Ejecuta una operación con el guardado en pausa y de una en una (cola).
+  //     Al terminar, si quedó algo pendiente, se programa.
+  // EN: Runs an operation with saving paused and one at a time (queue). When
+  //     done, if something is still pending, it is scheduled.
   let colaOperaciones: Promise<unknown> = Promise.resolve();
   function conGuardadoEnPausa<T>(op: () => Promise<T>): Promise<T> {
     const turno = colaOperaciones.then(async () => {
@@ -202,7 +230,7 @@ export const useSesion = defineStore("sesion", () => {
         return await op();
       } finally {
         operando = false;
-        if (cambios !== guardados) {
+        if (cambios !== guardados && !bloqueando) {
           if (estadoGuardado.value === "error") marcarFallo();
           else programarGuardado();
         }
@@ -212,12 +240,10 @@ export const useSesion = defineStore("sesion", () => {
     return turno;
   }
 
-  // ES: Activa el guardado automático CIFRADO una sola vez. El watcher es
-  //     síncrono (flush "sync") para contar cada cambio en el momento: así un
-  //     vaciado inmediato nunca cree que no hay nada pendiente.
-  // EN: Enables ENCRYPTED autosave exactly once. The watcher is synchronous
-  //     (flush "sync") so every change is counted at once: an immediate flush
-  //     never thinks there is nothing pending.
+  // ES: Conecta el guardado automático una sola vez (watcher síncrono para
+  //     contar cada cambio en el momento).
+  // EN: Wires autosave exactly once (synchronous watcher so every change is
+  //     counted at once).
   function activarGuardado() {
     if (guardadoActivo) return;
     guardadoActivo = true;
@@ -225,6 +251,7 @@ export const useSesion = defineStore("sesion", () => {
     watch(
       () => f.snapshot(),
       () => {
+        if (bloqueando) return;
         cambios++;
         if (estadoGuardado.value !== "error") estadoGuardado.value = "pendiente";
         programarGuardado();
@@ -233,19 +260,36 @@ export const useSesion = defineStore("sesion", () => {
     );
   }
 
-  // ── 4. Entrada, fallos y rescate / Entry, failures & rescue ─────────────────
-  // ES: Entra en la app con unos datos ya leídos y validados: hidrata, conecta
-  //     el guardado, limpia cualquier fallo y marca la app como configurada
-  //     (si hay datos, no tiene sentido volver a mostrar la bienvenida).
-  // EN: Enters the app with already read and validated data: hydrates, wires
-  //     autosave, clears any failure and marks the app as configured (if there
-  //     is data, showing the welcome again makes no sense).
+  // ── 4. Entrada, bloqueo y fallos / Entry, lock & failures ──────────────────
+  // ES: Autobloqueo por inactividad (minutos en ajustes; solo con bloqueo).
+  // EN: Inactivity auto-lock (minutes in settings; only with a lock).
+  const autobloqueo = crearAutobloqueo({
+    minutos: () => useAjustes().minutosAutobloqueo,
+    alExpirar: () => void bloquearAhora(),
+  });
+
+  // ES: Ajustes ← cabecera del fichero (la cabecera manda).
+  // EN: Settings ← file header (the header rules).
+  function sincronizarAjustes(bloqueo: boveda.Bloqueo | null) {
+    const ajustes = useAjustes();
+    const activo = bloqueo === "pin" || bloqueo === "password";
+    const tipo = activo ? (bloqueo as TipoBloqueo) : null;
+    if (ajustes.bloqueoActivo !== activo || ajustes.bloqueoTipo !== tipo) {
+      ajustes.setBloqueo(activo, tipo);
+    }
+  }
+
+  // ES: Entra con datos ya leídos y validados: hidrata sin contarlo como cambio,
+  //     limpia fallos, marca la app como configurada y arranca el autobloqueo.
+  // EN: Enters with already read and validated data: hydrates without counting
+  //     it as a change, clears failures, marks the app as configured and
+  //     starts the auto-lock.
   function entrar(datos: DatosBolsillo) {
     const ajustes = useAjustes();
-    useFinanzas().hidratar(datos);
     activarGuardado();
-    // ES: Lo hidratado coincide con el disco: nada pendiente.
-    // EN: What was hydrated matches the disk: nothing pending.
+    bloqueando = true;
+    useFinanzas().hidratar(datos);
+    bloqueando = false;
     cancelarTemporizadores();
     guardados = cambios;
     intentos = 0;
@@ -254,15 +298,59 @@ export const useSesion = defineStore("sesion", () => {
     error.value = "";
     if (!ajustes.configurado) ajustes.marcarConfigurado();
     desbloqueado.value = true;
+    if (modo.value === "fichero" && ajustes.bloqueoActivo) autobloqueo.iniciar();
+    else autobloqueo.parar();
   }
 
-  // ES: Garantiza que existe una copia de rescate del blob actual (una sola por
-  //     contenido). Devuelve false si no cabe: entonces NO se debe seguir con
-  //     nada que sobrescriba los datos sin que el usuario lo fuerce.
-  // EN: Ensures a rescue copy of the current blob exists (one per content).
-  //     Returns false if it does not fit: then nothing that overwrites the data
-  //     must go ahead unless the user forces it.
+  // ES: "Bloquear ahora" (y autobloqueo). Orden: vaciar lo pendiente; si no se
+  //     puede guardar NO se bloquea (se perderían cambios); olvidar la clave en
+  //     Rust; vaciar la memoria sin contarlo como cambio; y por último mostrar
+  //     el bloqueo. Solo con PIN o contraseña y en modo fichero.
+  // EN: "Lock now" (and auto-lock). Order: flush what is pending; if it cannot
+  //     be saved it does NOT lock (changes would be lost); forget the key in
+  //     Rust; wipe memory without counting it as a change; and finally show
+  //     the lock. Only with a PIN or password and in file mode.
+  async function bloquearAhora(): Promise<boolean> {
+    if (modo.value !== "fichero" || !useAjustes().bloqueoActivo || !desbloqueado.value) {
+      return false;
+    }
+    if (!(await vaciarGuardado())) return false;
+    return conGuardadoEnPausa(async () => {
+      // ES: Lo que entrara entre el vaciado y este turno se guarda aquí; si
+      //     no se puede, no se bloquea.
+      // EN: Whatever came in between the flush and this turn is saved here;
+      //     if it cannot be, it does not lock.
+      if (cambios !== guardados) {
+        const hasta = cambios;
+        try {
+          await persistir(useFinanzas().snapshot());
+        } catch {
+          estadoGuardado.value = "error";
+          return false;
+        }
+        marcarGuardado(hasta);
+      }
+      bloqueando = true;
+      cancelarTemporizadores();
+      autobloqueo.parar();
+      await boveda.bloquear();
+      useFinanzas().hidratar(datosVacios());
+      guardados = cambios;
+      estadoGuardado.value = "ok";
+      porRecuperacion.value = false;
+      desbloqueado.value = false;
+      return true;
+    });
+  }
+
+  // ES: Garantiza la copia de rescate antes de algo destructivo. En modo
+  //     fichero siempre es true: Rust aparta el fichero anterior a rescate/
+  //     al crear uno nuevo y nunca lo pisa. En legado, copia en localStorage.
+  // EN: Ensures the rescue copy before anything destructive. In file mode it
+  //     is always true: Rust moves the previous file to rescate/ when creating
+  //     a new one and never overwrites it. In legado, a localStorage copy.
   function asegurarRescate(): boolean {
+    if (modo.value === "fichero") return true;
     if (rescate.value) return true;
     try {
       rescate.value = almacen.crearRescate();
@@ -274,50 +362,135 @@ export const useSesion = defineStore("sesion", () => {
     }
   }
 
-  // ES: Pasa a la pantalla de error de datos. NUNCA siembra ejemplo ni escribe
-  //     el blob principal. Con daño o datos no válidos se hace ya la copia de
-  //     rescate; con "credencial" no (los datos pueden estar bien y solo faltar
-  //     el PIN): la copia se hará antes de cualquier opción destructiva.
-  // EN: Switches to the data error screen. It NEVER seeds samples nor writes
-  //     the main blob. On damage or invalid data the rescue copy is made right
-  //     away; on "credencial" it is not (the data may be fine and only the PIN
-  //     be missing): the copy is made before any destructive option.
-  function entrarEnFallo(tipo: FalloDatos) {
+  // ES: Pasa a la pantalla de error. Nunca siembra ejemplo ni escribe datos.
+  //     Con daño o datos no válidos se hace ya una copia de rescate (en
+  //     fichero, una copia en rescate/ hecha por Rust); con "credencial" no.
+  // EN: Switches to the error screen. It never seeds samples nor writes data.
+  //     On damage or invalid data a rescue copy is made right away (in file
+  //     mode, a copy in rescate/ made by Rust); not on "credencial".
+  async function entrarEnFallo(tipo: FalloDatos) {
     fallo.value = tipo;
     desbloqueado.value = false;
-    if (tipo !== "credencial") asegurarRescate();
+    autobloqueo.parar();
+    if (tipo === "credencial" || tipo === "falta" || tipo === "entorno") return;
+    if (modo.value === "legado") {
+      asegurarRescate();
+      return;
+    }
+    try {
+      rescate.value = await boveda.rescatar();
+      rescateFallido.value = false;
+    } catch {
+      rescateFallido.value = true;
+    }
   }
 
-  // ── 5. Decisión de arranque / Boot decision ────────────────────────────────
-  // ES: Punto de entrada al iniciar la app:
-  //       1. Sin blob → bienvenida (nada se guarda hasta que el usuario elige).
-  //       2. Sobre dañado → pantalla de error (antes de pedir PIN, para no
-  //          responder "credencial incorrecta" a unos datos rotos).
-  //       3. Bloqueo activo → pantalla de bloqueo.
-  //       4. Sin bloqueo → se lee con el secreto de ofuscación; si no abre o no
-  //          valida → pantalla de error, nunca datos de ejemplo encima.
-  //     La bienvenida depende de que NO haya blob, no de `ajustes.configurado`:
-  //     si se pierden los ajustes, los datos no se pisan.
-  // EN: Entry point at app start:
-  //       1. No blob → welcome (nothing is saved until the user chooses).
-  //       2. Damaged envelope → error screen (before asking for a PIN, so a
-  //          broken blob does not answer "wrong credential").
-  //       3. Lock enabled → lock screen.
-  //       4. No lock → read with the obfuscation secret; if it does not open or
-  //          validate → error screen, never sample data on top.
-  //     The welcome depends on there being NO blob, not on `ajustes.configurado`:
-  //     if the settings are lost, the data is not overwritten.
+  // ── 5. Migración desde localStorage / Migration from localStorage ───────────
+  // ES: Migra unos datos leídos de localStorage al fichero (tres fases en
+  //     boveda.migrar) y entra. Si la migración falla, se sigue en legado con
+  //     aviso: los datos están bien en localStorage y no se pierde nada.
+  // EN: Migrates data read from localStorage to the file (three phases in
+  //     boveda.migrar) and enters. If the migration fails, it goes on in
+  //     legado with a warning: the data is fine in localStorage and nothing is
+  //     lost.
+  async function migrarYEntrar(datos: DatosBolsillo, credencial: string | null) {
+    const ajustes = useAjustes();
+    const tipo = credencial ? (ajustes.bloqueoTipo ?? tipoDe(credencial)) : null;
+    try {
+      const blob = almacen.blobCrudo() ?? "";
+      const clave = await boveda.migrar(
+        datos,
+        tipo ?? "ninguno",
+        credencial,
+        await boveda.huella(blob)
+      );
+      modo.value = "fichero";
+      avisoMigracion.value = null;
+      claveRecuperacion.value = clave;
+      tieneRecuperacion.value = !!clave;
+      sincronizarAjustes(tipo ?? "ninguno");
+    } catch (e) {
+      modo.value = "legado";
+      avisoMigracion.value = codigo(e);
+    }
+    entrar(datos);
+  }
+
+  // ES: ¿Hay en localStorage datos distintos de los que se migraron?
+  // EN: Is there localStorage data different from what was migrated?
+  async function comprobarLegado(e: EstadoAlmacen) {
+    const blob = almacen.blobCrudo();
+    if (blob === null) {
+      avisoLegadoNuevo.value = false;
+      return;
+    }
+    avisoLegadoNuevo.value = (await boveda.huella(blob)) !== e.migracion?.huella;
+  }
+
+  // ── 6. Decisión de arranque / Boot decision ────────────────────────────────
+  // ES: Al iniciar:
+  //       1. Hay fichero: si no se lee → error; si se lee, la cabecera fija el
+  //          bloqueo (aunque se hayan perdido los ajustes) y se abre sin PIN
+  //          o se pide la credencial. El localStorage ya no se migra encima.
+  //       2. No hay fichero pero sí marca, copias o rescate → error "falta"
+  //          (nunca bienvenida ni migración: podría pisar algo).
+  //       3. No hay fichero pero sí datos en localStorage → modo legado y
+  //          migración en cuanto se lean.
+  //       4. Nada → bienvenida.
+  // EN: At start:
+  //       1. There is a file: if unreadable → error; if readable, the header
+  //          sets the lock (even if the settings were lost) and it opens
+  //          without a PIN or asks for the credential. localStorage is no
+  //          longer migrated on top.
+  //       2. No file but a marker, backups or rescue → "falta" error (never
+  //          welcome nor migration: it could overwrite something).
+  //       3. No file but localStorage data → legado mode and migration as
+  //          soon as it is read.
+  //       4. Nothing → welcome.
   async function arrancar() {
     const ajustes = useAjustes();
     ajustes.aplicarTema();
-
-    if (!almacen.hayDatos()) {
-      almacen.usarOfuscacion();
-      necesitaOnboarding.value = true;
+    let e: EstadoAlmacen;
+    try {
+      e = await boveda.estado();
+    } catch {
+      await entrarEnFallo("entorno");
       return;
     }
+    tieneRecuperacion.value = e.tieneRecuperacion;
+    if (e.hayFichero) {
+      modo.value = "fichero";
+      if (!e.legible) {
+        await entrarEnFallo(e.motivo ?? "danado");
+        return;
+      }
+      sincronizarAjustes(e.bloqueo);
+      await comprobarLegado(e);
+      if (e.bloqueo === "ninguno") await abrirFichero();
+      else desbloqueado.value = false;
+      return;
+    }
+    if (e.hayMarca || e.hayCopias || e.hayRescate) {
+      modo.value = "fichero";
+      await entrarEnFallo("falta");
+      return;
+    }
+    if (almacen.hayDatos()) {
+      modo.value = "legado";
+      await arrancarLegado();
+      return;
+    }
+    modo.value = "fichero";
+    almacen.usarOfuscacion();
+    necesitaOnboarding.value = true;
+  }
+
+  // ES: Arranque con datos de la 1.1.0 en localStorage (lógica de la Tanda 1).
+  // EN: Boot with 1.1.0 data in localStorage (Tanda 1 logic).
+  async function arrancarLegado() {
+    const ajustes = useAjustes();
     if (!almacen.sobreLegible()) {
-      entrarEnFallo("danado");
+      await entrarEnFallo("danado");
       return;
     }
     if (ajustes.bloqueoActivo) {
@@ -326,38 +499,62 @@ export const useSesion = defineStore("sesion", () => {
     }
     almacen.usarOfuscacion();
     const r = await almacen.leer();
-    if (r.estado === "ok") entrar(r.datos);
+    if (r.estado === "ok") await migrarYEntrar(r.datos, null);
     else if (r.estado === "vacio") necesitaOnboarding.value = true;
-    else entrarEnFallo(r.estado);
+    else await entrarEnFallo(r.estado);
   }
 
-  // ── 6. Desbloqueo / Unlock ──────────────────────────────────────────────────
-  // ES: Prueba una credencial (pantalla de bloqueo o de error). Si abre y valida,
-  //     la fija como secreto activo y entra; si los ajustes se habían perdido,
-  //     vuelve a marcar el bloqueo (PIN si son 4-6 dígitos, si no contraseña)
-  //     para que la próxima vez se pida. Si no abre → "credIncorrecta" (puede
-  //     ser también un cifrado alterado: no se puede distinguir). Si abre pero
-  //     no valida o es de una versión nueva → pantalla de error con rescate.
-  // EN: Tries a credential (lock or error screen). If it opens and validates,
-  //     it becomes the active secret and the app is entered; if the settings
-  //     were lost, the lock is set again (PIN if 4-6 digits, else password) so
-  //     it is asked next time. If it does not open → "credIncorrecta" (it may
-  //     also be altered ciphertext: they cannot be told apart). If it opens but
-  //     does not validate or is from a newer version → error screen with rescue.
+  // ES: Abre el fichero (con credencial o sin ella) y entra; clasifica fallos.
+  //     true si entró.
+  // EN: Opens the file (with or without a credential) and enters; classifies
+  //     failures. true if it entered.
+  async function abrirFichero(credencial?: string, recuperacion?: string): Promise<boolean> {
+    try {
+      const datos = recuperacion
+        ? await boveda.abrirConRecuperacion(recuperacion)
+        : await boveda.abrir(credencial);
+      porRecuperacion.value = !!recuperacion;
+      entrar(datos);
+      return true;
+    } catch (e) {
+      const c = codigo(e);
+      if (c === "credencial") {
+        error.value = recuperacion ? "recuperacionIncorrecta" : "credIncorrecta";
+      } else if (c === "recuperacion-formato" || c === "recuperacion-comprobacion") {
+        error.value = c === "recuperacion-formato" ? "recuperacionFormato" : "recuperacionErrata";
+      } else if (c === "sin-recuperacion") {
+        error.value = "sinRecuperacion";
+      } else if (c === "danado" || c === "version" || c === "invalido") {
+        // ES: Si descifró pero no valida, la clave quedó en Rust: se olvida.
+        // EN: If it decrypted but does not validate, the key stayed in Rust: forget it.
+        await boveda.bloquear().catch(() => {});
+        await entrarEnFallo(c);
+      } else {
+        error.value = "lecturaFallida";
+      }
+      return false;
+    }
+  }
+
+  // ── 7. Desbloqueo y recuperación / Unlock & recovery ───────────────────────
+  // ES: Prueba una credencial (pantalla de bloqueo o de error). En legado lee
+  //     localStorage y, si abre, migra al fichero con esa misma credencial.
+  // EN: Tries a credential (lock or error screen). In legado it reads
+  //     localStorage and, if it opens, migrates to the file with that same
+  //     credential.
   async function desbloquear(credencial: string): Promise<boolean> {
     error.value = "";
+    if (modo.value === "fichero") return abrirFichero(credencial);
     try {
       const r = await almacen.leer(credencial);
       if (r.estado === "ok") {
         almacen.usarSecreto(credencial);
         const ajustes = useAjustes();
-        if (!ajustes.bloqueoActivo)
-          ajustes.setBloqueo(true, /^\d{4,6}$/.test(credencial) ? "pin" : "password");
-        entrar(r.datos);
+        if (!ajustes.bloqueoActivo) ajustes.setBloqueo(true, tipoDe(credencial));
+        await migrarYEntrar(r.datos, credencial);
         return true;
       }
       if (r.estado === "credencial") {
-        // ES: clave i18n, se traduce en la pantalla / EN: i18n key, translated on screen
         error.value = "credIncorrecta";
         return false;
       }
@@ -365,7 +562,7 @@ export const useSesion = defineStore("sesion", () => {
         error.value = "lecturaFallida";
         return false;
       }
-      entrarEnFallo(r.estado);
+      await entrarEnFallo(r.estado);
       return false;
     } catch {
       error.value = "lecturaFallida";
@@ -373,159 +570,194 @@ export const useSesion = defineStore("sesion", () => {
     }
   }
 
-  // ES: Desde la pantalla de bloqueo: antes de abrir las opciones de recuperación
-  //     prueba el secreto de ofuscación. Si los ajustes dicen "bloqueo" pero los
-  //     datos están solo ofuscados (p. ej. un "quitar PIN" de la 1.1.0 que falló a
-  //     medias), abre y corrige los ajustes: esos datos no estaban protegidos por
-  //     ningún PIN. Si no, muestra la pantalla de error sin tocar nada.
-  // EN: From the lock screen: before opening the recovery options it tries the
-  //     obfuscation secret. If the settings say "lock" but the data is only
-  //     obfuscated (e.g. a 1.1.0 "remove PIN" that failed halfway), it opens and
-  //     fixes the settings: that data was not protected by any PIN. Otherwise it
-  //     shows the error screen without touching anything.
+  // ES: Abre con la clave de recuperación (PIN olvidado). Después hay que
+  //     poner credencial nueva con restablecerCredencial().
+  // EN: Opens with the recovery key (forgotten PIN). Afterwards a new
+  //     credential must be set with restablecerCredencial().
+  async function desbloquearConRecuperacion(clave: string): Promise<boolean> {
+    error.value = "";
+    if (modo.value !== "fichero") {
+      error.value = "sinRecuperacion";
+      return false;
+    }
+    return abrirFichero(undefined, clave);
+  }
+
+  // ES: "¿Has olvidado el PIN?" desde la pantalla de bloqueo. En legado
+  //     prueba antes la ofuscación (un "quitar PIN" de la 1.1.0 a medias); en
+  //     fichero lleva a la pantalla de error sin tocar nada.
+  // EN: "Forgot the PIN?" from the lock screen. In legado it first tries the
+  //     obfuscation (a half-done 1.1.0 "remove PIN"); in file mode it goes to
+  //     the error screen without touching anything.
   async function mostrarRecuperacion() {
+    if (modo.value === "fichero") {
+      await entrarEnFallo("credencial");
+      return;
+    }
     const r = await almacen.leer(almacen.SECRETO_OFUSCACION);
     if (r.estado === "ok") {
       almacen.usarOfuscacion();
       useAjustes().setBloqueo(false, null);
-      entrar(r.datos);
+      await migrarYEntrar(r.datos, null);
       return;
     }
-    entrarEnFallo(r.estado === "invalido" || r.estado === "version" ? r.estado : "credencial");
+    await entrarEnFallo(
+      r.estado === "invalido" || r.estado === "version" ? r.estado : "credencial"
+    );
   }
 
-  // ES: Opción "empezar de cero" de la pantalla de error: exige la copia de
-  //     rescate (salvo que el usuario fuerce tras ser avisado), quita el bloqueo
-  //     antiguo y lleva a la bienvenida. El blob ilegible no se toca hasta que
-  //     la bienvenida guarde los datos nuevos.
-  // EN: "Start from scratch" option of the error screen: requires the rescue
-  //     copy (unless the user forces it after being warned), removes the old
-  //     lock and goes to the welcome. The unreadable blob is not touched until
-  //     the welcome saves the new data.
+  // ES: "Empezar de cero" de la pantalla de error. En fichero, el almacén
+  //     anterior se apartará a rescate/ al crear el nuevo; en legado exige la
+  //     copia de rescate en localStorage (salvo `forzar`).
+  // EN: "Start from scratch" from the error screen. In file mode, the previous
+  //     store will be moved to rescate/ when creating the new one; in legado
+  //     it requires the localStorage rescue copy (unless `forzar`).
   function empezarDeCero(forzar = false): boolean {
     if (!asegurarRescate() && !forzar) return false;
     almacen.usarOfuscacion();
     useAjustes().setBloqueo(false, null);
+    reemplazarAlCrear = true;
+    modo.value = "fichero";
     fallo.value = null;
     error.value = "";
     necesitaOnboarding.value = true;
     return true;
   }
 
-  // ── 7. Gestión del bloqueo / Lock management ────────────────────────────────
-  // ES: Re-cifra los datos con un secreto nuevo de forma SEGURA: con el guardado
-  //     automático en pausa, primero guarda con el secreto nuevo y solo si va
-  //     bien lo activa (y quien llama actualiza los ajustes). Si falla, lanza y
-  //     no cambia nada: ni el secreto activo ni los ajustes, así que lo que hay
-  //     en disco sigue cuadrando con lo que dicen los ajustes.
-  // EN: Re-encrypts the data with a new secret SAFELY: with autosave paused, it
-  //     first saves with the new secret and only if that works activates it (and
-  //     the caller updates the settings). If it fails it throws and changes
-  //     nothing: neither the active secret nor the settings, so the disk still
-  //     matches what the settings say.
-  //     `recifrarEnPausa` es el paso en sí y debe llamarse ya dentro de la pausa.
-  // EN: `recifrarEnPausa` is the step itself and must be called inside the pause.
-  async function recifrarEnPausa(secretoNuevo: string, activar: () => void) {
-    const hasta = cambios;
-    try {
-      await almacen.guardar(useFinanzas().snapshot(), secretoNuevo);
-    } catch (e) {
-      if (cambios !== guardados) estadoGuardado.value = "error";
-      throw e;
-    }
-    activar();
-    marcarGuardado(hasta);
-  }
-  function recifrar(secretoNuevo: string, activar: () => void) {
-    return conGuardadoEnPausa(() => recifrarEnPausa(secretoNuevo, activar));
+  // ── 8. Gestión del bloqueo / Lock management ───────────────────────────────
+  // ES: Comprueba una credencial nueva (mínimos) y que estemos en fichero.
+  // EN: Checks a new credential (minimums) and that we are in file mode.
+  function exigirCredencialNueva(tipo: TipoBloqueo, valor: string) {
+    if (validarCredencial(tipo, valor)) throw new Error("credencial-invalida");
+    if (modo.value !== "fichero") throw new Error("migracion-pendiente");
   }
 
-  // ES: Activa el bloqueo con la credencial dada. Lanza si no se pudo guardar.
-  // EN: Enables the lock with the given credential. Throws if it could not save.
-  async function configurarBloqueo(tipo: TipoBloqueo, credencial: string) {
-    await recifrar(credencial, () => {
-      almacen.usarSecreto(credencial);
+  // ES: Activa el bloqueo. Rust cambia la clave de datos y crea una clave de
+  //     recuperación (queda en `claveRecuperacion` para enseñarla). Lanza si
+  //     falla; entonces no cambia nada.
+  // EN: Enables the lock. Rust changes the data key and creates a recovery key
+  //     (kept in `claveRecuperacion` to be shown). Throws on failure; then
+  //     nothing changes.
+  async function configurarBloqueo(tipo: TipoBloqueo, credencial: string): Promise<string> {
+    exigirCredencialNueva(tipo, credencial);
+    return conGuardadoEnPausa(async () => {
+      const clave = await boveda.configurarBloqueo(tipo, credencial);
       useAjustes().setBloqueo(true, tipo);
+      claveRecuperacion.value = clave;
+      tieneRecuperacion.value = true;
+      autobloqueo.iniciar();
+      return clave;
     });
   }
 
-  // ES: Quita el bloqueo: re-cifra con el secreto de ofuscación (los datos
-  //     siguen sin guardarse en claro) y limpia el bloqueo en ajustes.
-  // EN: Disables the lock: re-encrypts with the obfuscation secret (so data is
-  //     still not stored in plain text) and clears the lock in ajustes.
+  // ES: Quita el bloqueo (los datos quedan solo ofuscados).
+  // EN: Removes the lock (the data is left only obfuscated).
   async function quitarBloqueo() {
-    await recifrar(almacen.SECRETO_OFUSCACION, () => {
-      almacen.usarOfuscacion();
+    if (modo.value !== "fichero") throw new Error("migracion-pendiente");
+    await conGuardadoEnPausa(async () => {
+      await boveda.quitarBloqueo();
       useAjustes().setBloqueo(false, null);
+      tieneRecuperacion.value = false;
+      autobloqueo.parar();
     });
   }
 
-  // ES: Cambia la credencial: verifica la antigua y, solo si es válida, re-cifra
-  //     con la nueva. Devuelve false (sin tocar nada) si la antigua no abre los
-  //     datos; lanza si el guardado con la nueva falla (y la antigua sigue valiendo).
-  // EN: Changes the credential: verifies the old one and, only if valid,
-  //     re-encrypts with the new one. Returns false (touching nothing) if the
-  //     old one does not open the data; throws if saving with the new one fails
-  //     (and the old one keeps working).
+  // ES: Cambia la credencial. false (sin tocar nada) si la antigua no vale;
+  //     lanza si la nueva no cumple los mínimos o falla la escritura. Si se
+  //     abrió con la clave de recuperación, la antigua no se pide.
+  // EN: Changes the credential. false (touching nothing) if the old one is
+  //     wrong; throws if the new one is below the minimums or the write
+  //     fails. If opened with the recovery key, the old one is not asked.
   async function cambiarCredencial(
     antigua: string,
     nueva: string,
     tipo: TipoBloqueo
   ): Promise<boolean> {
-    // ES: La comprobación de la antigua va dentro de la misma exclusión.
-    // EN: Checking the old one happens inside the same exclusion.
+    exigirCredencialNueva(tipo, nueva);
     return conGuardadoEnPausa(async () => {
-      if (!(await almacen.secretoValido(antigua))) return false;
-      await recifrarEnPausa(nueva, () => {
-        almacen.usarSecreto(nueva);
-        useAjustes().setBloqueo(true, tipo);
-      });
+      try {
+        await boveda.cambiarCredencial(porRecuperacion.value ? null : antigua, tipo, nueva);
+      } catch (e) {
+        if (codigo(e) === "credencial") return false;
+        throw e;
+      }
+      useAjustes().setBloqueo(true, tipo);
+      porRecuperacion.value = false;
       return true;
     });
   }
 
-  // ── 8. Cierre de la bienvenida / Onboarding completion ──────────────────────
-  // ES: Completa la bienvenida: carga los datos elegidos (ejemplo o vacío),
-  //     los GUARDA cifrados (con la credencial elegida o con ofuscación) y solo
-  //     si el guardado va bien registra el bloqueo, marca la app como
-  //     configurada y entra. Si el guardado falla, lanza y no cambia de pantalla.
-  // EN: Finishes the welcome: loads the chosen data (samples or empty), SAVES
-  //     it encrypted (with the chosen credential or obfuscation) and only if
-  //     the save works records the lock, marks the app as configured and
-  //     enters. If the save fails it throws and stays on the welcome screen.
+  // ES: Tras abrir con la clave de recuperación: PIN o contraseña nuevos sin
+  //     pedir el antiguo. La clave de recuperación sigue valiendo.
+  // EN: After opening with the recovery key: new PIN or password without the
+  //     old one. The recovery key keeps working.
+  function restablecerCredencial(tipo: TipoBloqueo, nueva: string): Promise<boolean> {
+    if (!porRecuperacion.value) return Promise.reject(new Error("sin-recuperacion"));
+    return cambiarCredencial("", nueva, tipo);
+  }
+
+  // ES: Genera otra clave de recuperación (la anterior deja de valer). Pide la
+  //     credencial actual. Devuelve la nueva (también en `claveRecuperacion`).
+  // EN: Generates another recovery key (the previous one stops working). Asks
+  //     for the current credential. Returns the new one (also in
+  //     `claveRecuperacion`).
+  async function regenerarClaveRecuperacion(credencial: string): Promise<string> {
+    if (modo.value !== "fichero") throw new Error("migracion-pendiente");
+    return conGuardadoEnPausa(async () => {
+      const clave = await boveda.regenerarRecuperacion(credencial);
+      claveRecuperacion.value = clave;
+      tieneRecuperacion.value = true;
+      return clave;
+    });
+  }
+
+  // ES: La interfaz ya enseñó la clave de recuperación: se olvida de la memoria.
+  // EN: The UI already showed the recovery key: it is dropped from memory.
+  function olvidarClaveRecuperacion() {
+    claveRecuperacion.value = null;
+  }
+
+  // ── 9. Bienvenida, importación y reemplazo / Onboarding, import & replace ──
+  // ES: Completa la bienvenida: crea el almacén en fichero con los datos
+  //     elegidos y, solo si va bien, registra el bloqueo y entra. Lanza si la
+  //     credencial no cumple los mínimos o falla la escritura.
+  // EN: Finishes the welcome: creates the file store with the chosen data and,
+  //     only if that works, records the lock and enters. Throws if the
+  //     credential is below the minimums or the write fails.
   async function completarOnboarding(opts: {
     nombre: string;
     bloqueo: { tipo: TipoBloqueo; credencial: string } | null;
     datosIniciales: "ejemplo" | "vacio";
   }) {
     const ajustes = useAjustes();
-    const datos = opts.datosIniciales === "ejemplo" ? datosDemo() : datosVacios();
-    const secreto = opts.bloqueo?.credencial;
-    if (secreto) await almacen.guardar(datos, secreto);
-    else {
-      almacen.usarOfuscacion();
-      await almacen.guardar(datos);
+    if (opts.bloqueo && validarCredencial(opts.bloqueo.tipo, opts.bloqueo.credencial)) {
+      throw new Error("credencial-invalida");
     }
-    if (secreto) almacen.usarSecreto(secreto);
+    const datos = opts.datosIniciales === "ejemplo" ? datosDemo() : datosVacios();
+    const clave = await boveda.crear(
+      datos,
+      opts.bloqueo?.tipo ?? "ninguno",
+      opts.bloqueo?.credencial ?? null,
+      reemplazarAlCrear,
+      "bienvenida"
+    );
+    reemplazarAlCrear = false;
+    modo.value = "fichero";
+    claveRecuperacion.value = clave;
+    tieneRecuperacion.value = !!clave;
     ajustes.setNombre(opts.nombre.trim());
     ajustes.setBloqueo(!!opts.bloqueo, opts.bloqueo?.tipo ?? null);
     necesitaOnboarding.value = false;
     entrar(datos);
   }
 
-  // ── 9. Importación de datos / Data import ───────────────────────────────────
-  // ES: Importa una copia. Pasa SIEMPRE por migrar + validar (las copias
-  //     antiguas sin versión se migran, no se rechazan). Errores: "copia-invalida"
-  //     o "copia-version" (copia de una versión más nueva). Desde la pantalla de
-  //     error exige antes la copia de rescate (o `forzar`), guarda con
-  //     ofuscación y quita el bloqueo antiguo, porque su credencial no se conoce.
-  //     El guardado se espera: si falla, lanza y no se da por importada.
-  // EN: Imports a backup. It ALWAYS goes through migrate + validate (old
-  //     unversioned backups are migrated, not rejected). Errors: "copia-invalida"
-  //     or "copia-version" (backup from a newer version). From the error screen
-  //     it first requires the rescue copy (or `forzar`), saves with obfuscation
-  //     and removes the old lock, because its credential is unknown. The save is
-  //     awaited: if it fails, it throws and the import does not count.
+  // ES: Importa una copia (JSON antiguo o el contenido de una copia cifrada ya
+  //     descifrada). Pasa SIEMPRE por migrar + validar. Desde la pantalla de
+  //     error crea un almacén nuevo sin PIN (el anterior se aparta a rescate/).
+  // EN: Imports a backup (old JSON or the content of an already decrypted
+  //     encrypted backup). It ALWAYS goes through migrate + validate. From the
+  //     error screen it creates a new store without a PIN (the previous one
+  //     is moved to rescate/).
   async function importarDatos(crudo: unknown, forzar = false) {
     let datos: DatosBolsillo;
     try {
@@ -537,8 +769,10 @@ export const useSesion = defineStore("sesion", () => {
     }
     if (fallo.value) {
       if (!asegurarRescate() && !forzar) throw new Error("sin-rescate");
-      almacen.usarOfuscacion();
-      await almacen.guardar(datos);
+      await boveda.crear(datos, "ninguno", null, true, "importacion");
+      modo.value = "fichero";
+      reemplazarAlCrear = false;
+      tieneRecuperacion.value = false;
       useAjustes().setBloqueo(false, null);
       entrar(datos);
       return;
@@ -546,45 +780,100 @@ export const useSesion = defineStore("sesion", () => {
     await hidratarYGuardar(datos);
   }
 
-  // ES: Sustituye todos los datos y los guarda ya, con el guardado automático en
-  //     pausa. Si falla, los datos quedan en pantalla pero el estado pasa a
-  //     "error" (aviso y reintento) y se lanza para que la vista no dé el
-  //     cambio por hecho.
-  // EN: Replaces all the data and saves it now, with autosave paused. If it
-  //     fails, the data stays on screen but the state becomes "error" (warning
-  //     and retry) and it throws so the view does not treat it as done.
+  // ES: Sustituye todos los datos: PRIMERO se guardan y SOLO si va bien se
+  //     ponen en pantalla. Si falla, la pantalla y lo pendiente siguen como
+  //     estaban y se lanza para que la vista no lo dé por hecho.
+  // EN: Replaces all the data: FIRST it is saved and ONLY if that works is it
+  //     put on screen. If it fails, the screen and what was pending stay as
+  //     they were and it throws so the view does not treat it as done.
   async function hidratarYGuardar(datos: DatosBolsillo) {
     await conGuardadoEnPausa(async () => {
+      await persistir(datos);
       const f = useFinanzas();
       f.hidratar(datos);
-      const hasta = cambios;
-      try {
-        await almacen.guardar(f.snapshot());
-      } catch (e) {
-        estadoGuardado.value = "error";
-        throw e;
-      }
-      marcarGuardado(hasta);
+      marcarGuardado(cambios);
     });
   }
 
-  // ES: Botones de Ajustes "Empezar de cero" y "Cargar ejemplo": sustituyen
-  //     todos los datos por un conjunto vacío o por el de ejemplo (la vista
-  //     pide confirmación antes).
-  // EN: Settings buttons "Start from scratch" and "Load samples": replace all
-  //     the data with an empty set or the sample one (the view asks for
-  //     confirmation first).
+  // ES: "Empezar de cero" y "Cargar ejemplo" de Ajustes. / EN: Settings "Start from scratch" and "Load samples".
   async function reemplazarDatos(tipo: "ejemplo" | "vacio") {
     await hidratarYGuardar(tipo === "ejemplo" ? datosDemo() : datosVacios());
   }
 
-  // ── 10. API pública / Public API ────────────────────────────────────────────
-  // ES: Flags reactivos + acciones expuestas a los componentes. Los ayudantes
-  //     internos (activarGuardado, guardarAhora, recifrar, entrar,
-  //     entrarEnFallo, asegurarRescate) quedan privados.
-  // EN: Reactive flags + actions exposed to components. Internal helpers
-  //     (activarGuardado, guardarAhora, recifrar, entrar, entrarEnFallo,
-  //     asegurarRescate) stay private.
+  // ── 10. Copias / Backups ────────────────────────────────────────────────────
+  // ES: Copias automáticas (más nueva primero). / EN: Automatic backups (newest first).
+  function listarCopias() {
+    return boveda.listarCopias();
+  }
+
+  // ES: Restaura una copia automática: guarda antes lo pendiente, Rust deja el
+  //     principal actual como "antes-…" y el almacén queda bloqueado; después
+  //     se vuelve a arrancar (pide la credencial que tuviera esa copia).
+  // EN: Restores an automatic backup: first saves what is pending, Rust keeps
+  //     the current main file as "antes-…" and the store is left locked; then
+  //     it boots again (asks for the credential that backup had).
+  async function restaurarCopia(nombre: string) {
+    if (desbloqueado.value) await vaciarGuardado();
+    await conGuardadoEnPausa(async () => {
+      await boveda.restaurarCopia(nombre);
+      bloqueando = true;
+      autobloqueo.parar();
+      useFinanzas().hidratar(datosVacios());
+      guardados = cambios;
+      bloqueando = false;
+      desbloqueado.value = false;
+      fallo.value = null;
+    });
+    await arrancar();
+  }
+
+  // ES: Exporta una copia cifrada con contraseña propia (mín. 8), con los
+  //     recibos y las categorías propias dentro. false si se cancela.
+  // EN: Exports a backup encrypted with its own password (min. 8), with the
+  //     receipts and custom categories inside. false if cancelled.
+  async function exportarCopiaCifrada(contrasena: string): Promise<boolean> {
+    if (validarCredencial("password", contrasena)) throw new Error("credencial-invalida");
+    const hoy = new Date().toISOString().slice(0, 10);
+    return boveda.exportarCopiaCifrada(
+      { ...useFinanzas().snapshot(), categoriasCustom: categoriasCustom() },
+      contrasena,
+      `Bolsillo - copia ${hoy}.bolsillo`
+    );
+  }
+
+  // ES: Abre el diálogo para elegir una copia. JSON antiguo → su contenido ya
+  //     parseado (la vista lo importa con importarDatos); cifrada → hay que
+  //     pedir la contraseña y llamar a descifrarCopiaElegida. null si se cancela.
+  // EN: Opens the dialog to pick a backup. Old JSON → its content already
+  //     parsed (the view imports it with importarDatos); encrypted → the
+  //     password must be asked and descifrarCopiaElegida called. null if
+  //     cancelled.
+  async function elegirCopiaParaImportar(): Promise<
+    { tipo: "json"; crudo: unknown } | { tipo: "cifrada" } | null
+  > {
+    const e = await boveda.elegirCopia();
+    if (!e) return null;
+    if (e.tipo === "cifrada") return { tipo: "cifrada" };
+    try {
+      return { tipo: "json", crudo: JSON.parse(e.contenido) };
+    } catch {
+      throw new Error("copia-invalida");
+    }
+  }
+
+  // ES: Descifra la copia elegida. Lanza "copia-credencial" si la contraseña
+  //     no abre. Devuelve el contenido para importarDatos.
+  // EN: Decrypts the picked backup. Throws "copia-credencial" if the password
+  //     does not open it. Returns the content for importarDatos.
+  async function descifrarCopiaElegida(contrasena: string): Promise<unknown> {
+    try {
+      return await boveda.descifrarCopia(contrasena);
+    } catch (e) {
+      throw new Error(codigo(e) === "credencial" ? "copia-credencial" : codigo(e));
+    }
+  }
+
+  // ── 11. API pública / Public API ────────────────────────────────────────────
   return {
     desbloqueado,
     necesitaOnboarding,
@@ -594,15 +883,32 @@ export const useSesion = defineStore("sesion", () => {
     fallo,
     rescate,
     rescateFallido,
+    modo,
+    claveRecuperacion,
+    tieneRecuperacion,
+    porRecuperacion,
+    avisoLegadoNuevo,
+    avisoMigracion,
     arrancar,
     desbloquear,
+    desbloquearConRecuperacion,
     mostrarRecuperacion,
     empezarDeCero,
+    bloquearAhora,
+    registrarActividad: autobloqueo.actividad,
     configurarBloqueo,
     quitarBloqueo,
     cambiarCredencial,
+    restablecerCredencial,
+    regenerarClaveRecuperacion,
+    olvidarClaveRecuperacion,
     completarOnboarding,
     importarDatos,
     reemplazarDatos,
+    listarCopias,
+    restaurarCopia,
+    exportarCopiaCifrada,
+    elegirCopiaParaImportar,
+    descifrarCopiaElegida,
   };
 });

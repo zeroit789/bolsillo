@@ -1,228 +1,429 @@
 /* =============================================================================
- * recuperacion.test.ts — Datos ilegibles / Unreadable data
+ * recuperacion.test.ts — Datos ilegibles, migración y copias / Unreadable data, migration & backups
  * -----------------------------------------------------------------------------
- * ES: Reproduce H1 del análisis (arrancar con un blob que no se puede leer, que
- *     la app sustituía en silencio por los datos de ejemplo) y prueba las salidas
- *     de la pantalla de error. H2 (guardado que falla) está en guardado.test.ts.
- *     Todos los datos son inventados.
- * EN: Reproduces H1 from the analysis (booting with a blob that cannot be read,
- *     which the app silently replaced with the sample data) and tests the ways
- *     out of the error screen. H2 (failing save) lives in guardado.test.ts. All
- *     data is made up.
+ * ES: Reproduce H1 del análisis (datos que no se pueden leer y que antes se
+ *     pisaban con el ejemplo) en los dos almacenes: el de la 1.1.0 en
+ *     localStorage ("legado") y el fichero cifrado de la 1.2.0 (Rust simulado
+ *     con rustSimulado.ts). Prueba también la migración en tres fases, que no
+ *     se remigra encima de un fichero, la restauración de copias automáticas
+ *     y la copia cifrada de ida y vuelta. H2 (guardado que falla) está en
+ *     guardado.test.ts. Todos los datos son inventados.
+ * EN: Reproduces H1 from the analysis (unreadable data that used to be
+ *     overwritten with the samples) in both stores: the 1.1.0 localStorage one
+ *     ("legado") and the 1.2.0 encrypted file (Rust simulated with
+ *     rustSimulado.ts). It also tests the three-phase migration, that nothing
+ *     is migrated on top of a file, restoring automatic backups and the
+ *     encrypted backup round trip. H2 (failing save) lives in
+ *     guardado.test.ts. All data is made up.
  * -----------------------------------------------------------------------------
  * ÍNDICE / INDEX:
  *   1. Utilidades de prueba / Test helpers
- *   2. H1: datos ilegibles / H1: unreadable data
- *   3. Salidas de la pantalla de error / Ways out of the error screen
+ *   2. H1 en localStorage (1.1.0) / H1 in localStorage (1.1.0)
+ *   3. H1 en el fichero / H1 in the file
+ *   4. Migración en tres fases / Three-phase migration
+ *   5. Copias / Backups
  * ===========================================================================*/
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import * as almacen from "../utils/almacen";
 import { cifrar } from "../utils/cripto";
+import { simulador } from "../utils/rustSimulado";
+import { VERSION_DATOS, type DatosBolsillo } from "../types";
 import { useAjustes } from "./ajustes";
+import { useFinanzas } from "./finanzas";
 import { useSesion } from "./sesion";
 
 // ── 1. Utilidades de prueba / Test helpers ────────────────────────────────────
-// ES: Claves de localStorage que usa la app. / EN: localStorage keys used by the app.
+// ES: Claves de localStorage de la 1.1.0. / EN: 1.1.0 localStorage keys.
 const CLAVE_DATOS = "bolsillo.datos.cif";
 const CLAVE_AJUSTES = "bolsillo.ajustes";
 
-// ES: Vacía cualquier guardado pendiente del store activo (si la API existe),
-//     para que un temporizador de una prueba no escriba en la siguiente.
-// EN: Flushes any pending save of the active store (if the API exists), so a
-//     timer from one test never writes into the next one.
-async function vaciarPendientes() {
-  const s = useSesion() as unknown as { vaciarGuardado?: () => Promise<boolean> };
-  if (typeof s.vaciarGuardado === "function") await s.vaciarGuardado();
+// ES: Datos v2 (como los dejaba la 1.1.0 + Tanda 1) con un recibo dentro.
+// EN: v2 data (as 1.1.0 + Tanda 1 left it) with a receipt inside.
+function datosV2(recibo = "data:image/jpeg;base64,QUJD") {
+  return {
+    version: 2,
+    recurrentes: [
+      {
+        id: "r1",
+        concepto: "Nómina",
+        importe: 1500,
+        signo: "ingreso",
+        categoria: "Nómina",
+        desde: "2026-01",
+        hasta: null,
+      },
+    ],
+    puntuales: [
+      {
+        id: "p1",
+        concepto: "Súper",
+        importe: 80,
+        signo: "gasto",
+        categoria: "Comida",
+        fecha: "2026-02-10",
+        recibo,
+      },
+    ],
+    deudas: [],
+    planes: [],
+    presupuestos: [],
+    plantillas: [],
+    cuentas: [],
+  };
 }
 
-// ES: Simula cerrar y volver a abrir la app: stores nuevos, mismo localStorage.
-// EN: Simulates closing and reopening the app: fresh stores, same localStorage.
-async function reabrirApp() {
-  await vaciarPendientes();
+// ES: Deja en localStorage un almacén de la 1.1.0 (con PIN o sin él).
+// EN: Leaves a 1.1.0 store in localStorage (with or without a PIN).
+async function legado(pin: string | null, datos: unknown = datosV2()) {
+  localStorage.setItem(
+    CLAVE_DATOS,
+    await cifrar(JSON.stringify(datos), pin ?? almacen.SECRETO_OFUSCACION)
+  );
+  localStorage.setItem(
+    CLAVE_AJUSTES,
+    JSON.stringify({ bloqueoActivo: !!pin, bloqueoTipo: pin ? "pin" : null, configurado: true })
+  );
+}
+
+// ES: Cerrar y volver a abrir la app: stores nuevos, mismo disco y mismo
+//     localStorage, la clave de datos de Rust olvidada.
+// EN: Close and reopen the app: fresh stores, same disk and localStorage,
+//     Rust's data key forgotten.
+async function reabrir() {
+  const s = useSesion();
+  await s.vaciarGuardado();
   setActivePinia(createPinia());
   almacen.usarOfuscacion();
+  simulador.reiniciarProceso();
+  const nueva = useSesion();
+  await nueva.arrancar();
+  return nueva;
 }
 
-beforeEach(async () => {
+// ES: Contenido de datos.bolsillo (simulado). / EN: datos.bolsillo content (simulated).
+const enDisco = (): DatosBolsillo => JSON.parse(simulador.estado.principal!.datos);
+
+beforeEach(() => {
   setActivePinia(createPinia());
   localStorage.clear();
   almacen.usarOfuscacion();
+  simulador.reiniciar();
 });
 
 afterEach(async () => {
-  // ES: vi.restoreAllMocks no restaura el espía de localStorage de happy-dom:
-  //     se restaura a mano para que un fallo no contamine la prueba siguiente.
-  // EN: vi.restoreAllMocks does not restore happy-dom's localStorage spy: it is
-  //     restored by hand so a failure does not leak into the next test.
   if (vi.isMockFunction(localStorage.setItem)) vi.mocked(localStorage.setItem).mockRestore();
-  await vaciarPendientes();
+  await useSesion().vaciarGuardado();
 });
 
-// ES: Primer arranque completo: bienvenida con o sin PIN y datos de ejemplo.
-// EN: Full first run: onboarding with or without a PIN and the sample data.
-async function primerArranque(pin: string | null) {
-  const sesion = useSesion();
-  await sesion.arrancar();
-  await sesion.completarOnboarding({
-    nombre: "Prueba",
-    bloqueo: pin ? { tipo: "pin", credencial: pin } : null,
-    datosIniciales: "ejemplo",
-  } as Parameters<typeof sesion.completarOnboarding>[0]);
-  await vaciarPendientes();
-}
-
-// ── 2. H1: datos ilegibles / H1: unreadable data ──────────────────────────────
-describe("H1: nunca se pisan datos ilegibles / unreadable data is never overwritten", () => {
+// ── 2. H1 en localStorage (1.1.0) / H1 in localStorage (1.1.0) ────────────────
+describe("H1 en el almacén de la 1.1.0 / H1 in the 1.1.0 store", () => {
   it.each([
     ["JSON del blob roto / broken blob JSON", "{esto no es json"],
     ["base64 roto / broken base64", JSON.stringify({ v: 1, salt: "@@@", iv: "!!", ct: "??" })],
     ["faltan campos / missing fields", JSON.stringify({ v: 1, salt: "AAAA" })],
-  ])("sin bloqueo, blob dañado (%s) / no lock, damaged blob", async (_n, blob) => {
-    await primerArranque(null);
-    localStorage.setItem(CLAVE_DATOS, blob);
+  ])(
+    "blob dañado (%s): error, sin tocar nada / damaged blob: error, nothing touched",
+    async (_n, blob) => {
+      localStorage.setItem(CLAVE_DATOS, blob);
+      const s = useSesion();
+      await s.arrancar();
+      expect(s.modo).toBe("legado");
+      expect(s.fallo).toBe("danado");
+      expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
+      // ES: Copia de rescate en localStorage y ningún fichero creado.
+      // EN: Rescue copy in localStorage and no file created.
+      expect(s.rescate).toMatch(/^bolsillo\.datos\.rescate\./);
+      expect(simulador.estado.principal).toBeNull();
+    }
+  );
 
-    await reabrirApp();
-    const sesion = useSesion();
-    await sesion.arrancar();
-    await vaciarPendientes();
-
-    // ES: El blob sigue igual, byte a byte. / EN: The blob is byte-for-byte unchanged.
-    expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
-    expect(sesion.desbloqueado).toBe(false);
-    expect((sesion as unknown as { fallo: string | null }).fallo).toBe("danado");
-  });
-
-  it("sin bloqueo, descifra pero no valida / no lock, decrypts but does not validate", async () => {
-    await primerArranque(null);
-    localStorage.setItem(
-      CLAVE_DATOS,
-      await cifrar(JSON.stringify({ hola: 1 }), almacen.SECRETO_OFUSCACION)
-    );
+  it("descifra pero no valida: error invalido / decrypts but does not validate", async () => {
+    await legado(null, { hola: 1 });
     const blob = localStorage.getItem(CLAVE_DATOS);
-
-    await reabrirApp();
-    const sesion = useSesion();
-    await sesion.arrancar();
-    await vaciarPendientes();
-
+    const s = useSesion();
+    await s.arrancar();
+    expect(s.fallo).toBe("invalido");
     expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
-    expect(sesion.desbloqueado).toBe(false);
-    expect((sesion as unknown as { fallo: string | null }).fallo).toBe("invalido");
+    expect(simulador.estado.principal).toBeNull();
   });
 
-  it("con PIN y sin bolsillo.ajustes no se pisa nada / PIN set and settings lost: nothing is overwritten", async () => {
-    await primerArranque("1234");
+  it("con PIN y ajustes perdidos: pide el PIN y al abrir migra con ese PIN / PIN and settings lost", async () => {
+    await legado("1234");
     const blob = localStorage.getItem(CLAVE_DATOS);
     localStorage.removeItem(CLAVE_AJUSTES);
-
-    await reabrirApp();
-    const sesion = useSesion();
-    await sesion.arrancar();
-    await vaciarPendientes();
-
-    // ES: Mismo blob y sigue abriéndose con el PIN de siempre.
-    // EN: Same blob and it still opens with the usual PIN.
+    const s = useSesion();
+    await s.arrancar();
+    // ES: Sin ajustes se intenta sin PIN, no abre: pantalla de error "credencial".
+    // EN: Without settings it tries without a PIN, it does not open: "credencial" error screen.
+    expect(s.fallo).toBe("credencial");
+    expect(s.necesitaOnboarding).toBe(false);
+    expect(await s.desbloquear("9999")).toBe(false);
+    expect(s.error).toBe("credIncorrecta");
+    expect(await s.desbloquear("1234")).toBe(true);
+    // ES: Migrado con el mismo PIN; el localStorage sigue igual (no se borra).
+    // EN: Migrated with the same PIN; localStorage stays the same (not deleted).
+    expect(s.modo).toBe("fichero");
+    expect(simulador.estado.principal!.bloqueo).toBe("pin");
+    expect(simulador.estado.principal!.credencial).toBe("1234");
     expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
-    expect(await almacen.secretoValido("1234")).toBe(true);
-    expect(sesion.necesitaOnboarding).toBe(false);
-    expect(sesion.desbloqueado).toBe(false);
-    expect((sesion as unknown as { fallo: string | null }).fallo).toBe("credencial");
-  });
-});
-
-// ── 3. Salidas de la pantalla de error / Ways out of the error screen ────────
-describe("pantalla de error: salidas / error screen: ways out", () => {
-  // ES: Deja la app en fallo "danado" con un blob roto inventado.
-  // EN: Leaves the app in a "danado" failure with a made-up broken blob.
-  async function conBlobRoto() {
-    await primerArranque(null);
-    localStorage.setItem(CLAVE_DATOS, "{roto");
-    await reabrirApp();
-    const sesion = useSesion();
-    await sesion.arrancar();
-    return sesion;
-  }
-
-  it("empezar de cero conserva el rescate y luego guarda lo nuevo / start from scratch keeps the rescue", async () => {
-    const sesion = await conBlobRoto();
-    const rescate = sesion.rescate;
-    expect(rescate).not.toBeNull();
-    expect(localStorage.getItem(rescate!)).toBe("{roto");
-
-    expect(sesion.empezarDeCero()).toBe(true);
-    expect(sesion.necesitaOnboarding).toBe(true);
-    // ES: Hasta terminar la bienvenida no se toca el blob. / EN: Blob untouched until the welcome ends.
-    expect(localStorage.getItem(CLAVE_DATOS)).toBe("{roto");
-
-    await sesion.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
-    expect((await almacen.leer()).estado).toBe("ok");
-    expect(localStorage.getItem(rescate!)).toBe("{roto");
+    expect(useAjustes().bloqueoActivo).toBe(true);
+    expect(s.claveRecuperacion).not.toBeNull();
   });
 
   it("sin espacio para el rescate no se empieza de cero sin forzar / no rescue space: no restart unless forced", async () => {
-    await primerArranque(null);
     localStorage.setItem(CLAVE_DATOS, "{roto");
-    await reabrirApp();
-    const original = localStorage.setItem.bind(localStorage);
-    const espia = vi.spyOn(localStorage, "setItem").mockImplementation((k: string, v: string) => {
-      if (k.startsWith(almacen.PREFIJO_RESCATE))
-        throw new DOMException("lleno", "QuotaExceededError");
-      original(k, v);
+    const s = useSesion();
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("lleno", "QuotaExceededError");
     });
-    const sesion = useSesion();
-    await sesion.arrancar();
-    expect(sesion.rescateFallido).toBe(true);
-    expect(sesion.empezarDeCero()).toBe(false);
-    expect(sesion.necesitaOnboarding).toBe(false);
-    await expect(
-      sesion.importarDatos({ recurrentes: [], puntuales: [], deudas: [] })
-    ).rejects.toThrow("sin-rescate");
-    expect(localStorage.getItem(CLAVE_DATOS)).toBe("{roto");
-    espia.mockRestore();
-  });
-
-  it("importar una copia v1 desde el fallo entra sin bloqueo / importing a v1 backup from the failure enters unlocked", async () => {
-    const sesion = await conBlobRoto();
-    await sesion.importarDatos({ recurrentes: [], puntuales: [], deudas: [] });
-    expect(sesion.fallo).toBeNull();
-    expect(sesion.desbloqueado).toBe(true);
-    expect(useAjustes().bloqueoActivo).toBe(false);
-    expect((await almacen.leer()).estado).toBe("ok");
-    expect(localStorage.getItem(sesion.rescate!)).toBe("{roto");
-  });
-
-  it("con ajustes perdidos, el PIN de siempre abre y repone el bloqueo / settings lost: the usual PIN opens and restores the lock", async () => {
-    await primerArranque("1234");
-    localStorage.removeItem(CLAVE_AJUSTES);
-    await reabrirApp();
-    const sesion = useSesion();
-    await sesion.arrancar();
-    expect(sesion.fallo).toBe("credencial");
-    // ES: Con fallo de credencial no se hace rescate todavía. / EN: No rescue yet on a credential failure.
-    expect(sesion.rescate).toBeNull();
-
-    expect(await sesion.desbloquear("0000")).toBe(false);
-    expect(sesion.error).toBe("credIncorrecta");
-    expect(await sesion.desbloquear("1234")).toBe(true);
-    expect(sesion.fallo).toBeNull();
-    expect(useAjustes().bloqueoActivo).toBe(true);
-    expect(useAjustes().bloqueoTipo).toBe("pin");
+    await s.arrancar();
+    expect(s.rescateFallido).toBe(true);
+    expect(s.empezarDeCero()).toBe(false);
+    vi.mocked(localStorage.setItem).mockRestore();
+    expect(s.empezarDeCero(true)).toBe(true);
+    expect(s.necesitaOnboarding).toBe(true);
   });
 });
 
-describe("bloqueo en ajustes con datos solo ofuscados / lock in settings with only-obfuscated data", () => {
-  it("la recuperación abre y corrige los ajustes / recovery opens and fixes the settings", async () => {
-    await primerArranque(null);
-    // ES: Ajustes que dicen "PIN" sobre un blob solo ofuscado (estado de la 1.1.0).
-    // EN: Settings saying "PIN" over an only-obfuscated blob (1.1.0 state).
-    useAjustes().setBloqueo(true, "pin");
-    await reabrirApp();
-    const sesion = useSesion();
-    await sesion.arrancar();
-    expect(sesion.desbloqueado).toBe(false);
-    await sesion.mostrarRecuperacion();
-    expect(sesion.desbloqueado).toBe(true);
+// ── 3. H1 en el fichero / H1 in the file ─────────────────────────────────────
+describe("H1 en el fichero cifrado / H1 in the encrypted file", () => {
+  // ES: Primer arranque sin PIN con el ejemplo. / EN: First run without a PIN with the samples.
+  async function primerArranque() {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "ejemplo" });
+  }
+
+  it("fichero dañado: error, rescate y nunca se pisa / damaged file: error, rescue, never overwritten", async () => {
+    await primerArranque();
+    simulador.estado.principalRoto = "danado";
+    const antes = simulador.estado.principal;
+    simulador.estado.principal = null;
+    const s = await reabrir();
+    expect(s.fallo).toBe("danado");
+    expect(s.necesitaOnboarding).toBe(false);
+    expect(s.rescate).toMatch(/^rescate\/datos-/);
+    expect(simulador.estado.escrituras).toBe(0);
+    // ES: Empezar de cero aparta el dañado al crear el nuevo.
+    // EN: Starting from scratch moves the damaged one aside when creating the new one.
+    expect(s.empezarDeCero()).toBe(true);
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    expect(simulador.estado.rescate.filter((r) => r.startsWith("rescate/datos-"))).toHaveLength(2);
+    expect(enDisco().recurrentes).toEqual([]);
+    expect(antes).not.toBeNull();
+  });
+
+  it("fichero de una versión más nueva: error version / file from a newer version", async () => {
+    await primerArranque();
+    simulador.estado.principalRoto = "version";
+    simulador.estado.principal = null;
+    const s = await reabrir();
+    expect(s.fallo).toBe("version");
+  });
+
+  it("descifra pero no valida: error invalido y la clave se olvida / decrypts but invalid: key forgotten", async () => {
+    await primerArranque();
+    simulador.estado.principal!.datos = JSON.stringify({ version: VERSION_DATOS, hola: 1 });
+    const s = await reabrir();
+    expect(s.fallo).toBe("invalido");
+    expect(simulador.estado.abierta).toBeNull();
+  });
+
+  it("hubo almacén pero falta el fichero: error, nunca bienvenida ni migración / store existed but file missing", async () => {
+    await primerArranque();
+    simulador.estado.principal = null;
+    await legado(null);
+    const s = await reabrir();
+    expect(s.fallo).toBe("falta");
+    expect(s.necesitaOnboarding).toBe(false);
+    expect(simulador.estado.principal).toBeNull();
+  });
+
+  it("importar una copia desde el error crea el almacén sin PIN / importing from the error creates the store without a PIN", async () => {
+    await primerArranque();
+    await useSesion().configurarBloqueo("pin", "4831");
+    const s = await reabrir();
+    await s.mostrarRecuperacion();
+    expect(s.fallo).toBe("credencial");
+    await s.importarDatos(datosV2());
+    expect(s.desbloqueado).toBe(true);
     expect(useAjustes().bloqueoActivo).toBe(false);
+    expect(simulador.estado.principal!.bloqueo).toBe("ninguno");
+    // ES: El almacén con PIN se apartó a rescate/ (se puede recuperar con el PIN).
+    // EN: The PIN store was moved to rescate/ (it can be recovered with the PIN).
+    expect(simulador.estado.rescate.length).toBeGreaterThan(0);
+  });
+});
+
+// ── 4. Migración en tres fases / Three-phase migration ───────────────────────
+describe("migración desde localStorage / migration from localStorage", () => {
+  it("sin PIN migra al arrancar, con el recibo aparte, y el origen no se borra / migrates at boot", async () => {
+    await legado(null);
+    const blob = localStorage.getItem(CLAVE_DATOS);
+    const s = useSesion();
+    await s.arrancar();
+    expect(s.modo).toBe("fichero");
+    expect(s.desbloqueado).toBe(true);
+    expect(s.avisoMigracion).toBeNull();
+    // ES: El fichero lleva la referencia, no el recibo; el recibo va aparte.
+    // EN: The file carries the reference, not the receipt; the receipt lives apart.
+    const p = enDisco().puntuales[0];
+    expect(p.recibo).toBeUndefined();
+    expect(p.reciboId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(Object.values(simulador.estado.recibos)).toContain("data:image/jpeg;base64,QUJD");
+    expect(simulador.estado.principal!.migracion?.huella).toMatch(/^[0-9a-f]{64}$/);
+    expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
+    // ES: En memoria el recibo vuelve a estar en su sitio. / EN: In memory the receipt is back in place.
+    expect(useFinanzas().puntuales[0].recibo).toBe("data:image/jpeg;base64,QUJD");
+    // ES: Al reabrir se lee el fichero con su recibo. / EN: On reopening the file is read with its receipt.
+    await reabrir();
+    expect(useFinanzas().puntuales[0].recibo).toBe("data:image/jpeg;base64,QUJD");
+    expect(useFinanzas().puntuales[0].reciboId).toBeUndefined();
+  });
+
+  it("vuelvo a la 1.1.0, apunto algo y actualizo: manda el fichero y se avisa / back to 1.1.0 and up again", async () => {
+    await legado(null);
+    await useSesion().arrancar();
+    const fichero = simulador.estado.principal!.datos;
+    // ES: La 1.1.0 escribe en localStorage un apunte nuevo.
+    // EN: 1.1.0 writes a new entry to localStorage.
+    const conNuevo = datosV2();
+    conNuevo.puntuales.push({ ...conNuevo.puntuales[0], id: "p2", concepto: "En la 1.1.0" });
+    await legado(null, conNuevo);
+    const s = await reabrir();
+    expect(s.modo).toBe("fichero");
+    expect(s.avisoLegadoNuevo).toBe(true);
+    expect(simulador.estado.principal!.datos).toBe(fichero);
+    expect(useFinanzas().puntuales.map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  it("sin cambios en localStorage no hay aviso / no localStorage changes, no warning", async () => {
+    await legado(null);
+    await useSesion().arrancar();
+    const s = await reabrir();
+    expect(s.avisoLegadoNuevo).toBe(false);
+  });
+
+  it("si la verificación falla sigue en localStorage y se reintenta al reabrir / failed verification stays in localStorage", async () => {
+    await legado(null);
+    const blob = localStorage.getItem(CLAVE_DATOS);
+    simulador.estado.fallarVerificacion = true;
+    const s = useSesion();
+    await s.arrancar();
+    expect(s.modo).toBe("legado");
+    expect(s.avisoMigracion).toBe("verificacion");
+    expect(s.desbloqueado).toBe(true);
+    expect(simulador.estado.principal).toBeNull();
+    expect(simulador.estado.rescate[0]).toMatch(/^rescate\/migracion-/);
+    expect(localStorage.getItem(CLAVE_DATOS)).toBe(blob);
+    // ES: En legado se sigue guardando en localStorage. / EN: In legado it keeps saving to localStorage.
+    useFinanzas().addPlan({ nombre: "Bici", objetivo: 300, aportado: 0 });
+    expect(await s.vaciarGuardado()).toBe(true);
+    expect(localStorage.getItem(CLAVE_DATOS)).not.toBe(blob);
+    // ES: Otro arranque con la verificación arreglada migra (con el plan nuevo).
+    // EN: Another boot with verification fixed migrates (with the new plan).
+    simulador.estado.fallarVerificacion = false;
+    const s2 = await reabrir();
+    expect(s2.modo).toBe("fichero");
+    expect(enDisco().planes.map((p) => p.nombre)).toEqual(["Bici"]);
+  });
+
+  it("datos grandes: 20 000 movimientos y recibos de 300 KB / large data", async () => {
+    const d = datosV2();
+    const recibo = (i: number) =>
+      `data:image/jpeg;base64,${String(i).padStart(4, "0")}${"A".repeat(300_000)}`;
+    d.puntuales = Array.from({ length: 20_000 }, (_, i) => ({
+      id: `p${i}`,
+      concepto: `Gasto ${i}`,
+      importe: (i % 900) + 0.25,
+      signo: "gasto",
+      categoria: "Comida",
+      fecha: `2026-${String((i % 12) + 1).padStart(2, "0")}-10`,
+      recibo: i < 5 ? recibo(i) : (undefined as unknown as string),
+    }));
+    for (const p of d.puntuales)
+      if (p.recibo === undefined) delete (p as { recibo?: string }).recibo;
+    await legado(null, d);
+    const s = useSesion();
+    await s.arrancar();
+    expect(s.modo).toBe("fichero");
+    expect(Object.keys(simulador.estado.recibos)).toHaveLength(5);
+    // ES: El principal no lleva los 1,5 MB de recibos. / EN: The main file does not carry the 1.5 MB of receipts.
+    expect(simulador.estado.principal!.datos.length).toBeLessThan(4_000_000);
+    expect(simulador.estado.principal!.datos).not.toContain("AAAAAAAAAA");
+    await reabrir();
+    expect(useFinanzas().puntuales).toHaveLength(20_000);
+    expect(useFinanzas().puntuales[3].recibo).toBe(recibo(3));
+  });
+});
+
+// ── 5. Copias / Backups ───────────────────────────────────────────────────────
+describe("copias / backups", () => {
+  it("restaurar una copia automática / restoring an automatic backup", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    const f = useFinanzas();
+    for (let i = 0; i < 3; i++) {
+      f.addPlan({ nombre: `Plan ${i}`, objetivo: 100, aportado: 0 });
+      await s.vaciarGuardado();
+    }
+    const copias = await s.listarCopias();
+    const recientes = copias.filter((c) => c.nombre.startsWith("reciente-"));
+    // ES: La más vieja es la de la bienvenida (sin planes). / EN: The oldest is the welcome one (no plans).
+    await s.restaurarCopia(recientes[recientes.length - 1].nombre);
+    expect(s.desbloqueado).toBe(true);
+    expect(useFinanzas().planes).toEqual([]);
+    expect((await s.listarCopias()).some((c) => c.nombre.startsWith("antes-"))).toBe(true);
+  });
+
+  it("copia cifrada de ida y vuelta en una instalación limpia / encrypted backup round trip on a clean install", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "ejemplo" });
+    useFinanzas().addPuntual({
+      concepto: "Con recibo",
+      importe: 12,
+      signo: "gasto",
+      categoria: "Comida",
+      fecha: "2026-03-01",
+      recibo: "data:image/jpeg;base64,UkVD",
+    });
+    const original = JSON.parse(JSON.stringify(useFinanzas().snapshot()));
+    await expect(s.exportarCopiaCifrada("corta")).rejects.toThrow("credencial-invalida");
+    expect(await s.exportarCopiaCifrada("contraseña-copia")).toBe(true);
+    const exportada = simulador.estado.exportadas[0];
+    expect(exportada.nombre).toMatch(/\.bolsillo$/);
+
+    // ES: Instalación limpia: bienvenida y restaurar desde la copia.
+    // EN: Clean install: welcome and restore from the backup.
+    simulador.reiniciar();
+    localStorage.clear();
+    const s2 = await reabrir();
+    await s2.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    simulador.estado.proximoArchivo = JSON.stringify({
+      formato: "bolsillo",
+      contrasena: exportada.contrasena,
+      datos: exportada.datos,
+    });
+    expect(await s2.elegirCopiaParaImportar()).toEqual({ tipo: "cifrada" });
+    await expect(s2.descifrarCopiaElegida("otra-contraseña")).rejects.toThrow("copia-credencial");
+    await s2.importarDatos(await s2.descifrarCopiaElegida("contraseña-copia"));
+    expect(useFinanzas().snapshot()).toEqual(original);
+    expect(Object.values(simulador.estado.recibos)).toContain("data:image/jpeg;base64,UkVD");
+  });
+
+  it("se sigue importando el JSON antiguo por el diálogo / old JSON is still imported through the dialog", async () => {
+    const s = useSesion();
+    await s.arrancar();
+    await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+    const v1 = { recurrentes: [], puntuales: datosV2().puntuales, deudas: [] };
+    simulador.estado.proximoArchivo = JSON.stringify(v1);
+    const e = await s.elegirCopiaParaImportar();
+    expect(e?.tipo).toBe("json");
+    await s.importarDatos((e as { crudo: unknown }).crudo);
+    expect(useFinanzas().puntuales[0].recibo).toBe("data:image/jpeg;base64,QUJD");
+    expect(enDisco().version).toBe(VERSION_DATOS);
   });
 });

@@ -62,6 +62,7 @@ interface AjustesGuardados {
   moneda: string; // ES: código ISO de la moneda elegida (EUR, USD, GBP...) / EN: ISO currency code (EUR, USD, GBP...)
   idioma: Idioma; // ES: idioma de la interfaz (es / en) / EN: UI language (es / en)
   configurado: boolean; // ES: true tras completar la bienvenida / EN: true once onboarding is complete
+  minutosAutobloqueo: number; // ES: minutos sin actividad hasta bloquear (0 = nunca) / EN: idle minutes until locking (0 = never)
 }
 
 // ES: Base usada en el primer arranque y como base de fusión para datos
@@ -75,6 +76,7 @@ const POR_DEFECTO: AjustesGuardados = {
   moneda: "EUR",
   idioma: "es",
   configurado: false,
+  minutosAutobloqueo: 10,
 };
 
 // ── 4. Detección de idioma / Language detection ───────────────────────────────
@@ -129,6 +131,15 @@ export const useAjustes = defineStore("ajustes", () => {
   const moneda = ref<string>(inicial.moneda);
   const idioma = ref<Idioma>(inicial.idioma);
   const configurado = ref<boolean>(inicial.configurado);
+  // ES: Minutos del autobloqueo; un valor guardado raro vuelve a 10.
+  // EN: Auto-lock minutes; an odd saved value goes back to 10.
+  const minutosAutobloqueo = ref<number>(
+    Number.isInteger(inicial.minutosAutobloqueo) &&
+      inicial.minutosAutobloqueo >= 0 &&
+      inicial.minutosAutobloqueo <= 240
+      ? inicial.minutosAutobloqueo
+      : 10
+  );
 
   // ── 7. Tema / Theme ─────────────────────────────────────────────────────────
   // ES: Aplica el tema al documento alternando la clase que el CSS usa para
@@ -170,6 +181,13 @@ export const useAjustes = defineStore("ajustes", () => {
   function marcarConfigurado() {
     configurado.value = true;
   }
+  // ES: Minutos sin actividad hasta bloquear (0 = nunca, máximo 240). Solo
+  //     actúa con PIN o contraseña.
+  // EN: Idle minutes until locking (0 = never, at most 240). It only acts
+  //     with a PIN or password.
+  function setMinutosAutobloqueo(n: number) {
+    minutosAutobloqueo.value = Math.min(Math.max(Math.trunc(n) || 0, 0), 240);
+  }
 
   // ── 9. Watchers de persistencia y efectos / Persistence & side-effect watchers ─
   // ES: Persiste todos los ajustes en localStorage y re-aplica el tema ante
@@ -184,25 +202,29 @@ export const useAjustes = defineStore("ajustes", () => {
   //     reaching the rescue. The saved theme is applied separately, without
   //     writing. If saving fails (full quota), the change stays in memory and
   //     the app goes on: settings are not financial data.
-  watch([tema, bloqueoActivo, bloqueoTipo, nombre, moneda, idioma, configurado], () => {
-    try {
-      localStorage.setItem(
-        CLAVE,
-        JSON.stringify({
-          tema: tema.value,
-          bloqueoActivo: bloqueoActivo.value,
-          bloqueoTipo: bloqueoTipo.value,
-          nombre: nombre.value,
-          moneda: moneda.value,
-          idioma: idioma.value,
-          configurado: configurado.value,
-        })
-      );
-    } catch {
-      /* ES: cuota llena: se queda en memoria / EN: full quota: kept in memory */
+  watch(
+    [tema, bloqueoActivo, bloqueoTipo, nombre, moneda, idioma, configurado, minutosAutobloqueo],
+    () => {
+      try {
+        localStorage.setItem(
+          CLAVE,
+          JSON.stringify({
+            tema: tema.value,
+            bloqueoActivo: bloqueoActivo.value,
+            bloqueoTipo: bloqueoTipo.value,
+            nombre: nombre.value,
+            moneda: moneda.value,
+            idioma: idioma.value,
+            configurado: configurado.value,
+            minutosAutobloqueo: minutosAutobloqueo.value,
+          })
+        );
+      } catch {
+        /* ES: cuota llena: se queda en memoria / EN: full quota: kept in memory */
+      }
+      aplicarTema();
     }
-    aplicarTema();
-  });
+  );
   // ES: Tema guardado aplicado al arrancar, sin escribir nada.
   // EN: Saved theme applied at boot, without writing anything.
   aplicarTema();
@@ -231,6 +253,7 @@ export const useAjustes = defineStore("ajustes", () => {
     moneda,
     idioma,
     configurado,
+    minutosAutobloqueo,
     aplicarTema,
     setTema,
     toggleTema,
@@ -239,5 +262,6 @@ export const useAjustes = defineStore("ajustes", () => {
     setMoneda,
     setIdioma,
     marcarConfigurado,
+    setMinutosAutobloqueo,
   };
 });

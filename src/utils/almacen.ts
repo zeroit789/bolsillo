@@ -1,6 +1,15 @@
 /* =============================================================================
- * almacen.ts — Almacén persistente cifrado / Encrypted persistent store
+ * almacen.ts — Almacén heredado en localStorage / Legacy localStorage store
  * -----------------------------------------------------------------------------
+ * ES: HEREDADO (hasta la 1.1.0). Desde la 1.2.0 los datos viven en un fichero
+ *     cifrado que gestiona Rust (utils/boveda.ts); este módulo solo se usa
+ *     para leer el blob de localStorage y migrarlo, o para seguir guardando
+ *     ahí si la migración no se pudo verificar. El blob nunca se borra.
+ * EN: LEGACY (up to 1.1.0). Since 1.2.0 the data lives in an encrypted file
+ *     managed by Rust (utils/boveda.ts); this module is only used to read
+ *     the localStorage blob and migrate it, or to keep saving there if the
+ *     migration could not be verified. The blob is never deleted.
+ *
  * ES: Almacén persistente de los datos financieros, SIEMPRE cifrado en disco.
  *     Mantiene en memoria el "secreto" activo (derivado de la credencial del
  *     usuario o de un secreto de ofuscación) y cifra/descifra con él. Los ajustes

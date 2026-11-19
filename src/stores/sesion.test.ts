@@ -17,6 +17,7 @@ import { prepararDatos } from "../utils/migraciones";
 import { datosVacios } from "../data/demo";
 import { mesActual } from "../utils/format";
 import * as almacen from "../utils/almacen";
+import { simulador } from "../utils/rustSimulado";
 import { useAjustes } from "./ajustes";
 import { useFinanzas } from "./finanzas";
 import { useSesion } from "./sesion";
@@ -68,15 +69,34 @@ function copia(): DatosBolsillo {
   };
 }
 
-// ES: Simula cerrar y volver a abrir la app: stores nuevos, mismo localStorage.
-// EN: Simulates closing and reopening the app: fresh stores, same localStorage.
+// ES: Simula cerrar y volver a abrir la app: stores nuevos, mismo disco
+//     (simulado) y la clave de datos de Rust olvidada.
+// EN: Simulates closing and reopening the app: fresh stores, same (simulated)
+//     disk and Rust's data key forgotten.
 function reabrirApp() {
   setActivePinia(createPinia());
   almacen.usarOfuscacion();
+  simulador.reiniciarProceso();
+}
+
+// ES: Lo que hay ahora en datos.bolsillo (simulado), ya parseado.
+// EN: What is now in datos.bolsillo (simulated), already parsed.
+function enDisco(): DatosBolsillo {
+  return JSON.parse(simulador.estado.principal!.datos);
+}
+
+// ES: Bienvenida sin PIN y con los datos dados ya guardados.
+// EN: Welcome without a PIN and with the given data already saved.
+async function conDatos(d: DatosBolsillo) {
+  const s = useSesion();
+  await s.arrancar();
+  await s.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
+  await s.importarDatos(d);
 }
 
 beforeEach(() => {
   localStorage.clear();
+  simulador.reiniciar();
   reabrirApp();
 });
 
@@ -117,45 +137,81 @@ describe("bloqueo con PIN / PIN lock", () => {
     expect(useFinanzas().snapshot().planes).toHaveLength(planesAntes);
   });
 
-  it("cambiar el PIN exige el antiguo / changing the PIN requires the old one", async () => {
+  it("cambiar el PIN exige el antiguo y no invalida la recuperación / changing the PIN requires the old one and keeps recovery", async () => {
+    await conDatos(copia());
     const sesion = useSesion();
-    await sesion.configurarBloqueo("pin", "1111");
+    const clave = await sesion.configurarBloqueo("pin", "1111");
+    expect(sesion.claveRecuperacion).toBe(clave);
 
     expect(await sesion.cambiarCredencial("9999", "2222", "pin")).toBe(false);
-    expect(await almacen.secretoValido("1111")).toBe(true);
+    expect(simulador.estado.principal!.credencial).toBe("1111");
 
     expect(await sesion.cambiarCredencial("1111", "2222", "pin")).toBe(true);
-    expect(await almacen.secretoValido("2222")).toBe(true);
-    expect(await almacen.secretoValido("1111")).toBe(false);
+    expect(simulador.estado.principal!.credencial).toBe("2222");
+    reabrirApp();
+    const s2 = useSesion();
+    await s2.arrancar();
+    expect(await s2.desbloquearConRecuperacion(clave)).toBe(true);
+    expect(s2.porRecuperacion).toBe(true);
+    // ES: Con la recuperación se pone PIN nuevo sin el viejo.
+    // EN: With recovery a new PIN is set without the old one.
+    expect(await s2.restablecerCredencial("pin", "5050")).toBe(true);
+    expect(simulador.estado.principal!.credencial).toBe("5050");
   });
 
-  it("quitar el PIN vuelve a la ofuscación / removing the PIN goes back to obfuscation", async () => {
+  it("credenciales nuevas con mínimos: PIN de 4-6 cifras y contraseña de 8 / new credentials with minimums", async () => {
+    await conDatos(copia());
+    const sesion = useSesion();
+    await expect(sesion.configurarBloqueo("password", "corta")).rejects.toThrow(
+      "credencial-invalida"
+    );
+    await expect(sesion.configurarBloqueo("pin", "12")).rejects.toThrow("credencial-invalida");
+    expect(simulador.estado.principal!.bloqueo).toBe("ninguno");
+  });
+
+  it("quitar el PIN deja los datos solo ofuscados / removing the PIN leaves data only obfuscated", async () => {
+    await conDatos(copia());
     const sesion = useSesion();
     await sesion.configurarBloqueo("pin", "1111");
     await sesion.quitarBloqueo();
 
     expect(useAjustes().bloqueoActivo).toBe(false);
-    expect(await almacen.secretoValido("1111")).toBe(false);
-    // ES: Los datos siguen legibles con el secreto de ofuscación.
-    // EN: The data is still readable with the obfuscation secret.
-    almacen.usarOfuscacion();
-    expect((await almacen.leer()).estado).toBe("ok");
+    expect(simulador.estado.principal!.bloqueo).toBe("ninguno");
+    reabrirApp();
+    const s2 = useSesion();
+    await s2.arrancar();
+    expect(s2.desbloqueado).toBe(true);
+    expect(useFinanzas().snapshot()).toEqual(copia());
+  });
+
+  it("el bloqueo lo dice el fichero aunque se pierdan los ajustes (H1) / the file decides the lock even if settings are lost", async () => {
+    await conDatos(copia());
+    await useSesion().configurarBloqueo("pin", "1111");
+    localStorage.clear();
+    reabrirApp();
+    const s2 = useSesion();
+    await s2.arrancar();
+    expect(s2.necesitaOnboarding).toBe(false);
+    expect(s2.desbloqueado).toBe(false);
+    expect(useAjustes().bloqueoActivo).toBe(true);
+    expect(useAjustes().bloqueoTipo).toBe("pin");
+    expect(await s2.desbloquear("1111")).toBe(true);
+    expect(useFinanzas().snapshot()).toEqual(copia());
   });
 });
 
 describe("importar copia / import backup", () => {
   it("importa y persiste una copia válida / imports and persists a valid backup", async () => {
-    const sesion = useSesion();
-    await sesion.importarDatos(copia());
+    await conDatos(copia());
 
     expect(useFinanzas().snapshot()).toEqual(copia());
-    // ES: Queda guardada cifrada en disco. / EN: It is saved encrypted on disk.
-    expect(await almacen.leer()).toEqual({ estado: "ok", datos: copia() });
+    // ES: Queda guardada en el fichero. / EN: It is saved in the file.
+    expect(enDisco()).toEqual(copia());
   });
 
   it("rechaza una copia inválida sin tocar los datos / rejects an invalid backup without touching data", async () => {
+    await conDatos(copia());
     const sesion = useSesion();
-    await sesion.importarDatos(copia());
 
     await expect(sesion.importarDatos({ recurrentes: [] })).rejects.toThrow("copia-invalida");
     expect(useFinanzas().snapshot()).toEqual(copia());
@@ -173,6 +229,7 @@ describe("importar copia / import backup", () => {
       deudas,
       categoriasCustom: ["Mascotas"],
     };
+    await conDatos(datosVacios());
     await useSesion().importarDatos(antigua);
     const s = useFinanzas().snapshot();
     expect(s.version).toBe(VERSION_DATOS);
@@ -181,6 +238,7 @@ describe("importar copia / import backup", () => {
   });
 
   it("rechaza una copia de una versión más nueva / rejects a backup from a newer version", async () => {
+    await conDatos(datosVacios());
     const sesion = useSesion();
     await expect(sesion.importarDatos({ ...copia(), version: VERSION_DATOS + 1 })).rejects.toThrow(
       "copia-version"
@@ -188,13 +246,13 @@ describe("importar copia / import backup", () => {
   });
 
   it("la exportación (snapshot en JSON) se vuelve a importar igual / an export round-trips", async () => {
-    const sesion = useSesion();
-    await sesion.importarDatos(copia());
+    await conDatos(copia());
 
     // ES: Igual que AjustesView: snapshot serializado a JSON y vuelto a leer.
     // EN: Same as AjustesView: snapshot serialized to JSON and read back.
     const json = JSON.stringify(useFinanzas().snapshot(), null, 2);
     reabrirApp();
+    await useSesion().arrancar();
     await useSesion().importarDatos(JSON.parse(json));
     expect(useFinanzas().snapshot()).toEqual(copia());
   });
@@ -276,20 +334,34 @@ describe("datos iniciales y reemplazo / initial data and replacement", () => {
     const sesion = useSesion();
     await sesion.arrancar();
     expect(sesion.necesitaOnboarding).toBe(true);
-    expect(almacen.hayDatos()).toBe(false);
+    expect(simulador.estado.principal).toBeNull();
 
     await sesion.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "vacio" });
-    const r = await almacen.leer();
-    expect(r.estado === "ok" && r.datos.recurrentes.length === 0).toBe(true);
+    expect(enDisco().recurrentes).toHaveLength(0);
     expect(useAjustes().configurado).toBe(true);
+    // ES: Nada en localStorage: los datos viven en el fichero.
+    // EN: Nothing in localStorage: the data lives in the file.
+    expect(almacen.hayDatos()).toBe(false);
   });
 
   it("con ejemplo se guardan los datos de ejemplo / with samples the sample data is saved", async () => {
     const sesion = useSesion();
     await sesion.arrancar();
     await sesion.completarOnboarding({ nombre: "", bloqueo: null, datosIniciales: "ejemplo" });
-    const r = await almacen.leer();
-    expect(r.estado === "ok" && r.datos.recurrentes.length > 0).toBe(true);
+    expect(enDisco().recurrentes.length).toBeGreaterThan(0);
+  });
+
+  it("con PIN guarda la clave de recuperación para enseñarla una vez / with a PIN the recovery key is kept to show once", async () => {
+    const sesion = useSesion();
+    await sesion.arrancar();
+    await sesion.completarOnboarding({
+      nombre: "",
+      bloqueo: { tipo: "pin", credencial: "4831" },
+      datosIniciales: "vacio",
+    });
+    expect(sesion.claveRecuperacion).toMatch(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/);
+    sesion.olvidarClaveRecuperacion();
+    expect(sesion.claveRecuperacion).toBeNull();
   });
 
   it("Empezar de cero y Cargar ejemplo sustituyen y guardan / start from scratch and load samples replace and save", async () => {
@@ -299,12 +371,10 @@ describe("datos iniciales y reemplazo / initial data and replacement", () => {
 
     await sesion.reemplazarDatos("vacio");
     expect(useFinanzas().snapshot().deudas).toEqual([]);
-    let r = await almacen.leer();
-    expect(r.estado === "ok" && r.datos.deudas.length === 0).toBe(true);
+    expect(enDisco().deudas).toHaveLength(0);
 
     await sesion.reemplazarDatos("ejemplo");
-    r = await almacen.leer();
-    expect(r.estado === "ok" && r.datos.deudas.length > 0).toBe(true);
+    expect(enDisco().deudas.length).toBeGreaterThan(0);
     expect(sesion.estadoGuardado).toBe("ok");
   });
 });
