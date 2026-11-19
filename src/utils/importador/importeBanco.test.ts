@@ -69,6 +69,14 @@ describe("analizarImporteBanco con coma decimal / with decimal comma", () => {
     expect(c("0x10")).toBe("invalido");
   });
 
+  it("los espacios dentro del número solo valen como millares de tres / spaces inside the number are only valid as thousands of three", () => {
+    expect(c("1 234,56")).toBe(123456);
+    expect(c("1 234 567,89 €")).toBe(123456789);
+    expect(c("1 2,34")).toBe("invalido");
+    expect(c("12 34,00")).toBe("invalido");
+    expect(c("1 234,5 6")).toBe("invalido");
+  });
+
   it("vacío / empty", () => {
     expect(c("")).toBe("vacio");
     expect(c("   ")).toBe("vacio");

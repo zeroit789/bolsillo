@@ -81,32 +81,48 @@ export function analizarImporteBanco(
     return { tipo: "valido", centimos: centimos === 0 ? 0 : centimos };
   }
 
-  // ES: Quita espacios (también duros) y la moneda; el menos Unicode pasa a "-".
-  // EN: Drop spaces (non-breaking ones too) and the currency; Unicode minus -> "-".
-  let t = valor.replace(/\s/g, "").replace(/\u2212/g, "-");
+  // ES: El menos Unicode pasa a "-"; se recortan los espacios de los bordes
+  //     (\s incluye los duros) y la moneda de delante o de detrás.
+  // EN: Unicode minus becomes "-"; edge spaces are trimmed (\s includes the
+  //     non-breaking ones) and so is the currency before or after.
+  let t = valor.replace(/\u2212/g, "-").trim();
   if (t === "") return { tipo: "vacio" };
-  t = t.replace(/^(€|eur)|(€|eur)$/gi, "");
+  t = t
+    .replace(/^(€|eur)\s*/i, "")
+    .replace(/\s*(€|eur)$/i, "")
+    .trim();
 
   // ES: Marcas de signo: paréntesis, signo delante o "-" detrás. Solo una.
-  // EN: Sign marks: parentheses, sign in front or "-" after. Only one.
+  //     Entre el signo y el número puede haber espacios ("- 7,00").
+  // EN: Sign marks: parentheses, sign in front or "-" after. Only one. There
+  //     may be spaces between the sign and the number ("- 7,00").
   let negativo = false;
   let marcas = 0;
   if (t.startsWith("(") && t.endsWith(")")) {
-    t = t.slice(1, -1);
+    t = t.slice(1, -1).trim();
     negativo = true;
     marcas++;
   }
   if (t.startsWith("-") || t.startsWith("+")) {
     negativo = t[0] === "-";
-    t = t.slice(1);
+    t = t.slice(1).trim();
     marcas++;
   }
   if (t.endsWith("-")) {
-    t = t.slice(0, -1);
+    t = t.slice(0, -1).trim();
     negativo = true;
     marcas++;
   }
   if (marcas > 1) return { tipo: "invalido" };
+
+  // ES: Espacios DENTRO del número: solo como separador de millares en grupos
+  //     de tres ("1 234,56"); "1 2,34" es un error, no 12,34.
+  // EN: Spaces INSIDE the number: only as a thousands separator in groups of
+  //     three ("1 234,56"); "1 2,34" is an error, not 12.34.
+  if (/\s/.test(t)) {
+    if (!/^\d{1,3}(?:\s\d{3})+(?:[.,]\d+)?$/.test(t)) return { tipo: "invalido" };
+    t = t.replace(/\s/g, "");
+  }
 
   // ES: El resto tiene que ser un número bien formado en el formato pedido.
   // EN: The rest must be a well-formed number in the requested format.
