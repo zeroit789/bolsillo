@@ -26,9 +26,9 @@
   <img src="docs/screenshot.png" alt="Panel de Bolsillo con datos de ejemplo / Bolsillo dashboard with sample data" width="820">
 </p>
 
-> **ES:** Este README describe la rama `main`. Puede incluir cambios que todavía no están en la última versión publicada; mira [Novedades en `main`](#novedades-en-main-sin-publicar).
+> **ES:** Este README describe el código de la versión **1.2.0**. Hasta que salga en [Releases](https://github.com/zeroit789/bolsillo/releases), la última publicada es la 1.1.0; mira [Novedades de la 1.2.0](#novedades-de-la-120) y el [CHANGELOG](CHANGELOG.md).
 >
-> **EN:** This README describes the `main` branch. It may include changes that are not in the latest release yet; see [What's new in `main`](#whats-new-in-main-unreleased).
+> **EN:** This README describes the code of version **1.2.0**. Until it shows up in [Releases](https://github.com/zeroit789/bolsillo/releases), the latest published one is 1.1.0; see [What's new in 1.2.0](#whats-new-in-120) and the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -38,43 +38,50 @@
 
 ### Descarga
 
-La última versión publicada está en [Releases](https://github.com/zeroit789/bolsillo/releases/latest). Para Windows hay un instalador `.exe` (por ejemplo, `Bolsillo_1.1.0_x64-setup.exe`, el recomendado) y un `.msi`. Antes de instalar, lee [Instalar en Windows: SmartScreen y SHA256](#instalar-en-windows-smartscreen-y-sha256): el instalador no está firmado.
+La última versión publicada está en [Releases](https://github.com/zeroit789/bolsillo/releases/latest). Para Windows hay un instalador `.exe` (por ejemplo, `Bolsillo_1.2.0_x64-setup.exe`, el recomendado) y un `.msi`. Antes de instalar, lee [Instalar en Windows: SmartScreen y SHA256](#instalar-en-windows-smartscreen-y-sha256): el instalador no está firmado.
 
 ### Qué es
 
 Bolsillo es una app de escritorio hecha con Tauri para llevar las finanzas personales mes a mes: ingresos, gastos, deudas, ahorro y presupuestos. No usa servidores ni cuentas, y los datos no salen de tu equipo.
 
-Es un proyecto de portfolio de código abierto. La última versión publicada es la **1.1.0**.
+Es un proyecto de portfolio de código abierto. Este código es la versión **1.2.0**; los cambios de cada versión están en el [CHANGELOG](CHANGELOG.md).
 
 **Plataformas:**
 
 - **Windows**: es la única plataforma con instalador publicado y la única probada.
 - **macOS y Linux**: Tauri permite compilarla ahí (ver [Requisitos](#requisitos)), pero no hay binarios publicados y no se ha probado en esos sistemas.
 
-### Novedades en `main` (sin publicar)
+### Novedades de la 1.2.0
 
-Estos cambios están en el código, pero **no en la 1.1.0** que se descarga hoy. La 1.1.0 todavía carga las fuentes desde Google Fonts, no tiene CSP y mete los datos de ejemplo en el primer arranque.
+Respecto a la 1.1.0 (que carga las fuentes desde Google Fonts, no tiene CSP y mete los datos de ejemplo en el primer arranque):
+
+- **Importar extractos del banco** (CSV o Excel .xlsx) con vista previa, errores por fila, duplicados marcados y perfiles por banco. Ver [Funcionalidades](#funcionalidades).
+- **Reglas de categoría** y sugerencias de regla a partir de las categorías que corriges a mano.
+- **Fijos con frecuencia** semanal, mensual, trimestral o anual, y fin por fecha o por número de cobros.
+- **Transferencias entre cuentas y ajuste de saldo**, que mueven saldos sin contar como ingreso ni gasto.
 
 - **Datos en un fichero cifrado**: Rust guarda los datos en `datos.bolsillo` (escritura atómica), con AES-256-GCM, clave de datos envuelta, Argon2id, clave de recuperación, copias automáticas y recibos en ficheros aparte (ya no hay tope de unos 5 MB). Los datos de la 1.1.0 se migran solos y su `localStorage` no se borra. Detalle en [Privacidad y seguridad](#privacidad-y-seguridad) y [`docs/MIGRACION.md`](docs/MIGRACION.md).
-- **Versión de esquema y migraciones**: los datos guardados llevan un número de versión (ahora la 3, con fechas de calendario estrictas: una fecha imposible de antes se corrige y el valor original queda en una etiqueta). Al abrirlos, y al importar una copia, se migran a la versión actual y se validan campo a campo. Los datos sin versión se tratan como la 1.
+- **Versión de esquema y migraciones**: los datos guardados llevan un número de versión (ahora la 4; desde la 3, con fechas de calendario estrictas: una fecha imposible de antes se corrige y el valor original queda en una etiqueta). Al abrirlos, y al importar una copia, se migran a la versión actual y se validan campo a campo. Los datos sin versión se tratan como la 1.
 - **La app no pisa datos que no puede leer**: si el bloque cifrado está dañado, no se descifra, no pasa la validación o lo escribió una versión más nueva de Bolsillo, aparece una pantalla de rescate en vez de cargar el ejemplo encima. Si el bloque está dañado, no es válido o es de una versión más nueva, la app intenta guardar en ese momento una copia de rescate del bloque cifrado tal cual. Si lo que falla es la credencial (los datos pueden estar bien y faltar el PIN o la contraseña), la copia se aplaza hasta que elijas importar una copia o empezar de cero. Guardar la copia puede fallar, por ejemplo si no queda espacio: entonces la pantalla lo avisa, pide descargar antes los datos ilegibles y solo deja importar o empezar de cero si confirmas que se perderán. La pantalla también permite descargar el bloque y probar otra credencial, y empezar de cero no borra la copia de rescate.
 - **Aviso si falla el guardado**: si no se puede guardar (por ejemplo, porque el almacenamiento está lleno), sale un aviso fijo con botón de reintentar, y la app reintenta sola cada vez más espaciado (de 2 a 60 segundos). Al cerrar la ventana, la app intenta guardar lo pendiente; si falla o tarda más de 5 segundos, pide confirmación antes de cerrar sin esos cambios.
 - **Empezar vacío o con ejemplo**: la bienvenida pregunta si quieres empezar sin datos (la opción por defecto) o con los de ejemplo. En Ajustes hay dos botones, «Empezar de cero» y «Cargar ejemplo», los dos con confirmación; «Empezar de cero» quita los datos de ejemplo de una vez.
 - **Fuentes locales**: Syne y DM Sans van dentro de la app, así que no hay ninguna petición a Google Fonts. Sus licencias OFL 1.1 están en [`src/assets/fonts/`](src/assets/fonts/) y el build las copia a `dist/licencias/`.
 - **CSP** definida en `src-tauri/tauri.conf.json` (en la 1.1.0 era `null`).
 - **Accesibilidad**: se puede usar con el teclado, el foco se ve en los dos temas, los diálogos tienen `role="dialog"`, título asociado, foco atrapado y se cierran con `Esc`, los botones de icono y los campos tienen nombre accesible, y se respeta `prefers-reduced-motion`.
-- **Exportación bajo demanda**: ExcelJS y jsPDF solo se cargan al exportar. El bundle principal pasa de unos 1.612 kB a 245 kB.
+- **Exportación bajo demanda**: ExcelJS y jsPDF solo se cargan al exportar o al importar un Excel. El bundle principal pasa de unos 1.612 kB a unos 330 kB.
 - **Otros**: identificadores con `crypto.randomUUID()`, un único redondeo de importes (`utils/importe.ts`), dependencias al día y `cargo clippy` en la CI.
 
 ### Funcionalidades
 
-- **Movimientos**: gastos e ingresos fijos (se repiten cada mes, con día de pago opcional) o puntuales. Cada uno con categoría, fecha, comercio, etiquetas, cuenta y foto del recibo. Buscador y filtro por tipo.
+- **Movimientos**: gastos e ingresos fijos o puntuales. Los fijos se repiten cada semana, mes, trimestre o año, con día de pago o primer día opcionales, y pueden terminar en una fecha o tras un número de cobros; el formulario enseña cuándo cae el primer cobro. Cada movimiento lleva categoría, fecha, comercio, etiquetas, cuenta y foto del recibo. Buscador y filtro por tipo.
+- **Importar extractos**: el CSV o Excel (.xlsx) que descargas de la web del banco. El asistente propone las columnas (fecha, concepto e importe, o cargo y abono), entiende `1.234,56` y `1,234.56`, `dd/mm/aaaa` y `aaaa-mm-dd`, separador `;`, `,` o tabulador, y UTF-8 o Windows-1252. Antes de importar ves cada fila, los errores y los posibles duplicados (lo ya apuntado y las filas repetidas en el fichero), y decides fila a fila. Las columnas se guardan como perfil del banco y la próxima vez se reconocen solas. No lee Norma 43, OFX, QIF ni CAMT.053, ni los `.xls` antiguos.
+- **Reglas de categoría** (Ajustes): "si el concepto contiene X, la categoría es Y", con orden, activar o desactivar y solo ingresos o solo gastos. Al importar, lo que no encaja con ninguna regla va a "Otros". Si cambias a mano la categoría de un mismo comercio varias veces, Bolsillo propone la regla.
 - **Gasto dividido**: un mismo gasto repartido entre varias categorías.
 - **Plantillas de alta rápida**: movimientos habituales que se registran con un clic.
 - **Deudas**: tarjeta, préstamo, coche, hipoteca… con total, cuota mensual, lo ya pagado y día de cobro. La cuota cuenta como gasto fijo y la deuda se va saldando sola mes a mes (barra de progreso y meses restantes).
 - **Planes de ahorro**: metas con objetivo y aportaciones.
 - **Presupuestos por categoría** y **sobres** para repartir el dinero del mes.
-- **Cuentas y patrimonio**: varias cuentas o monederos con saldo inicial y patrimonio total.
+- **Cuentas y patrimonio**: varias cuentas o monederos con saldo inicial y patrimonio total. Transferencias entre cuentas (no son ingreso ni gasto) y "Ajustar saldo" para dejar una cuenta en lo que dice el banco, con su historial.
 - **Resumen del mes**: tarjetas de ingresos, gastos, disponible y gastos fijos; objetivo de gasto diario; gasto por categoría (gráfica de dona); evolución de ingresos y gastos; previsión de caja a 6 meses.
 - **Calendario** con mapa de calor del gasto diario.
 - **Historial**: tabla mes a mes, resumen anual, comparativa con el mes anterior y ranking de comercios («dónde gastas»).
@@ -89,7 +96,7 @@ Estos cambios están en el código, pero **no en la 1.1.0** que se descarga hoy.
 
 ### Privacidad y seguridad
 
-Los datos se guardan en tu equipo, en un fichero cifrado dentro del directorio de datos de la app (en Windows, `%APPDATA%\com.zeroit.bolsillo\datos.bolsillo`). Lo escribe el backend en Rust; el frontend no elige rutas. No hay telemetría ni llamadas a servidores, y la versión de `main` no hace ninguna petición externa. La 1.1.0 los guardaba en el `localStorage` del WebView: la primera vez que esta versión los lee, los migra al fichero sin borrar el original. Qué ficheros hay, cómo es la migración y cómo volver a la 1.1.0: [`docs/MIGRACION.md`](docs/MIGRACION.md).
+Los datos se guardan en tu equipo, en un fichero cifrado dentro del directorio de datos de la app (en Windows, `%APPDATA%\com.zeroit.bolsillo\datos.bolsillo`). Lo escribe el backend en Rust; el frontend no elige rutas. No hay telemetría ni llamadas a servidores, y la 1.2.0 no hace ninguna petición externa. Las reglas, los perfiles de banco, las transferencias y los ajustes van dentro del mismo fichero cifrado. Un extracto importado no se guarda: se lee en memoria y solo quedan los movimientos que importas. La 1.1.0 los guardaba en el `localStorage` del WebView: la primera vez que esta versión los lee, los migra al fichero sin borrar el original. Qué ficheros hay, cómo es la migración y cómo volver a la 1.1.0: [`docs/MIGRACION.md`](docs/MIGRACION.md).
 
 **Cómo se cifran** (`src-tauri/src/`): el contenido va cifrado con **AES-256-GCM** (crate `aes-gcm` 0.11.1) con una **clave de datos aleatoria de 256 bits**. Esa clave se guarda "envuelta" (cifrada) en la cabecera del fichero, una vez por cada forma de abrir:
 
@@ -123,10 +130,10 @@ El instalador **no está firmado** con un certificado de código, así que Windo
 Hazlo solo si has descargado el archivo de la página de [Releases](https://github.com/zeroit789/bolsillo/releases/latest) de este repositorio. Antes, comprueba su SHA256 en PowerShell:
 
 ```powershell
-Get-FileHash .\Bolsillo_1.1.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Bolsillo_1.2.0_x64-setup.exe -Algorithm SHA256
 ```
 
-Compara el resultado con el SHA256 que GitHub calcula para cada archivo de la release. Lo ves en la página de la release, junto a cada archivo, o con `gh release view v1.1.0 -R zeroit789/bolsillo --json assets`. Las notas de la 1.1.0 no incluyen los hashes; a partir de la 1.2.0 se publicarán también en las notas. Que el hash coincida demuestra que el archivo es el mismo que se subió a la release, no que se haya compilado a partir de este código.
+Compara el resultado con el que aparece para ese archivo en `SHA256SUMS`, un fichero adjunto a cada release desde la 1.2.0 (lo genera el flujo de publicación, [`.github/workflows/release.yml`](.github/workflows/release.yml), a partir de los archivos ya subidos). GitHub también enseña el SHA256 de cada archivo en la página de la release, o con `gh release view v1.2.0 -R zeroit789/bolsillo --json assets`; la 1.1.0 no tiene `SHA256SUMS`. Que el hash coincida demuestra que el archivo es el mismo que se subió a la release, no que se haya compilado a partir de este código.
 
 **Smart App Control**: si lo tienes activado, Windows bloquea las apps sin firmar y no permite excepciones para una app concreta ([FAQ de Microsoft](https://support.microsoft.com/windows/smart-app-control-faq-285ea03d-fa88-4d56-882e-6698afdb7003)). Con Smart App Control activo no podrás instalar Bolsillo.
 
@@ -175,11 +182,11 @@ pnpm tauri build      # ejecutable e instaladores de la versión publicada en sr
 
 **Perfil de desarrollo.** `pnpm tauri:dev` y `pnpm tauri:build:dev` fusionan `src-tauri/tauri.dev.conf.json` (JSON Merge Patch, RFC 7396) con la configuración normal. Cambian el nombre a «Bolsillo Dev» y el identificador a `com.zeroit.bolsillo.dev`, así que los datos de pruebas van a otra carpeta y no tocan los de la app instalada. **`pnpm tauri dev` a pelo usa el identificador de producción (`com.zeroit.bolsillo`) y abre los datos reales**: úsalo solo si sabes lo que haces.
 
-En el navegador (`pnpm dev`) la interfaz funciona, pero lo que depende de Tauri (diálogo de guardar al exportar y notificaciones nativas) solo va dentro de la app de escritorio.
+En el navegador (`pnpm dev`) la interfaz funciona, pero lo que depende de Tauri (diálogo de guardar al exportar y notificaciones nativas) solo va dentro de la app de escritorio. Para importar un extracto, el navegador usa su propio selector de ficheros en vez del diálogo nativo.
 
 ### Tests y CI
 
-- **Tests** (`pnpm test`): 380 tests en 29 ficheros, con Vitest y happy-dom, junto al código (`src/**/*.test.ts`); los de la sesión corren contra el backend de Rust simulado (`src/utils/rustSimulado.ts`), con las mismas reglas que el real. Cubren las deudas (cuotas, última cuota parcial, aviso de saldada), los planes, la comparativa entre meses y el resumen mensual, el redondeo de importes y su validación en los formularios (vacío, inválido, por encima del tope, gasto dividido y aportaciones a planes), la exportación a CSV/XLSX/PDF (con el diálogo y el comando de Tauri simulados), la importación y validación de copias, el cifrado con PIN (ida y vuelta, PIN incorrecto, datos manipulados y flujo de bloqueo completo), la recuperación ante datos ilegibles (en localStorage y en el fichero), la migración en tres fases y que no se remigra encima del fichero, las copias automáticas y la copia cifrada, el guardado (fallo, reintento, debounce, reemplazo que guarda antes de publicar y cambio de PIN), «Bloquear ahora» y el autobloqueo, los mínimos de credencial y el aviso de PIN débil, y el foco de los diálogos. Además, `cargo test` (71 tests) prueba el almacén cifrado de Rust.
+- **Tests** (`pnpm test`): 444 tests en 33 ficheros, con Vitest y happy-dom, junto al código (`src/**/*.test.ts`); los de la sesión corren contra el backend de Rust simulado (`src/utils/rustSimulado.ts`), con las mismas reglas que el real. Cubren las deudas (cuotas, última cuota parcial, aviso de saldada), los planes, la comparativa entre meses y el resumen mensual, el redondeo de importes y su validación en los formularios (vacío, inválido, por encima del tope, gasto dividido y aportaciones a planes), la exportación a CSV/XLSX/PDF (con el diálogo y el comando de Tauri simulados), la importación y validación de copias, el cifrado con PIN (ida y vuelta, PIN incorrecto, datos manipulados y flujo de bloqueo completo), la recuperación ante datos ilegibles (en localStorage y en el fichero), la migración en tres fases y que no se remigra encima del fichero, las copias automáticas y la copia cifrada, el guardado (fallo, reintento, debounce, reemplazo que guarda antes de publicar y cambio de PIN), «Bloquear ahora» y el autobloqueo, los mínimos de credencial y el aviso de PIN débil, el foco de los diálogos, la lectura de extractos (CSV, XLSX, importes y fechas de banco, perfiles, vista previa, duplicados y reglas), los recurrentes con frecuencia y cuotas, las transferencias y ajustes de saldo, y la migración a la versión 4 del esquema. Además, `cargo test` (72 tests) prueba el almacén cifrado de Rust, también que unos datos de la versión 4 salen idénticos del fichero y de las copias.
 - **Lint** (`pnpm lint`): ESLint con la flat config oficial de Vue + TypeScript (`eslint-plugin-vue` _essential_ + `vueTsConfigs.recommended`).
 - **Formato** (`pnpm format:check`): Prettier, separado del lint (`@vue/eslint-config-prettier/skip-formatting` evita que choquen).
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), en cada push y pull request a `main`:
@@ -196,6 +203,8 @@ Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm lint && pnp
 ```
 bolsillo/
 ├─ .github/workflows/ci.yml   # CI: gitleaks + lint + formato + tests + vue-tsc + build + cargo check + clippy + cargo test
+├─ .github/workflows/release.yml # con un tag v*: instaladores de Windows en un borrador de release + SHA256SUMS
+├─ CHANGELOG.md               # cambios de cada versión (ES y EN)
 ├─ docs/screenshot.png        # captura del README (datos de ejemplo)
 ├─ docs/MIGRACION.md          # ficheros de datos, migración desde la 1.1.0 y vuelta atrás
 ├─ art/                       # material gráfico
@@ -211,18 +220,22 @@ bolsillo/
 │  ├─ views/                  # 10 pantallas: resumen, movimientos, calendario, deudas,
 │  │                          #   planes, presupuestos, sobres, cuentas, historial, ajustes
 │  ├─ components/             # gráficas, modal de movimiento, onboarding, bloqueo,
-│  │                          #   AvisoGuardado (fallo al guardar) y PantallaErrorDatos (rescate)
+│  │                          #   AvisoGuardado (fallo al guardar), PantallaErrorDatos (rescate),
+│  │                          #   ImportarExtracto (asistente) y ReglasCategoria (Ajustes)
 │  ├─ stores/                 # Pinia: finanzas, ajustes y sesión (bloqueo, guardado y recuperación)
 │  ├─ utils/                  # boveda.ts (puente con el almacén cifrado de Rust), rustSimulado.ts
 │  │                          #   (Rust simulado: tests y pnpm dev), cripto.ts y almacen.ts (almacén
 │  │                          #   heredado de la 1.1.0), migraciones.ts, credencial.ts, autobloqueo.ts,
 │  │                          #   export.ts, importe.ts (redondeo), id.ts (identificadores),
 │  │                          #   useFocoAtrapado.ts (foco de diálogos), formato, deudas,
-│  │                          #   planes, comparativa, avisos (+ sus *.test.ts)
+│  │                          #   planes, comparativa, avisos, recurrencia.ts (frecuencias y cuotas),
+│  │                          #   transferencias.ts (saldos, transferencias y ajustes),
+│  │                          #   extracto.ts (abrir CSV/XLSX) e importador/ (CSV, XLSX, importes,
+│  │                          #   fechas, perfiles, vista previa, duplicados, reglas) (+ sus *.test.ts)
 │  ├─ data/                   # categorías por defecto y datos de ejemplo
 │  └─ types/                  # tipos del dominio, versión del esquema y validación
 └─ src-tauri/                 # capa nativa (Rust)
-   ├─ src/lib.rs              # plugins y comandos (almacén, copias, guardar_archivo con diálogo)
+   ├─ src/lib.rs              # plugins y comandos (almacén, copias, elegir_extracto y guardar_archivo con diálogo)
    ├─ src/boveda.rs           # almacén: abrir, guardar, crear, migrar, bloqueo, recuperación y copias
    ├─ src/formato.rs          # formato del fichero: cabecera en claro y clave de datos envuelta
    ├─ src/cripto.rs           # Argon2id, AES-256-GCM y bytes aleatorios
@@ -250,43 +263,50 @@ Las fuentes Syne y DM Sans (paquetes `@fontsource-variable/syne` y `@fontsource-
 
 ### Download
 
-The latest release is on [Releases](https://github.com/zeroit789/bolsillo/releases/latest). For Windows there's an `.exe` installer (for example `Bolsillo_1.1.0_x64-setup.exe`, the recommended one) and an `.msi`. Before installing, read [Installing on Windows: SmartScreen and SHA256](#installing-on-windows-smartscreen-and-sha256): the installer isn't signed.
+The latest release is on [Releases](https://github.com/zeroit789/bolsillo/releases/latest). For Windows there's an `.exe` installer (for example `Bolsillo_1.2.0_x64-setup.exe`, the recommended one) and an `.msi`. Before installing, read [Installing on Windows: SmartScreen and SHA256](#installing-on-windows-smartscreen-and-sha256): the installer isn't signed.
 
 ### What it is
 
 Bolsillo is a desktop app built with Tauri for tracking your personal finances month by month: income, expenses, debts, savings and budgets. There are no servers and no accounts, and your data never leaves your computer.
 
-It's an open-source portfolio project. The latest release is **1.1.0**.
+It's an open-source portfolio project. This code is version **1.2.0**; each version's changes are in the [CHANGELOG](CHANGELOG.md).
 
 **Platforms:**
 
 - **Windows**: the only platform with a published installer, and the only one tested.
 - **macOS and Linux**: Tauri lets you build it there (see [Requirements](#requirements)), but there are no published binaries and it hasn't been tested on those systems.
 
-### What's new in `main` (unreleased)
+### What's new in 1.2.0
 
-These changes are in the code but **not in 1.1.0**, which is what you download today. 1.1.0 still loads its fonts from Google Fonts, has no CSP and loads the sample data on first launch.
+Compared with 1.1.0 (which loads its fonts from Google Fonts, has no CSP and loads the sample data on first launch):
+
+- **Bank statement import** (CSV or Excel .xlsx) with a preview, errors per row, flagged duplicates and per-bank profiles. See [Features](#features).
+- **Category rules** and rule suggestions from the categories you correct by hand.
+- **Fixed items with a frequency**: weekly, monthly, quarterly or yearly, ending on a date or after a number of charges.
+- **Transfers between accounts and balance adjustment**, which move balances without counting as income or expense.
 
 - **Data in an encrypted file**: Rust stores the data in `datos.bolsillo` (atomic writes), with AES-256-GCM, a wrapped data key, Argon2id, a recovery key, automatic backups and receipts in separate files (there's no longer a ~5 MB cap). 1.1.0 data is migrated automatically and its `localStorage` isn't deleted. Details in [Privacy and security](#privacy-and-security) and [`docs/MIGRACION.md`](docs/MIGRACION.md).
-- **Schema version and migrations**: saved data carries a version number (currently 3, with strict calendar dates: an impossible old date is fixed and the original value is kept in a tag). When it's opened, and when a backup is imported, it's migrated to the current version and validated field by field. Data with no version is treated as version 1.
+- **Schema version and migrations**: saved data carries a version number (currently 4; since 3, with strict calendar dates: an impossible old date is fixed and the original value is kept in a tag). When it's opened, and when a backup is imported, it's migrated to the current version and validated field by field. Data with no version is treated as version 1.
 - **The app doesn't overwrite data it can't read**: if the encrypted blob is damaged, doesn't decrypt, fails validation or was written by a newer Bolsillo, you get a rescue screen instead of the sample data loaded on top. If the blob is damaged, invalid or from a newer version, the app tries to save a rescue copy of the encrypted blob as is right away. If the credential is what fails (the data may be fine and only the PIN or password be missing), the copy is put off until you choose to import a backup or start from scratch. Saving the copy can fail, for example when there is no space left: the screen then says so, asks you to download the unreadable data first and only lets you import or start from scratch if you confirm it will be lost. The screen also lets you download the blob and try another credential, and starting from scratch doesn't delete the rescue copy.
 - **Warning when saving fails**: if the data can't be saved (for example, because storage is full), a persistent warning with a retry button appears, and the app retries on its own with growing gaps (2 to 60 seconds). When you close the window, the app tries to save anything pending; if that fails or takes more than 5 seconds, it asks for confirmation before closing without those changes.
 - **Start empty or with samples**: the welcome screen asks whether to start with no data (the default) or with the sample data. Settings has two buttons, "Start from scratch" and "Load samples", both with a confirmation; "Start from scratch" removes the sample data in one go.
 - **Local fonts**: Syne and DM Sans ship inside the app, so there are no requests to Google Fonts. Their OFL 1.1 licenses are in [`src/assets/fonts/`](src/assets/fonts/) and the build copies them to `dist/licencias/`.
 - **CSP** set in `src-tauri/tauri.conf.json` (in 1.1.0 it was `null`).
 - **Accessibility**: usable from the keyboard, visible focus in both themes, dialogs with `role="dialog"`, a linked title, trapped focus and `Esc` to close, accessible names on icon buttons and fields, and `prefers-reduced-motion` is respected.
-- **On-demand export**: ExcelJS and jsPDF only load when you export. The main bundle drops from about 1,612 kB to 245 kB.
+- **On-demand export**: ExcelJS and jsPDF only load when you export or import an Excel file. The main bundle drops from about 1,612 kB to about 330 kB.
 - **Other**: IDs from `crypto.randomUUID()`, a single place for rounding amounts (`utils/importe.ts`), updated dependencies and `cargo clippy` in CI.
 
 ### Features
 
-- **Transactions**: recurring expenses and income (repeat every month, with an optional payment day) or one-off ones. Each has a category, date, merchant, tags, account and a receipt photo. Search box and type filter.
+- **Transactions**: recurring or one-off expenses and income. Recurring ones repeat every week, month, quarter or year, with an optional payment day or first day, and can end on a date or after a number of charges; the form shows when the first charge falls. Each transaction has a category, date, merchant, tags, account and a receipt photo. Search box and type filter.
+- **Statement import**: the CSV or Excel (.xlsx) file you download from your bank's website. The wizard proposes the columns (date, description and amount, or debit and credit), understands `1.234,56` and `1,234.56`, `dd/mm/yyyy` and `yyyy-mm-dd`, `;`, `,` or tab separators, and UTF-8 or Windows-1252. Before importing you see every row, the errors and possible duplicates (what's already entered and rows repeated in the file), and decide row by row. The columns are saved as the bank's profile and recognised on their own next time. It doesn't read Norma 43, OFX, QIF or CAMT.053, nor old `.xls` files.
+- **Category rules** (Settings): "if the description contains X, the category is Y", with ordering, enable or disable, and income only or expenses only. On import, anything no rule matches goes to "Otros". If you change the category of the same merchant by hand several times, Bolsillo proposes the rule.
 - **Split expenses**: spread a single expense across several categories.
 - **Quick-add templates**: log your usual transactions with one click.
 - **Debts**: credit card, loan, car, mortgage… with total, monthly payment, amount already paid and charge day. The payment counts as a recurring expense and the debt pays itself down month by month (progress bar and months left).
 - **Savings plans**: goals with a target and contributions.
 - **Category budgets** and **envelopes** to split up the month's money.
-- **Accounts and net worth**: multiple accounts or wallets with a starting balance and a total net worth.
+- **Accounts and net worth**: multiple accounts or wallets with a starting balance and a total net worth. Transfers between accounts (neither income nor expense) and "Adjust balance" to set an account to what the bank shows, with their history.
 - **Monthly summary**: income, expenses, available and recurring-expense cards; a daily spending target; spending by category (donut chart); income vs. expense trend; 6-month cash flow forecast.
 - **Calendar** with a heat map of daily spending.
 - **History**: month-by-month table, yearly summary, comparison with last month and a merchant ranking ("where your money goes").
@@ -301,7 +321,7 @@ These changes are in the code but **not in 1.1.0**, which is what you download t
 
 ### Privacy and security
 
-Data is stored on your computer, in an encrypted file inside the app data directory (on Windows, `%APPDATA%\com.zeroit.bolsillo\datos.bolsillo`). The Rust backend writes it; the frontend does not pick paths. There's no telemetry and no calls to any server, and the `main` version makes no outside requests. 1.1.0 kept the data in the WebView `localStorage`: the first time this version reads it, it migrates it to the file without deleting the original. Which files exist, how the migration works and how to go back to 1.1.0: [`docs/MIGRACION.md`](docs/MIGRACION.md).
+Data is stored on your computer, in an encrypted file inside the app data directory (on Windows, `%APPDATA%\com.zeroit.bolsillo\datos.bolsillo`). The Rust backend writes it; the frontend does not pick paths. There's no telemetry and no calls to any server, and 1.2.0 makes no outside requests. Rules, bank profiles, transfers and adjustments live inside the same encrypted file. An imported statement isn't stored: it's read in memory and only the transactions you import remain. 1.1.0 kept the data in the WebView `localStorage`: the first time this version reads it, it migrates it to the file without deleting the original. Which files exist, how the migration works and how to go back to 1.1.0: [`docs/MIGRACION.md`](docs/MIGRACION.md).
 
 **How it's encrypted** (`src-tauri/src/`): the content is encrypted with **AES-256-GCM** (crate `aes-gcm` 0.11.1) with a **random 256-bit data key**. That key is stored "wrapped" (encrypted) in the file header, once for each way to open it:
 
@@ -335,10 +355,10 @@ The installer **isn't signed** with a code-signing certificate, so Windows warns
 Only do this if you downloaded the file from this repository's [Releases](https://github.com/zeroit789/bolsillo/releases/latest) page. Check its SHA256 in PowerShell first:
 
 ```powershell
-Get-FileHash .\Bolsillo_1.1.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Bolsillo_1.2.0_x64-setup.exe -Algorithm SHA256
 ```
 
-Compare the result with the SHA256 GitHub computes for each release file. You can see it on the release page, next to each file, or with `gh release view v1.1.0 -R zeroit789/bolsillo --json assets`. The 1.1.0 release notes don't include the hashes; from 1.2.0 on they'll be in the notes too. A matching hash proves the file is the one uploaded to the release, not that it was built from this code.
+Compare the result with the one listed for that file in `SHA256SUMS`, a file attached to every release since 1.2.0 (the release workflow, [`.github/workflows/release.yml`](.github/workflows/release.yml), builds it from the files already uploaded). GitHub also shows each file's SHA256 on the release page, or with `gh release view v1.2.0 -R zeroit789/bolsillo --json assets`; 1.1.0 has no `SHA256SUMS`. A matching hash proves the file is the one uploaded to the release, not that it was built from this code.
 
 **Smart App Control**: if it's on, Windows blocks unsigned apps and doesn't allow exceptions for a single app ([Microsoft FAQ](https://support.microsoft.com/windows/smart-app-control-faq-285ea03d-fa88-4d56-882e-6698afdb7003)). With Smart App Control on, you won't be able to install Bolsillo.
 
@@ -387,11 +407,11 @@ pnpm tauri build      # executable and installers of the released app in src-tau
 
 **Development profile.** `pnpm tauri:dev` and `pnpm tauri:build:dev` merge `src-tauri/tauri.dev.conf.json` (JSON Merge Patch, RFC 7396) into the normal configuration. They change the name to "Bolsillo Dev" and the identifier to `com.zeroit.bolsillo.dev`, so test data goes to another folder and never touches the installed app's data. **Plain `pnpm tauri dev` uses the production identifier (`com.zeroit.bolsillo`) and opens the real data**: only use it if you know what you are doing.
 
-In the browser (`pnpm dev`) the UI works, but anything that relies on Tauri (the save dialog when exporting and native notifications) only works inside the desktop app.
+In the browser (`pnpm dev`) the UI works, but anything that relies on Tauri (the save dialog when exporting and native notifications) only works inside the desktop app. To import a statement, the browser uses its own file picker instead of the native dialog.
 
 ### Tests and CI
 
-- **Tests** (`pnpm test`): 380 tests in 29 files, with Vitest and happy-dom, next to the code (`src/**/*.test.ts`); the session ones run against the simulated Rust backend (`src/utils/rustSimulado.ts`), which follows the same rules as the real one. They cover debts (installments, final partial installment, settled notice), plans, the month-to-month comparison and the monthly summary, rounding of amounts and their validation in the forms (empty, invalid, above the cap, split expenses and plan contributions), CSV/XLSX/PDF export (with Tauri's dialog and command mocked), backup import and validation, PIN encryption (round trip, wrong PIN, tampered data and the full lock flow), recovery from unreadable data (in localStorage and in the file), the three-phase migration and that nothing is migrated on top of the file, automatic backups and the encrypted backup, saving (failure, retry, debounce, replace that saves before publishing and PIN change), "Lock now" and auto-lock, credential minimums and the weak PIN warning, and dialog focus. On top of that, `cargo test` (71 tests) checks the Rust encrypted store.
+- **Tests** (`pnpm test`): 444 tests in 33 files, with Vitest and happy-dom, next to the code (`src/**/*.test.ts`); the session ones run against the simulated Rust backend (`src/utils/rustSimulado.ts`), which follows the same rules as the real one. They cover debts (installments, final partial installment, settled notice), plans, the month-to-month comparison and the monthly summary, rounding of amounts and their validation in the forms (empty, invalid, above the cap, split expenses and plan contributions), CSV/XLSX/PDF export (with Tauri's dialog and command mocked), backup import and validation, PIN encryption (round trip, wrong PIN, tampered data and the full lock flow), recovery from unreadable data (in localStorage and in the file), the three-phase migration and that nothing is migrated on top of the file, automatic backups and the encrypted backup, saving (failure, retry, debounce, replace that saves before publishing and PIN change), "Lock now" and auto-lock, credential minimums and the weak PIN warning, dialog focus, statement reading (CSV, XLSX, bank amounts and dates, profiles, preview, duplicates and rules), recurring items with frequency and instalments, transfers and balance adjustments, and the migration to schema version 4. On top of that, `cargo test` (72 tests) checks the Rust encrypted store, including that version 4 data comes back identical from the file and the backups.
 - **Linting** (`pnpm lint`): ESLint with the official Vue + TypeScript flat config (`eslint-plugin-vue` _essential_ + `vueTsConfigs.recommended`).
 - **Formatting** (`pnpm format:check`): Prettier, kept apart from linting (`@vue/eslint-config-prettier/skip-formatting` stops them from clashing).
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request to `main`:
@@ -408,6 +428,8 @@ To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm lint && pnpm fo
 ```
 bolsillo/
 ├─ .github/workflows/ci.yml   # CI: gitleaks + lint + format + tests + vue-tsc + build + cargo check + clippy + cargo test
+├─ .github/workflows/release.yml # on a v* tag: Windows installers in a draft release + SHA256SUMS
+├─ CHANGELOG.md               # changes in each version (ES and EN)
 ├─ docs/screenshot.png        # README screenshot (sample data)
 ├─ docs/MIGRACION.md          # data files, migration from 1.1.0 and rolling back
 ├─ art/                       # artwork
@@ -423,18 +445,22 @@ bolsillo/
 │  ├─ views/                  # 10 screens: summary, transactions, calendar, debts,
 │  │                          #   plans, budgets, envelopes, accounts, history, settings
 │  ├─ components/             # charts, transaction modal, onboarding, lock screen,
-│  │                          #   AvisoGuardado (save failure) and PantallaErrorDatos (rescue)
+│  │                          #   AvisoGuardado (save failure), PantallaErrorDatos (rescue),
+│  │                          #   ImportarExtracto (wizard) and ReglasCategoria (Settings)
 │  ├─ stores/                 # Pinia: finances, settings and session (lock, saving and recovery)
 │  ├─ utils/                  # boveda.ts (bridge to the Rust encrypted store), rustSimulado.ts
 │  │                          #   (simulated Rust: tests and pnpm dev), cripto.ts and almacen.ts
 │  │                          #   (1.1.0 legacy store), migraciones.ts, credencial.ts, autobloqueo.ts,
 │  │                          #   export.ts, importe.ts (rounding), id.ts (IDs),
 │  │                          #   useFocoAtrapado.ts (dialog focus), formatting, debts,
-│  │                          #   plans, comparison, notifications (+ their *.test.ts)
+│  │                          #   plans, comparison, notifications, recurrencia.ts (frequencies and
+│  │                          #   instalments), transferencias.ts (balances, transfers and adjustments),
+│  │                          #   extracto.ts (open CSV/XLSX) and importador/ (CSV, XLSX, amounts,
+│  │                          #   dates, profiles, preview, duplicates, rules) (+ their *.test.ts)
 │  ├─ data/                   # default categories and sample data
 │  └─ types/                  # domain types, schema version and validation
 └─ src-tauri/                 # native layer (Rust)
-   ├─ src/lib.rs              # plugins and commands (store, backups, guardar_archivo with dialog)
+   ├─ src/lib.rs              # plugins and commands (store, backups, elegir_extracto and guardar_archivo with dialog)
    ├─ src/boveda.rs           # store: open, save, create, migrate, lock, recovery and backups
    ├─ src/formato.rs          # file format: plaintext header and wrapped data key
    ├─ src/cripto.rs           # Argon2id, AES-256-GCM and random bytes

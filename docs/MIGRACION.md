@@ -47,7 +47,7 @@ Si existe un `datos.bolsillo` válido, la 1.2.0 **nunca** vuelve a migrar desde 
 1. En la 1.2.0, **exporta una copia JSON** (Ajustes → Exportar copia). Es la forma de llevarte lo que hayas cambiado desde la migración.
 2. Copia la carpeta `%APPDATA%\com.zeroit.bolsillo\` entera a otro sitio (otro disco o fuera del PC). ⚠️ Por confirmar si el desinstalador de la 1.2.0 la borra.
 3. Instala la 1.1.0. Abrirá los datos de `localStorage` tal como estaban **en el momento de la migración**: lo que hiciste en la 1.2.0 no está ahí.
-4. Para tenerlo, importa en la 1.1.0 la copia JSON del paso 1. ⚠️ Por confirmar con la 1.1.0 real: la copia de la 1.2.0 lleva `version: 3`, que la 1.1.0 no conoce.
+4. Para tenerlo, importa en la 1.1.0 la copia JSON del paso 1. ⚠️ Por confirmar con la 1.1.0 real: la copia de la 1.2.0 lleva `version: 4`, que la 1.1.0 no conoce.
 
 La 1.1.0 no sabe leer `datos.bolsillo` y no lo toca. Si más tarde vuelves a la 1.2.0, esta abrirá `datos.bolsillo` (con lo que tenía al irte) y avisará de que `localStorage` cambió.
 
@@ -102,7 +102,7 @@ If a valid `datos.bolsillo` exists, 1.2.0 **never** migrates from `localStorage`
 1. In 1.2.0, **export a JSON backup** (Settings → Export backup). That is how you take along whatever changed since the migration.
 2. Copy the whole `%APPDATA%\com.zeroit.bolsillo\` folder somewhere else (another disk or off the PC). ⚠️ To be confirmed whether the 1.2.0 uninstaller deletes it.
 3. Install 1.1.0. It will open the `localStorage` data as it was **at the moment of the migration**: what you did in 1.2.0 is not there.
-4. To get it, import into 1.1.0 the JSON backup from step 1. ⚠️ To be confirmed with the real 1.1.0: the 1.2.0 backup carries `version: 3`, which 1.1.0 does not know.
+4. To get it, import into 1.1.0 the JSON backup from step 1. ⚠️ To be confirmed with the real 1.1.0: the 1.2.0 backup carries `version: 4`, which 1.1.0 does not know.
 
 1.1.0 cannot read `datos.bolsillo` and does not touch it. If you later go back to 1.2.0, it will open `datos.bolsillo` (with what it had when you left) and warn that `localStorage` changed.
 
