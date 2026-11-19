@@ -55,7 +55,8 @@ Es un proyecto de portfolio de código abierto. La última versión publicada es
 
 Estos cambios están en el código, pero **no en la 1.1.0** que se descarga hoy. La 1.1.0 todavía carga las fuentes desde Google Fonts, no tiene CSP y mete los datos de ejemplo en el primer arranque.
 
-- **Versión de esquema y migraciones**: los datos guardados llevan un número de versión (ahora la 2). Al abrirlos, y al importar una copia, se migran a la versión actual y se validan campo a campo. Los datos sin versión se tratan como la 1.
+- **Datos en un fichero cifrado**: Rust guarda los datos en `datos.bolsillo` (escritura atómica), con AES-256-GCM, clave de datos envuelta, Argon2id, clave de recuperación, copias automáticas y recibos en ficheros aparte (ya no hay tope de unos 5 MB). Los datos de la 1.1.0 se migran solos y su `localStorage` no se borra. Detalle en [Privacidad y seguridad](#privacidad-y-seguridad) y [`docs/MIGRACION.md`](docs/MIGRACION.md).
+- **Versión de esquema y migraciones**: los datos guardados llevan un número de versión (ahora la 3, con fechas de calendario estrictas: una fecha imposible de antes se corrige y el valor original queda en una etiqueta). Al abrirlos, y al importar una copia, se migran a la versión actual y se validan campo a campo. Los datos sin versión se tratan como la 1.
 - **La app no pisa datos que no puede leer**: si el bloque cifrado está dañado, no se descifra, no pasa la validación o lo escribió una versión más nueva de Bolsillo, aparece una pantalla de rescate en vez de cargar el ejemplo encima. Si el bloque está dañado, no es válido o es de una versión más nueva, la app intenta guardar en ese momento una copia de rescate del bloque cifrado tal cual. Si lo que falla es la credencial (los datos pueden estar bien y faltar el PIN o la contraseña), la copia se aplaza hasta que elijas importar una copia o empezar de cero. Guardar la copia puede fallar, por ejemplo si no queda espacio: entonces la pantalla lo avisa, pide descargar antes los datos ilegibles y solo deja importar o empezar de cero si confirmas que se perderán. La pantalla también permite descargar el bloque y probar otra credencial, y empezar de cero no borra la copia de rescate.
 - **Aviso si falla el guardado**: si no se puede guardar (por ejemplo, porque el almacenamiento está lleno), sale un aviso fijo con botón de reintentar, y la app reintenta sola cada vez más espaciado (de 2 a 60 segundos). Al cerrar la ventana, la app intenta guardar lo pendiente; si falla o tarda más de 5 segundos, pide confirmación antes de cerrar sin esos cambios.
 - **Empezar vacío o con ejemplo**: la bienvenida pregunta si quieres empezar sin datos (la opción por defecto) o con los de ejemplo. En Ajustes hay dos botones, «Empezar de cero» y «Cargar ejemplo», los dos con confirmación; «Empezar de cero» quita los datos de ejemplo de una vez.
@@ -87,34 +88,27 @@ Estos cambios están en el código, pero **no en la 1.1.0** que se descarga hoy.
 
 ### Privacidad y seguridad
 
-Los datos se guardan en el `localStorage` del WebView de Tauri, dentro del perfil de usuario de tu equipo. No hay telemetría ni llamadas a servidores, y la versión de `main` no hace ninguna petición externa.
+Los datos se guardan en tu equipo, en un fichero cifrado dentro del directorio de datos de la app (en Windows, `%APPDATA%\com.zeroit.bolsillo\datos.bolsillo`). Lo escribe el backend en Rust; el frontend no elige rutas. No hay telemetría ni llamadas a servidores, y la versión de `main` no hace ninguna petición externa. La 1.1.0 los guardaba en el `localStorage` del WebView: la primera vez que esta versión los lee, los migra al fichero sin borrar el original. Qué ficheros hay, cómo es la migración y cómo volver a la 1.1.0: [`docs/MIGRACION.md`](docs/MIGRACION.md).
 
-**Cómo se cifran** (`src/utils/cripto.ts`, `src/utils/almacen.ts`): los datos financieros van en una sola clave, `bolsillo.datos.cif`, cifrados con **AES-GCM de 256 bits**. La clave se deriva con **PBKDF2-SHA256 a 150.000 iteraciones**, con un salt aleatorio de 16 bytes y un IV de 12 bytes nuevos en cada guardado (Web Crypto API). Si la credencial es incorrecta o alguien ha tocado el cifrado, no se descifra; la app no distingue un caso del otro.
+**Cómo se cifran** (`src-tauri/src/`): el contenido va cifrado con **AES-256-GCM** (crate `aes-gcm` 0.11.1) con una **clave de datos aleatoria de 256 bits**. Esa clave se guarda "envuelta" (cifrada) en la cabecera del fichero, una vez por cada forma de abrir:
 
-Cuánto protege eso depende del bloqueo que tengas puesto:
+- **Con PIN o contraseña**: con una clave derivada de tu credencial con **Argon2id** (crate `argon2` 0.6.0) a m = 46 MiB, t = 1, p = 1, la primera configuración mínima de la [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) (consultada el 19-11-2026). Los parámetros y la sal van en la cabecera.
+- **Con la clave de recuperación**: se crea al poner el PIN o la contraseña (32 símbolos en 8 grupos, con comprobación de erratas) y se enseña una vez para que la apuntes. Abre los datos si olvidas el PIN. Cambiar el PIN no la invalida; generar otra sí.
+- **Sin PIN ni contraseña**: con una clave fija que está en el código público. **Eso no protege nada**: cualquiera que lea el fichero puede abrirlo. Solo evita que se vea a simple vista.
 
-**Sin PIN ni contraseña, los datos solo están ofuscados.** Se cifran con un secreto fijo que está en el código fuente, y el código es público. Cualquiera que pueda leer tu perfil de usuario puede descifrarlos. Solo evita que se vean a simple vista.
+La clave se deriva una vez al desbloquear y la clave de datos se queda en la memoria de Rust hasta que bloqueas (al bloquear se borra con `zeroize`). Hay «Bloquear ahora» y autobloqueo por inactividad (10 minutos por defecto). El tipo de bloqueo está en la cabecera del fichero, así que borrar los ajustes no quita el PIN. Al poner el PIN, o al generar otra clave de recuperación, la clave de datos cambia, y las copias automáticas que estaban solo ofuscadas pasan a pedir el PIN.
 
-**Con PIN (4 a 6 dígitos), la protección es débil frente a quien copie el perfil**, por esto:
+**Cuánto protege.** Argon2id hace cada intento mucho más caro que el PBKDF2 de la 1.1.0, pero un PIN de 4 cifras solo tiene 10.000 combinaciones: quien se lleve el fichero puede probarlas todas en su equipo. El PIN evita que alguien que abra la app en tu equipo vea tus datos; frente a una copia del fichero, usa una **contraseña larga** (mínimo 8 caracteres; mejor una frase de varias palabras). La app avisa si el PIN es de los fáciles (1234, 0000, 1212, años…).
 
-- Hay muy pocos PIN posibles: 10.000 de 4 dígitos y 1.110.000 entre 4 y 6 dígitos.
-- Quien copie el bloque cifrado puede probarlos todos en su propio ordenador. Ahí no hay límite de intentos ni esperas (dentro de la app tampoco los hay), solo el coste de PBKDF2.
-- Medido en un PC de sobremesa con Node.js, cada prueba tarda unos 16 ms en un solo hilo. Eso son unos 3 minutos para todos los PIN de 4 dígitos y unas 5 horas para todos los de 4 a 6, con un solo hilo. Repartido entre varios núcleos o con una GPU, mucho menos.
+**Copias automáticas** (`copias\`): las 10 últimas versiones (como mucho una cada 10 minutos) y una por día durante 30 días, cifradas igual que el original. Un fichero que no se puede leer nunca se pisa: se aparta a `rescate\`. Las copias están en el mismo disco: guarda también una **copia cifrada** fuera del PC (va con su propia contraseña, de al menos 8 caracteres, y se guarda con el diálogo nativo). La copia **JSON** se sigue pudiendo exportar e importar, pero **va sin cifrar**: lleva todos tus datos y fotos de recibos en texto legible.
 
-El PIN sirve para que alguien que abra la app en tu equipo no vea tus datos. No protege una copia del perfil.
+**Lo que se guarda en claro**, en el `localStorage` del WebView:
 
-**Usa una contraseña larga.** La app admite contraseñas desde 4 caracteres, pero una tan corta cae igual de rápido que un PIN. Con una frase de varias palabras, probar todas las combinaciones deja de ser viable. Para referencia, OWASP recomienda hoy 600.000 iteraciones para PBKDF2-HMAC-SHA256; Bolsillo usa 150.000. Si olvidas el PIN o la contraseña, los datos no se pueden recuperar.
-
-**Lo que se guarda en claro**, sin cifrar, en el mismo `localStorage`:
-
-- `bolsillo.ajustes`: tema, idioma, moneda, tu nombre, si hay bloqueo y si es PIN o contraseña, y si ya pasaste la bienvenida.
+- `bolsillo.ajustes`: tema, idioma, moneda, tu nombre, una copia del tipo de bloqueo (manda la del fichero), minutos del autobloqueo y si ya pasaste la bienvenida.
 - `bolsillo.categorias-custom`: los nombres de tus categorías propias.
 - `bolsillo.mes-visto`: el último mes que abriste.
-- `bolsillo.deudas.notificadas`, `bolsillo.pagos-avisados` y `bolsillo.recordatorio-mes`: control de las notificaciones (identificadores internos de deudas y movimientos ya avisados, y el mes del último recordatorio). No llevan importes ni conceptos.
-
-Las copias de rescate (`bolsillo.datos.rescate.<fecha>`) son el bloque cifrado tal cual, con el mismo nivel de protección que el original.
-
-**La copia de seguridad JSON se exporta sin cifrar.** El archivo `bolsillo-backup.json` lleva todos tus movimientos, deudas, planes, cuentas, fotos de recibos y categorías propias en texto legible. Trátalo como un documento sensible: no lo dejes en carpetas compartidas ni lo mandes por correo sin cifrarlo tú. Está previsto cifrarla en la próxima versión.
+- `bolsillo.deudas.notificadas`, `bolsillo.pagos-avisados` y `bolsillo.recordatorio-mes`: control de las notificaciones (identificadores internos y el mes del último recordatorio). No llevan importes ni conceptos.
+- Si venías de la 1.1.0, `bolsillo.datos.cif` (y sus `bolsillo.datos.rescate.<fecha>`) siguen ahí con la protección de entonces (PBKDF2 a 150.000 iteraciones, u ofuscación sin PIN). No se borran para poder volver atrás.
 
 **CSP** (`src-tauri/tauri.conf.json`, `csp` y `devCsp`): por defecto solo lo propio (`default-src 'self'`); solo código propio (`script-src 'self'`, sin `eval`); estilos propios y también en línea (`style-src 'self' 'unsafe-inline'`); fuentes propias (`font-src 'self'`); imágenes propias y en `data:`/`blob:` (recibos); conexiones solo a la propia app y al IPC de Tauri (`connect-src 'self' ipc: http://ipc.localhost`; en desarrollo también al servidor de Vite, `ws://localhost:1420` y `http://localhost:1420`); y nada de `object`, `frame` ni `base`/`form-action` ajenos (`object-src 'none'`, `frame-src 'none'`, `base-uri 'self'`, `form-action 'self'`).
 
@@ -190,18 +184,19 @@ En el navegador (`pnpm dev`) la interfaz funciona, pero lo que depende de Tauri 
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), en cada push y pull request a `main`:
   1. **Secretos**: `gitleaks` 8.30.1 (binario verificado por SHA256) sobre todo el historial.
   2. **Frontend**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `vue-tsc --noEmit` y `vite build` con Node 24 y pnpm 12.
-  3. **Rust**: en Windows (`windows-latest`, con caché de cargo), después del `vite build` que Tauri necesita para compilar: `cargo check --locked` y `cargo clippy --all-targets --locked -- -D warnings`. Comprueba tipos, dependencias (con el `Cargo.lock` tal cual) y los avisos de clippy; no genera el instalador.
+  3. **Rust**: en Windows (`windows-latest`, con caché de cargo), después del `vite build` que Tauri necesita para compilar: `cargo check --locked`, `cargo clippy --all-targets --locked -- -D warnings` y `cargo test --locked` (los tests del almacén cifrado: cifrado, PIN correcto e incorrecto, clave de recuperación sin PIN, datos grandes, recibos, fichero dañado, escritura atómica con fallo a mitad, copias rotativas, migración y copia cifrada). Comprueba tipos, dependencias (con el `Cargo.lock` tal cual) y los avisos de clippy; no genera el instalador.
 
   Las acciones de GitHub van fijadas por SHA completo.
 
-Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`, y en `src-tauri/`, `cargo clippy --all-targets -- -D warnings`.
+Para repetir la CI en local: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`, y en `src-tauri/`, `cargo clippy --all-targets -- -D warnings` y `cargo test`.
 
 ### Estructura
 
 ```
 bolsillo/
-├─ .github/workflows/ci.yml   # CI: gitleaks + lint + formato + tests + vue-tsc + build + cargo check + clippy
+├─ .github/workflows/ci.yml   # CI: gitleaks + lint + formato + tests + vue-tsc + build + cargo check + clippy + cargo test
 ├─ docs/screenshot.png        # captura del README (datos de ejemplo)
+├─ docs/MIGRACION.md          # ficheros de datos, migración desde la 1.1.0 y vuelta atrás
 ├─ art/                       # material gráfico
 ├─ public/                    # recursos estáticos
 ├─ index.html                 # página que monta la app
@@ -217,14 +212,21 @@ bolsillo/
 │  ├─ components/             # gráficas, modal de movimiento, onboarding, bloqueo,
 │  │                          #   AvisoGuardado (fallo al guardar) y PantallaErrorDatos (rescate)
 │  ├─ stores/                 # Pinia: finanzas, ajustes y sesión (bloqueo, guardado y recuperación)
-│  ├─ utils/                  # cripto.ts (cifrado), almacen.ts (almacenamiento), migraciones.ts,
+│  ├─ utils/                  # boveda.ts (puente con el almacén cifrado de Rust), rustSimulado.ts
+│  │                          #   (Rust simulado: tests y pnpm dev), cripto.ts y almacen.ts (almacén
+│  │                          #   heredado de la 1.1.0), migraciones.ts, credencial.ts, autobloqueo.ts,
 │  │                          #   export.ts, importe.ts (redondeo), id.ts (identificadores),
 │  │                          #   useFocoAtrapado.ts (foco de diálogos), formato, deudas,
 │  │                          #   planes, comparativa, avisos (+ sus *.test.ts)
 │  ├─ data/                   # categorías por defecto y datos de ejemplo
 │  └─ types/                  # tipos del dominio, versión del esquema y validación
 └─ src-tauri/                 # capa nativa (Rust)
-   ├─ src/lib.rs              # plugins y comando para escribir exportaciones a disco
+   ├─ src/lib.rs              # plugins y comandos (almacén, copias, guardar_archivo con diálogo)
+   ├─ src/boveda.rs           # almacén: abrir, guardar, crear, migrar, bloqueo, recuperación y copias
+   ├─ src/formato.rs          # formato del fichero: cabecera en claro y clave de datos envuelta
+   ├─ src/cripto.rs           # Argon2id, AES-256-GCM y bytes aleatorios
+   ├─ src/recuperacion.rs     # clave de recuperación con comprobación de erratas
+   ├─ src/directorio.rs       # escritura atómica, copias rotativas, rescate y recibos
    ├─ src/main.rs             # punto de entrada
    ├─ capabilities/           # permisos de la ventana
    ├─ tauri.conf.json         # ventana, CSP, build e instaladores
@@ -264,7 +266,8 @@ It's an open-source portfolio project. The latest release is **1.1.0**.
 
 These changes are in the code but **not in 1.1.0**, which is what you download today. 1.1.0 still loads its fonts from Google Fonts, has no CSP and loads the sample data on first launch.
 
-- **Schema version and migrations**: saved data carries a version number (currently 2). When it's opened, and when a backup is imported, it's migrated to the current version and validated field by field. Data with no version is treated as version 1.
+- **Data in an encrypted file**: Rust stores the data in `datos.bolsillo` (atomic writes), with AES-256-GCM, a wrapped data key, Argon2id, a recovery key, automatic backups and receipts in separate files (there's no longer a ~5 MB cap). 1.1.0 data is migrated automatically and its `localStorage` isn't deleted. Details in [Privacy and security](#privacy-and-security) and [`docs/MIGRACION.md`](docs/MIGRACION.md).
+- **Schema version and migrations**: saved data carries a version number (currently 3, with strict calendar dates: an impossible old date is fixed and the original value is kept in a tag). When it's opened, and when a backup is imported, it's migrated to the current version and validated field by field. Data with no version is treated as version 1.
 - **The app doesn't overwrite data it can't read**: if the encrypted blob is damaged, doesn't decrypt, fails validation or was written by a newer Bolsillo, you get a rescue screen instead of the sample data loaded on top. If the blob is damaged, invalid or from a newer version, the app tries to save a rescue copy of the encrypted blob as is right away. If the credential is what fails (the data may be fine and only the PIN or password be missing), the copy is put off until you choose to import a backup or start from scratch. Saving the copy can fail, for example when there is no space left: the screen then says so, asks you to download the unreadable data first and only lets you import or start from scratch if you confirm it will be lost. The screen also lets you download the blob and try another credential, and starting from scratch doesn't delete the rescue copy.
 - **Warning when saving fails**: if the data can't be saved (for example, because storage is full), a persistent warning with a retry button appears, and the app retries on its own with growing gaps (2 to 60 seconds). When you close the window, the app tries to save anything pending; if that fails or takes more than 5 seconds, it asks for confirmation before closing without those changes.
 - **Start empty or with samples**: the welcome screen asks whether to start with no data (the default) or with the sample data. Settings has two buttons, "Start from scratch" and "Load samples", both with a confirmation; "Start from scratch" removes the sample data in one go.
@@ -296,34 +299,27 @@ These changes are in the code but **not in 1.1.0**, which is what you download t
 
 ### Privacy and security
 
-Data is stored in the Tauri WebView's `localStorage`, inside your user profile on your computer. There's no telemetry and no calls to any server, and the `main` version makes no outside requests.
+Data is stored on your computer, in an encrypted file inside the app data directory (on Windows, `%APPDATA%\com.zeroit.bolsillo\datos.bolsillo`). The Rust backend writes it; the frontend does not pick paths. There's no telemetry and no calls to any server, and the `main` version makes no outside requests. 1.1.0 kept the data in the WebView `localStorage`: the first time this version reads it, it migrates it to the file without deleting the original. Which files exist, how the migration works and how to go back to 1.1.0: [`docs/MIGRACION.md`](docs/MIGRACION.md).
 
-**How it's encrypted** (`src/utils/cripto.ts`, `src/utils/almacen.ts`): the financial data lives under a single key, `bolsillo.datos.cif`, encrypted with **256-bit AES-GCM**. The key is derived with **PBKDF2-SHA256 at 150,000 iterations**, with a fresh random 16-byte salt and 12-byte IV on every save (Web Crypto API). A wrong credential and a tampered ciphertext both fail to decrypt; the app can't tell the two apart.
+**How it's encrypted** (`src-tauri/src/`): the content is encrypted with **AES-256-GCM** (crate `aes-gcm` 0.11.1) with a **random 256-bit data key**. That key is stored "wrapped" (encrypted) in the file header, once for each way to open it:
 
-How much that protects you depends on your lock setting:
+- **With a PIN or password**: with a key derived from your credential with **Argon2id** (crate `argon2` 0.6.0) at m = 46 MiB, t = 1, p = 1, the first minimum configuration of the [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) (checked on 2026-11-19). The parameters and salt live in the header.
+- **With the recovery key**: created when you set the PIN or password (32 symbols in 8 groups, with typo detection) and shown once so you can write it down. It opens the data if you forget the PIN. Changing the PIN doesn't invalidate it; generating a new one does.
+- **With no PIN or password**: with a fixed key that lives in the public code. **That protects nothing**: anyone who can read the file can open it. It only keeps it from being readable at a glance.
 
-**With no PIN or password, the data is only obfuscated.** It's encrypted with a fixed secret that lives in the source code, and the code is public. Anyone who can read your user profile can decrypt it. It only keeps the data from being readable at a glance.
+The key is derived once when you unlock, and the data key stays in Rust's memory until you lock (on lock it's wiped with `zeroize`). There's "Lock now" and an inactivity auto-lock (10 minutes by default). The lock type lives in the file header, so wiping the settings doesn't remove the PIN. When you set the PIN, or generate a new recovery key, the data key changes, and the automatic backups that were only obfuscated start asking for the PIN.
 
-**With a PIN (4 to 6 digits), protection is weak against someone who copies your profile**, because:
+**How much it protects.** Argon2id makes each guess far more expensive than 1.1.0's PBKDF2, but a 4-digit PIN only has 10,000 combinations: whoever takes the file can try them all on their own computer. A PIN keeps someone who opens the app on your computer from seeing your data; against a copy of the file, use a **long password** (8 characters minimum; better a phrase of several words). The app warns you if the PIN is an easy one (1234, 0000, 1212, years…).
 
-- There are very few possible PINs: 10,000 with 4 digits and 1,110,000 from 4 to 6 digits.
-- Whoever copies the encrypted blob can try them all on their own computer. There's no attempt limit or delay there (there isn't one inside the app either), only the cost of PBKDF2.
-- Measured on a desktop PC with Node.js, each guess takes about 16 ms on a single thread. That's about 3 minutes for every 4-digit PIN and about 5 hours for every PIN from 4 to 6 digits, on one thread. Spread across several cores or on a GPU, much less.
+**Automatic backups** (`copias\`): the last 10 versions (at most one every 10 minutes) and one per day for 30 days, encrypted like the original. A file that can't be read is never overwritten: it's moved to `rescate\`. The backups are on the same disk: also keep an **encrypted backup** off the PC (it has its own password, at least 8 characters, and is saved with the native dialog). The **JSON** backup can still be exported and imported, but it's **unencrypted**: it holds all your data and receipt photos as readable text.
 
-A PIN keeps someone who opens the app on your computer from seeing your data. It doesn't protect a copy of your profile.
+**What's stored in plain text**, in the WebView `localStorage`:
 
-**Use a long password.** The app accepts passwords from 4 characters, but one that short falls as quickly as a PIN. With a phrase of several words, trying every combination stops being feasible. For reference, OWASP currently recommends 600,000 iterations for PBKDF2-HMAC-SHA256; Bolsillo uses 150,000. If you forget the PIN or password, the data can't be recovered.
-
-**What's stored in plain text**, unencrypted, in the same `localStorage`:
-
-- `bolsillo.ajustes`: theme, language, currency, your name, whether there's a lock and whether it's a PIN or a password, and whether you've finished the welcome screen.
+- `bolsillo.ajustes`: theme, language, currency, your name, a copy of the lock type (the file's one rules), the auto-lock minutes and whether you've finished the welcome screen.
 - `bolsillo.categorias-custom`: the names of your custom categories.
 - `bolsillo.mes-visto`: the last month you opened.
-- `bolsillo.deudas.notificadas`, `bolsillo.pagos-avisados` and `bolsillo.recordatorio-mes`: notification bookkeeping (internal IDs of debts and transactions already notified, and the month of the last reminder). They hold no amounts or descriptions.
-
-Rescue copies (`bolsillo.datos.rescate.<date>`) are the encrypted blob as is, with the same protection as the original.
-
-**The JSON backup is exported unencrypted.** The `bolsillo-backup.json` file holds all your transactions, debts, plans, accounts, receipt photos and custom categories as readable text. Treat it as a sensitive document: don't leave it in shared folders or email it without encrypting it yourself. Encrypting it is planned for the next release.
+- `bolsillo.deudas.notificadas`, `bolsillo.pagos-avisados` and `bolsillo.recordatorio-mes`: notification bookkeeping (internal IDs and the month of the last reminder). They hold no amounts or descriptions.
+- If you came from 1.1.0, `bolsillo.datos.cif` (and its `bolsillo.datos.rescate.<date>`) are still there with the protection they had then (PBKDF2 at 150,000 iterations, or obfuscation without a PIN). They're kept so you can go back.
 
 **CSP** (`src-tauri/tauri.conf.json`, `csp` and `devCsp`): only the app's own sources by default (`default-src 'self'`); only the app's own code (`script-src 'self'`, no `eval`); its own styles plus inline ones (`style-src 'self' 'unsafe-inline'`); its own fonts (`font-src 'self'`); its own images plus `data:`/`blob:` (receipts); connections only to the app itself and to Tauri's IPC (`connect-src 'self' ipc: http://ipc.localhost`; in development also to the Vite server, `ws://localhost:1420` and `http://localhost:1420`); and no outside `object`, `frame` or `base`/`form-action` (`object-src 'none'`, `frame-src 'none'`, `base-uri 'self'`, `form-action 'self'`).
 
@@ -399,18 +395,19 @@ In the browser (`pnpm dev`) the UI works, but anything that relies on Tauri (the
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request to `main`:
   1. **Secrets**: `gitleaks` 8.30.1 (binary verified by SHA256) over the full history.
   2. **Frontend**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm format:check`, `pnpm test`, `vue-tsc --noEmit` and `vite build` on Node 24 and pnpm 12.
-  3. **Rust**: on Windows (`windows-latest`, with a cargo cache), after the `vite build` Tauri needs to compile: `cargo check --locked` and `cargo clippy --all-targets --locked -- -D warnings`. It checks types, dependencies (against the committed `Cargo.lock`) and clippy warnings; it doesn't build the installer.
+  3. **Rust**: on Windows (`windows-latest`, with a cargo cache), after the `vite build` Tauri needs to compile: `cargo check --locked`, `cargo clippy --all-targets --locked -- -D warnings` and `cargo test --locked` (the encrypted store tests: encryption, right and wrong PIN, recovery key without the PIN, large data, receipts, damaged file, atomic write with a failure halfway, rotating backups, migration and encrypted backup). It checks types, dependencies (against the committed `Cargo.lock`) and clippy warnings; it doesn't build the installer.
 
   GitHub Actions are pinned to full commit SHAs.
 
-To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`, and in `src-tauri/`, `cargo clippy --all-targets -- -D warnings`.
+To reproduce CI locally: `pnpm install --frozen-lockfile && pnpm lint && pnpm format:check && pnpm test && pnpm build`, and in `src-tauri/`, `cargo clippy --all-targets -- -D warnings` and `cargo test`.
 
 ### Project structure
 
 ```
 bolsillo/
-├─ .github/workflows/ci.yml   # CI: gitleaks + lint + format + tests + vue-tsc + build + cargo check + clippy
+├─ .github/workflows/ci.yml   # CI: gitleaks + lint + format + tests + vue-tsc + build + cargo check + clippy + cargo test
 ├─ docs/screenshot.png        # README screenshot (sample data)
+├─ docs/MIGRACION.md          # data files, migration from 1.1.0 and rolling back
 ├─ art/                       # artwork
 ├─ public/                    # static assets
 ├─ index.html                 # page that mounts the app
@@ -426,14 +423,21 @@ bolsillo/
 │  ├─ components/             # charts, transaction modal, onboarding, lock screen,
 │  │                          #   AvisoGuardado (save failure) and PantallaErrorDatos (rescue)
 │  ├─ stores/                 # Pinia: finances, settings and session (lock, saving and recovery)
-│  ├─ utils/                  # cripto.ts (encryption), almacen.ts (storage), migraciones.ts,
+│  ├─ utils/                  # boveda.ts (bridge to the Rust encrypted store), rustSimulado.ts
+│  │                          #   (simulated Rust: tests and pnpm dev), cripto.ts and almacen.ts
+│  │                          #   (1.1.0 legacy store), migraciones.ts, credencial.ts, autobloqueo.ts,
 │  │                          #   export.ts, importe.ts (rounding), id.ts (IDs),
 │  │                          #   useFocoAtrapado.ts (dialog focus), formatting, debts,
 │  │                          #   plans, comparison, notifications (+ their *.test.ts)
 │  ├─ data/                   # default categories and sample data
 │  └─ types/                  # domain types, schema version and validation
 └─ src-tauri/                 # native layer (Rust)
-   ├─ src/lib.rs              # plugins and the command that writes exports to disk
+   ├─ src/lib.rs              # plugins and commands (store, backups, guardar_archivo with dialog)
+   ├─ src/boveda.rs           # store: open, save, create, migrate, lock, recovery and backups
+   ├─ src/formato.rs          # file format: plaintext header and wrapped data key
+   ├─ src/cripto.rs           # Argon2id, AES-256-GCM and random bytes
+   ├─ src/recuperacion.rs     # recovery key with typo detection
+   ├─ src/directorio.rs       # atomic write, rotating backups, rescue and receipts
    ├─ src/main.rs             # entry point
    ├─ capabilities/           # window permissions
    ├─ tauri.conf.json         # window, CSP, build and installers
