@@ -140,6 +140,61 @@ describe("detectarDuplicados contra lo apuntado / against what is entered", () =
     ]);
   });
 
+  it("coincide con la búsqueda exhaustiva en casos aleatorios (semilla fija) / matches exhaustive search on random cases (fixed seed)", () => {
+    // ES: Generador pseudoaleatorio reproducible (mulberry32).
+    // EN: Reproducible pseudo-random generator (mulberry32).
+    let semilla = 20261119;
+    const azar = () => {
+      semilla = (semilla + 0x6d2b79f5) | 0;
+      let t = Math.imul(semilla ^ (semilla >>> 15), 1 | semilla);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const entero = (n: number) => Math.floor(azar() * n);
+    const dia = (d: number) => `2026-02-${String(d + 1).padStart(2, "0")}`;
+
+    // ES: Mejor (máximo de parejas, mínima suma de días) probando todo.
+    // EN: Best (maximum pairs, minimum sum of days) by trying everything.
+    function exhaustiva(dF: number[], dA: number[], tol: number): [number, number] {
+      let mejor: [number, number] = [0, 0];
+      const usado = new Array<boolean>(dA.length).fill(false);
+      const probar = (i: number, parejas: number, suma: number) => {
+        if (i === dF.length) {
+          if (parejas > mejor[0] || (parejas === mejor[0] && suma < mejor[1])) {
+            mejor = [parejas, suma];
+          }
+          return;
+        }
+        probar(i + 1, parejas, suma);
+        dA.forEach((d, j) => {
+          const dist = Math.abs(dF[i] - d);
+          if (usado[j] || dist > tol) return;
+          usado[j] = true;
+          probar(i + 1, parejas + 1, suma + dist);
+          usado[j] = false;
+        });
+      };
+      probar(0, 0, 0);
+      return mejor;
+    }
+
+    for (let caso = 0; caso < 400; caso++) {
+      const dF = Array.from({ length: 1 + entero(5) }, () => entero(7));
+      const dA = Array.from({ length: 1 + entero(5) }, () => entero(7));
+      const tol = entero(4);
+      const marcas = detectarDuplicados(
+        dF.map((d, i) => fila(i + 2, dia(d), "PAN", 100)),
+        dA.map((d, j) => apunte(`a${j}`, dia(d), "pan", 1)),
+        { toleranciaDias: tol }
+      ).filter((m) => m.tipo === "apuntado");
+      const suma = marcas.reduce((s, m) => s + (m.tipo === "apuntado" ? m.dias : 0), 0);
+      const ids = new Set(marcas.map((m) => (m.tipo === "apuntado" ? m.id : "")));
+      const contexto = JSON.stringify({ dF, dA, tol });
+      expect([marcas.length, suma], contexto).toEqual(exhaustiva(dF, dA, tol));
+      expect(ids.size, contexto).toBe(marcas.length);
+    }
+  });
+
   it("distinto signo, importe o concepto no casan / different sign, amount or concept do not match", () => {
     const filas = [fila(2, "2026-02-03", "BIZUM", 1500, "ingreso")];
     expect(detectarDuplicados(filas, [apunte("a", "2026-02-03", "Bizum", 15, "gasto")])).toEqual(
