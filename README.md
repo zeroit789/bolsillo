@@ -150,7 +150,7 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 | Estado                        | `pinia` · `@vue/devtools-api`                                | 4.1.0 · 8.2.1              |
 | Estilos                       | `tailwindcss` · `@tailwindcss/vite`                          | 4.3.5 · 4.3.5              |
 | Fuentes                       | `@fontsource-variable/syne` · `@fontsource-variable/dm-sans` | 5.3.0 · 5.3.0              |
-| Build                         | `vite` · `@vitejs/plugin-vue`                                | 6.4.6 · 5.2.4              |
+| Build                         | `vite` · `@vitejs/plugin-vue`                                | 8.3.8 · 6.0.11             |
 | Tipos                         | `typescript` · `vue-tsc`                                     | 5.6.3 · 2.2.12             |
 | Lint y formato                | `eslint` · `eslint-plugin-vue` · `prettier`                  | 10.15.0 · 10.12.1 · 3.10.1 |
 | Tests                         | `vitest` · `happy-dom`                                       | 5.1.1 · 21.0.4             |
@@ -375,7 +375,7 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 | State                      | `pinia` · `@vue/devtools-api`                                | 4.1.0 · 8.2.1              |
 | Styling                    | `tailwindcss` · `@tailwindcss/vite`                          | 4.3.5 · 4.3.5              |
 | Fonts                      | `@fontsource-variable/syne` · `@fontsource-variable/dm-sans` | 5.3.0 · 5.3.0              |
-| Build                      | `vite` · `@vitejs/plugin-vue`                                | 6.4.6 · 5.2.4              |
+| Build                      | `vite` · `@vitejs/plugin-vue`                                | 8.3.8 · 6.0.11             |
 | Types                      | `typescript` · `vue-tsc`                                     | 5.6.3 · 2.2.12             |
 | Linting and formatting     | `eslint` · `eslint-plugin-vue` · `prettier`                  | 10.15.0 · 10.12.1 · 3.10.1 |
 | Tests                      | `vitest` · `happy-dom`                                       | 5.1.1 · 21.0.4             |
