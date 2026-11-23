@@ -143,7 +143,7 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 
 | Pieza                         | Paquete                                                      | Versión                    |
 | ----------------------------- | ------------------------------------------------------------ | -------------------------- |
-| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.7 · 2.12.5            |
+| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.7 · 2.12.6            |
 | API de Tauri para el frontend | `@tauri-apps/api`                                            | 2.12.5                     |
 | Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener`    | 2.8.4 · 2.8.1 · 2.7.3      |
 | Interfaz                      | `vue`                                                        | 3.5.45                     |
@@ -368,7 +368,7 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 
 | Part                       | Package                                                      | Version                    |
 | -------------------------- | ------------------------------------------------------------ | -------------------------- |
-| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.7 · 2.12.5            |
+| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.7 · 2.12.6            |
 | Tauri API for the frontend | `@tauri-apps/api`                                            | 2.12.5                     |
 | Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener`    | 2.8.4 · 2.8.1 · 2.7.3      |
 | UI                         | `vue`                                                        | 3.5.45                     |
