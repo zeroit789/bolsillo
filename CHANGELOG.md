@@ -15,6 +15,7 @@ All notable changes to Bolsillo are in this file. The format follows [Keep a Cha
 #### Cambiado
 
 - La CI y el flujo de publicación usan `pnpm/action-setup` 6.1.1 (antes 6.1.0), fijado por SHA.
+- Crates de Rust: `tauri` 2.12.7 (antes 2.12.5), `tauri-build` 2.7.6 (antes 2.7.4), `serde` 1.0.229 y `serde_json` 1.0.154. `@tauri-apps/api` sigue en 2.12.5, en la misma versión menor que `tauri`.
 
 ### [1.2.0] - 2026-11-19
 
@@ -81,6 +82,7 @@ Primera versión publicada: movimientos fijos y puntuales con categoría, comerc
 #### Changed
 
 - CI and the release workflow use `pnpm/action-setup` 6.1.1 (was 6.1.0), pinned by SHA.
+- Rust crates: `tauri` 2.12.7 (was 2.12.5), `tauri-build` 2.7.6 (was 2.7.4), `serde` 1.0.229 and `serde_json` 1.0.154. `@tauri-apps/api` stays on 2.12.5, on the same minor version as `tauri`.
 
 ### [1.2.0] - 2026-11-19
 

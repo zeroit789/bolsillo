@@ -143,7 +143,7 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 
 | Pieza                         | Paquete                                                      | Versión                    |
 | ----------------------------- | ------------------------------------------------------------ | -------------------------- |
-| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.5 · 2.12.5            |
+| Núcleo de escritorio          | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.7 · 2.12.5            |
 | API de Tauri para el frontend | `@tauri-apps/api`                                            | 2.12.5                     |
 | Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener`    | 2.8.4 · 2.8.1 · 2.7.3      |
 | Interfaz                      | `vue`                                                        | 3.5.45                     |
@@ -155,9 +155,9 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 | Lint y formato                | `eslint` · `eslint-plugin-vue` · `prettier`                  | 10.15.0 · 10.12.1 · 3.10.1 |
 | Tests                         | `vitest` · `happy-dom`                                       | 5.1.1 · 21.0.4             |
 | Exportación                   | `exceljs` · `jspdf` · `jspdf-autotable`                      | 4.4.0 · 4.2.1 · 5.0.9      |
-| Serialización (Rust)          | `serde` · `serde_json`                                       | 1.0.228 · 1.0.150          |
+| Serialización (Rust)          | `serde` · `serde_json`                                       | 1.0.229 · 1.0.154          |
 
-Los crates de los plugins (`tauri-plugin-dialog`, `-notification`, `-opener`) llevan las mismas versiones que sus paquetes npm.
+Los crates de los plugins (`tauri-plugin-dialog`, `-notification`, `-opener`) llevan las mismas versiones que sus paquetes npm. El crate `tauri` y el paquete `@tauri-apps/api` comparten la versión menor (2.12), que es lo que pide la [guía de Tauri](https://v2.tauri.app/develop/updating-dependencies/); de `@tauri-apps/api` no hay 2.12.6 ni 2.12.7 (npm, 23-11-2026).
 
 ### Requisitos
 
@@ -368,7 +368,7 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 
 | Part                       | Package                                                      | Version                    |
 | -------------------------- | ------------------------------------------------------------ | -------------------------- |
-| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.5 · 2.12.5            |
+| Desktop core               | `tauri` (Rust) · `@tauri-apps/cli`                           | 2.12.7 · 2.12.5            |
 | Tauri API for the frontend | `@tauri-apps/api`                                            | 2.12.5                     |
 | Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener`    | 2.8.4 · 2.8.1 · 2.7.3      |
 | UI                         | `vue`                                                        | 3.5.45                     |
@@ -380,9 +380,9 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 | Linting and formatting     | `eslint` · `eslint-plugin-vue` · `prettier`                  | 10.15.0 · 10.12.1 · 3.10.1 |
 | Tests                      | `vitest` · `happy-dom`                                       | 5.1.1 · 21.0.4             |
 | Export                     | `exceljs` · `jspdf` · `jspdf-autotable`                      | 4.4.0 · 4.2.1 · 5.0.9      |
-| Serialization (Rust)       | `serde` · `serde_json`                                       | 1.0.228 · 1.0.150          |
+| Serialization (Rust)       | `serde` · `serde_json`                                       | 1.0.229 · 1.0.154          |
 
-The plugin crates (`tauri-plugin-dialog`, `-notification`, `-opener`) use the same versions as their npm packages.
+The plugin crates (`tauri-plugin-dialog`, `-notification`, `-opener`) use the same versions as their npm packages. The `tauri` crate and the `@tauri-apps/api` package share the minor version (2.12), which is what the [Tauri guide](https://v2.tauri.app/develop/updating-dependencies/) asks for; there is no 2.12.6 or 2.12.7 of `@tauri-apps/api` (npm, 2026-11-23).
 
 ### Requirements
 
