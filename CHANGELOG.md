@@ -10,6 +10,12 @@ All notable changes to Bolsillo are in this file. The format follows [Keep a Cha
 
 ## Español
 
+### [Sin publicar · Unreleased]
+
+#### Cambiado
+
+- La CI y el flujo de publicación usan `pnpm/action-setup` 6.1.1 (antes 6.1.0), fijado por SHA.
+
 ### [1.2.0] - 2026-11-19
 
 Antes de actualizar, lee los avisos del final de esta versión y [`docs/MIGRACION.md`](docs/MIGRACION.md).
@@ -70,6 +76,12 @@ Primera versión publicada: movimientos fijos y puntuales con categoría, comerc
 
 ## English
 
+### [Sin publicar · Unreleased]
+
+#### Changed
+
+- CI and the release workflow use `pnpm/action-setup` 6.1.1 (was 6.1.0), pinned by SHA.
+
 ### [1.2.0] - 2026-11-19
 
 Before updating, read the notices at the end of this version and [`docs/MIGRACION.md`](docs/MIGRACION.md).
@@ -126,6 +138,7 @@ Before updating, read the notices at the end of this version and [`docs/MIGRACIO
 
 First public release: fixed and one-off transactions with category, merchant, tags, account and receipt photo; split expenses; quick-entry templates; debts with a monthly instalment; savings plans; budgets and envelopes; accounts and net worth; monthly summary, calendar, history, comparison and cash forecast; export to XLSX and PDF; PIN lock; notifications; Spanish and English.
 
+[Sin publicar · Unreleased]: https://github.com/zeroit789/bolsillo/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/zeroit789/bolsillo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/zeroit789/bolsillo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/zeroit789/bolsillo/releases/tag/v1.0.0
