@@ -36,7 +36,11 @@ function aBase64(bytes: Uint8Array): string {
 }
 // ES: Decodifica un string base64 de vuelta al array de bytes original.
 // EN: Decodes a base64 string back into the original byte array.
-function deBase64(b64: string): Uint8Array {
+// ES: Devuelve Uint8Array<ArrayBuffer> (no ArrayBufferLike): desde TypeScript 5.7 WebCrypto solo acepta
+//     buffers que no sean SharedArrayBuffer, y así el tipo lo garantiza.
+// EN: Returns Uint8Array<ArrayBuffer> (not ArrayBufferLike): since TypeScript 5.7 WebCrypto only accepts
+//     non-SharedArrayBuffer buffers, and this type guarantees it.
+function deBase64(b64: string): Uint8Array<ArrayBuffer> {
   const s = atob(b64);
   const out = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
@@ -50,7 +54,7 @@ function deBase64(b64: string): Uint8Array {
 // EN: Derives an AES-GCM key from a secret + salt using PBKDF2-SHA256. The salt
 //     makes each encryption unique (the same secret yields a different key), and
 //     150k iterations slow brute-force attacks on the secret.
-async function derivarClave(secreto: string, salt: Uint8Array): Promise<CryptoKey> {
+async function derivarClave(secreto: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   // ES: Importa el secreto crudo como material base PBKDF2 (aún no cifra nada).
   // EN: Import the raw secret as PBKDF2 base material (not usable to encrypt yet).
   const base = await crypto.subtle.importKey("raw", enc.encode(secreto), "PBKDF2", false, [
@@ -123,9 +127,9 @@ export class ErrorSobreDanado extends Error {
 // ES: Sobre ya decodificado: los bytes listos para derivar la clave y descifrar.
 // EN: Decoded envelope: the bytes ready to derive the key and decrypt.
 interface SobreDecodificado {
-  salt: Uint8Array;
-  iv: Uint8Array;
-  ct: Uint8Array;
+  salt: Uint8Array<ArrayBuffer>;
+  iv: Uint8Array<ArrayBuffer>;
+  ct: Uint8Array<ArrayBuffer>;
 }
 
 // ES: Lee y comprueba la estructura del blob sin descifrarlo. Lanza

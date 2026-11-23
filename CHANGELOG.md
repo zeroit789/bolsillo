@@ -19,6 +19,7 @@ All notable changes to Bolsillo are in this file. The format follows [Keep a Cha
 - `@tauri-apps/cli` 2.12.6 (antes 2.12.5).
 - `pinia` 4.1.0 (antes 3.0.4). Pinia 4 solo se distribuye como ESM y pide instalar aparte `@vue/devtools-api` (8.2.1), que entra como dependencia directa. Bolsillo no usa nada de lo que cambia y el bundle principal sigue igual.
 - `vite` 8.3.8 (antes 6.4.6) y `@vitejs/plugin-vue` 6.0.11 (antes 5.2.4). Vite 8 compila con Rolldown y Oxc en vez de Rollup y esbuild, y trata igual en desarrollo y en el build el `default` de los paquetes CommonJS. Se comprobó en el build que ExcelJS escribe y vuelve a leer un `.xlsx` y que jsPDF con jspdf-autotable genera un PDF. El bundle principal baja de unos 387 kB a unos 382 kB. `esbuild` ya no se instala, así que sale de `allowBuilds` en `pnpm-workspace.yaml`.
+- Vue 3.5.46, TypeScript 5.9.3 y vue-tsc 3.3.14. Los tipos de WebCrypto de TypeScript 5.7+ exigen `Uint8Array<ArrayBuffer>`: ajustado en `cripto.ts`, sin cambios de comportamiento.
 
 ### [1.2.0] - 2026-11-19
 
@@ -89,6 +90,7 @@ Primera versión publicada: movimientos fijos y puntuales con categoría, comerc
 - `@tauri-apps/cli` 2.12.6 (was 2.12.5).
 - `pinia` 4.1.0 (was 3.0.4). Pinia 4 ships as ESM only and asks for `@vue/devtools-api` (8.2.1) to be installed separately, so it is now a direct dependency. Bolsillo uses nothing that changed and the main bundle stays the same size.
 - `vite` 8.3.8 (was 6.4.6) and `@vitejs/plugin-vue` 6.0.11 (was 5.2.4). Vite 8 builds with Rolldown and Oxc instead of Rollup and esbuild, and handles the `default` of CommonJS packages the same way in development and in the build. The build was checked: ExcelJS writes and reads back an `.xlsx` and jsPDF with jspdf-autotable produces a PDF. The main bundle drops from about 387 kB to about 382 kB. `esbuild` is no longer installed, so it leaves `allowBuilds` in `pnpm-workspace.yaml`.
+- Vue 3.5.46, TypeScript 5.9.3 and vue-tsc 3.3.14. TypeScript 5.7+ WebCrypto types require `Uint8Array<ArrayBuffer>`: adjusted in `cripto.ts`, no behaviour change.
 
 ### [1.2.0] - 2026-11-19
 
