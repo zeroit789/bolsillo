@@ -374,7 +374,9 @@ describe("migración desde localStorage / migration from localStorage", () => {
     await reabrir();
     expect(useFinanzas().puntuales).toHaveLength(20_000);
     expect(useFinanzas().puntuales[3].recibo).toBe(recibo(3));
-  });
+    // ES: 20 000 movimientos tardan ~8 s en los runners de GitHub: tiempo límite propio en vez de los 5 s por defecto.
+    // EN: 20,000 transactions take ~8 s on GitHub runners: own time limit instead of the default 5 s.
+  }, 30_000);
 });
 
 // ── 5. Copias / Backups ───────────────────────────────────────────────────────
