@@ -21,6 +21,13 @@ updates:
       npm-mayores:
         patterns: ["*"]
         update-types: [major]
+    # ES: TypeScript 7 aún no vale: vue-tsc depende de la API de JS que la 7 ya no trae y typescript-eslint
+    #     pide < 6.1 (comprobado el 23-11-2026). Quitar este ignore cuando los dos la soporten.
+    # EN: TypeScript 7 doesn't work yet: vue-tsc relies on the JS API that 7 no longer ships and typescript-eslint
+    #     requires < 6.1 (checked on 2026-11-23). Remove this ignore once both support it.
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   # ES: Crates de Rust del backend Tauri / EN: Rust crates of the Tauri backend
   - package-ecosystem: cargo
