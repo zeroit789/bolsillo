@@ -147,7 +147,7 @@ Versiones exactas de `pnpm-lock.yaml` y `src-tauri/Cargo.lock`:
 | API de Tauri para el frontend | `@tauri-apps/api`                                            | 2.12.5                     |
 | Plugins de Tauri              | `plugin-dialog` · `plugin-notification` · `plugin-opener`    | 2.8.4 · 2.8.1 · 2.7.3      |
 | Interfaz                      | `vue`                                                        | 3.5.45                     |
-| Estado                        | `pinia`                                                      | 3.0.4                      |
+| Estado                        | `pinia` · `@vue/devtools-api`                                | 4.1.0 · 8.2.1              |
 | Estilos                       | `tailwindcss` · `@tailwindcss/vite`                          | 4.3.5 · 4.3.5              |
 | Fuentes                       | `@fontsource-variable/syne` · `@fontsource-variable/dm-sans` | 5.3.0 · 5.3.0              |
 | Build                         | `vite` · `@vitejs/plugin-vue`                                | 6.4.6 · 5.2.4              |
@@ -372,7 +372,7 @@ Exact versions from `pnpm-lock.yaml` and `src-tauri/Cargo.lock`:
 | Tauri API for the frontend | `@tauri-apps/api`                                            | 2.12.5                     |
 | Tauri plugins              | `plugin-dialog` · `plugin-notification` · `plugin-opener`    | 2.8.4 · 2.8.1 · 2.7.3      |
 | UI                         | `vue`                                                        | 3.5.45                     |
-| State                      | `pinia`                                                      | 3.0.4                      |
+| State                      | `pinia` · `@vue/devtools-api`                                | 4.1.0 · 8.2.1              |
 | Styling                    | `tailwindcss` · `@tailwindcss/vite`                          | 4.3.5 · 4.3.5              |
 | Fonts                      | `@fontsource-variable/syne` · `@fontsource-variable/dm-sans` | 5.3.0 · 5.3.0              |
 | Build                      | `vite` · `@vitejs/plugin-vue`                                | 6.4.6 · 5.2.4              |
